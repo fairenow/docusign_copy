@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0f172a;
+  min-height: 100vh;
+  color: #e2e8f0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Signature canvas cursor */
+.signature-canvas {
+  cursor: crosshair;
+}
+
+/* Overlay elements */
+.overlay-element {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+}
+
+.overlay-element:hover {
+  outline: 2px solid #3b82f6;
+}
+
+.overlay-element.selected {
+  outline: 2px solid #3b82f6;
+}
+
+/* Drag ghost prevention */
+.overlay-element img {
+  pointer-events: none;
+}
+
+/* Text input in overlay */
+.overlay-text-input {
+  border: none;
+  background: transparent;
+  font-size: inherit;
+  font-family: inherit;
+  color: inherit;
+  outline: none;
+  width: 100%;
+  min-width: 80px;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Document container */
+.document-container {
+  background: white;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+/* DOCX content styling */
+.docx-content {
+  padding: 2rem;
+  min-width: 612px;
+  min-height: 792px;
+  background: white;
+  color: #1e293b;
+  font-size: 12pt;
+  line-height: 1.6;
+}
+
+.docx-content p {
+  margin-bottom: 1em;
+}
+
+.docx-content h1, .docx-content h2, .docx-content h3 {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: bold;
+}
+
+.docx-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.docx-content td, .docx-content th {
+  border: 1px solid #ccc;
+  padding: 0.5em;
+}
+
+/* Checkbox field */
+.checkbox-field {
+  width: 20px;
+  height: 20px;
+  background: white;
+  border: 2px solid #3b82f6;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Button gradient */
+.btn-gradient {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+}
+
+.btn-gradient:hover {
+  opacity: 0.9;
+}
