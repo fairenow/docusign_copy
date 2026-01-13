@@ -1,10 +1,22 @@
 import { useState } from 'react'
-import { Pen, Type, Calendar, Hash, CheckSquare } from 'lucide-react'
+import { Pen, Type, Calendar, Hash, CheckSquare, Sparkles } from 'lucide-react'
 import SignaturePanel from './SignaturePanel'
 import TextOptions from './TextOptions'
+import DetectedFieldsPanel from './DetectedFieldsPanel'
 
-export default function Sidebar({ onAddElement, hasDocument }) {
+export default function Sidebar({
+  onAddElement,
+  hasDocument,
+  fileType,
+  detectedFields = [],
+  isDetecting = false,
+  onPlaceField,
+  onPlaceAllFields,
+  onDismissDetected,
+  onRedetect
+}) {
   const [activePanel, setActivePanel] = useState(null)
+  const [showDetectedFields, setShowDetectedFields] = useState(true)
 
   const togglePanel = (panel) => {
     setActivePanel(activePanel === panel ? null : panel)
@@ -89,6 +101,45 @@ export default function Sidebar({ onAddElement, hasDocument }) {
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
+        {/* Detected Fields Panel */}
+        {hasDocument && showDetectedFields && (isDetecting || detectedFields.length > 0) && (
+          <DetectedFieldsPanel
+            detectedFields={detectedFields}
+            isDetecting={isDetecting}
+            onPlaceField={onPlaceField}
+            onPlaceAllFields={onPlaceAllFields}
+            onClose={() => {
+              setShowDetectedFields(false)
+              onDismissDetected?.()
+            }}
+          />
+        )}
+
+        {/* Show detected fields toggle if previously hidden */}
+        {hasDocument && !showDetectedFields && detectedFields.length > 0 && (
+          <button
+            onClick={() => setShowDetectedFields(true)}
+            className="w-full p-3 mb-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-lg text-gray-200 hover:border-blue-500/50 transition-all flex items-center gap-3"
+          >
+            <Sparkles size={20} className="text-blue-400" />
+            <span className="text-sm">Show {detectedFields.length} detected fields</span>
+          </button>
+        )}
+
+        {/* Re-detect button for PDF files when no fields shown */}
+        {hasDocument && fileType === 'pdf' && !showDetectedFields && detectedFields.length === 0 && !isDetecting && (
+          <button
+            onClick={() => {
+              setShowDetectedFields(true)
+              onRedetect?.()
+            }}
+            className="w-full p-3 mb-4 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3"
+          >
+            <Sparkles size={20} />
+            <span className="text-sm">Detect Form Fields</span>
+          </button>
+        )}
+
         <p className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-3">
           Add Fields
         </p>

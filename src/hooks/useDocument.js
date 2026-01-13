@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import * as mammoth from 'mammoth'
+import { detectFormFields } from '../utils/formFieldDetector'
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
@@ -11,6 +12,8 @@ export function useDocument() {
   const [pdfDoc, setPdfDoc] = useState(null)
   const [totalPages, setTotalPages] = useState(1)
   const [docxHtml, setDocxHtml] = useState('')
+  const [detectedFields, setDetectedFields] = useState([])
+  const [isDetecting, setIsDetecting] = useState(false)
   const canvasRef = useRef(null)
 
   const loadFile = useCallback(async (uploadedFile) => {
@@ -32,20 +35,23 @@ export function useDocument() {
 
   const loadPDF = async (uploadedFile) => {
     const arrayBuffer = await uploadedFile.arrayBuffer()
-    
+
     try {
       const doc = await pdfjsLib.getDocument({
         data: arrayBuffer,
         useWorkerFetch: false,
         isEvalSupported: false
       }).promise
-      
+
       setPdfDoc(doc)
       setTotalPages(doc.numPages)
       setDocxHtml('')
-      
+
       // Render first page
       await renderPageInternal(doc, 1, 1)
+
+      // Automatically detect form fields
+      await detectFieldsInDocument(doc)
     } catch (err) {
       console.error('PDF load error:', err)
       // Fallback loading
@@ -53,8 +59,38 @@ export function useDocument() {
       setPdfDoc(doc)
       setTotalPages(doc.numPages)
       await renderPageInternal(doc, 1, 1)
+
+      // Try to detect fields even with fallback loading
+      await detectFieldsInDocument(doc)
     }
   }
+
+  const detectFieldsInDocument = async (doc) => {
+    if (!doc) return
+
+    setIsDetecting(true)
+    setDetectedFields([])
+
+    try {
+      const result = await detectFormFields(doc)
+      setDetectedFields(result.allFields)
+    } catch (err) {
+      console.warn('Field detection error:', err)
+      setDetectedFields([])
+    }
+
+    setIsDetecting(false)
+  }
+
+  const clearDetectedFields = useCallback(() => {
+    setDetectedFields([])
+  }, [])
+
+  const redetectFields = useCallback(async () => {
+    if (pdfDoc) {
+      await detectFieldsInDocument(pdfDoc)
+    }
+  }, [pdfDoc])
 
   const renderPageInternal = async (doc, pageNum, zoom) => {
     const page = await doc.getPage(pageNum)
@@ -92,6 +128,10 @@ export function useDocument() {
     docxHtml,
     loadFile,
     renderPage,
-    canvasRef
+    canvasRef,
+    detectedFields,
+    isDetecting,
+    clearDetectedFields,
+    redetectFields
   }
 }

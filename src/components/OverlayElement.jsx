@@ -81,12 +81,19 @@ export default function OverlayElement({ element, onUpdate, onDelete }) {
       case 'signature':
         return (
           <div className="p-1">
-            <img 
-              src={element.data} 
-              alt="Signature" 
-              className="max-h-16 pointer-events-none"
-              draggable={false}
-            />
+            {element.data ? (
+              <img
+                src={element.data}
+                alt="Signature"
+                className="max-h-16 pointer-events-none"
+                draggable={false}
+              />
+            ) : (
+              <div className="px-4 py-2 bg-amber-50 border-2 border-dashed border-amber-400 rounded text-amber-600 text-sm flex items-center gap-2 min-w-[150px]">
+                <span className="text-lg">✍️</span>
+                <span>Sign here</span>
+              </div>
+            )}
           </div>
         )
       
