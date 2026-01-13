@@ -10,6 +10,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [pendingSignatureId, setPendingSignatureId] = useState(null)
   
   const {
     file,
@@ -45,6 +46,30 @@ function App() {
       setElements([])
     }
   }, [])
+
+  // Handle click on empty signature placeholder
+  const handleSignatureClick = useCallback((elementId) => {
+    setPendingSignatureId(elementId)
+  }, [])
+
+  // Apply signature to a pending element or add new
+  const handleApplySignature = useCallback((signatureData) => {
+    if (pendingSignatureId) {
+      // Apply to existing placeholder
+      setElements(prev => prev.map(el =>
+        el.id === pendingSignatureId ? { ...el, data: signatureData } : el
+      ))
+      setPendingSignatureId(null)
+    } else {
+      // Add new signature element
+      addElement({
+        type: 'signature',
+        data: signatureData,
+        x: 100,
+        y: 100
+      })
+    }
+  }, [pendingSignatureId, addElement])
 
   // Place a detected field as an element
   const placeDetectedField = useCallback((field) => {
@@ -223,6 +248,9 @@ function App() {
         onPlaceAllFields={placeAllDetectedFields}
         onDismissDetected={clearDetectedFields}
         onRedetect={redetectFields}
+        onApplySignature={handleApplySignature}
+        pendingSignatureId={pendingSignatureId}
+        onClearPendingSignature={() => setPendingSignatureId(null)}
       />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -256,6 +284,7 @@ function App() {
           onUpdateElement={updateElement}
           onDeleteElement={deleteElement}
           onFileUpload={handleFileLoad}
+          onSignatureClick={handleSignatureClick}
         />
       </main>
 

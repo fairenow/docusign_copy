@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Pen, Type, Calendar, Hash, CheckSquare, Sparkles } from 'lucide-react'
 import SignaturePanel from './SignaturePanel'
 import TextOptions from './TextOptions'
@@ -13,12 +13,26 @@ export default function Sidebar({
   onPlaceField,
   onPlaceAllFields,
   onDismissDetected,
-  onRedetect
+  onRedetect,
+  onApplySignature,
+  pendingSignatureId,
+  onClearPendingSignature
 }) {
   const [activePanel, setActivePanel] = useState(null)
   const [showDetectedFields, setShowDetectedFields] = useState(true)
 
+  // Auto-open signature panel when a signature placeholder is clicked
+  useEffect(() => {
+    if (pendingSignatureId) {
+      setActivePanel('signature')
+    }
+  }, [pendingSignatureId])
+
   const togglePanel = (panel) => {
+    // Clear pending signature if closing signature panel
+    if (activePanel === 'signature' && panel !== 'signature') {
+      onClearPendingSignature?.()
+    }
     setActivePanel(activePanel === panel ? null : panel)
   }
 
@@ -27,12 +41,19 @@ export default function Sidebar({
       alert('Please upload a document first')
       return
     }
-    onAddElement({
-      type: 'signature',
-      data: signatureData,
-      x: 100,
-      y: 100
-    })
+    // Use onApplySignature if available (handles both new and pending)
+    if (onApplySignature) {
+      onApplySignature(signatureData)
+    } else {
+      onAddElement({
+        type: 'signature',
+        data: signatureData,
+        x: 100,
+        y: 100
+      })
+    }
+    // Close the panel after applying
+    setActivePanel(null)
   }
 
   const handleAddText = (options) => {
@@ -150,15 +171,24 @@ export default function Sidebar({
           className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
             activePanel === 'signature'
               ? 'bg-blue-600 border-blue-600 text-white'
+              : pendingSignatureId
+              ? 'bg-amber-600 border-amber-600 text-white animate-pulse'
               : 'bg-dark-700 border-dark-600 text-gray-200 hover:bg-blue-600 hover:border-blue-600'
           }`}
         >
           <Pen size={20} />
-          <span>Signature</span>
+          <span>{pendingSignatureId ? 'Apply Signature' : 'Signature'}</span>
         </button>
 
         {activePanel === 'signature' && (
-          <SignaturePanel onApply={handleAddSignature} />
+          <div className="mb-2">
+            {pendingSignatureId && (
+              <div className="mb-2 p-2 bg-amber-500/20 border border-amber-500/50 rounded text-amber-200 text-xs">
+                Draw or type your signature below, then click Apply to add it to the selected field.
+              </div>
+            )}
+            <SignaturePanel onApply={handleAddSignature} />
+          </div>
         )}
 
         {/* Text Button */}

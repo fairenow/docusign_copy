@@ -12,7 +12,8 @@ export default function DocumentViewer({
   zoom,
   onUpdateElement,
   onDeleteElement,
-  onFileUpload
+  onFileUpload,
+  onSignatureClick
 }) {
   const fileInputRef = useRef(null)
   const dropZoneRef = useRef(null)
@@ -107,6 +108,7 @@ export default function DocumentViewer({
               element={element}
               onUpdate={(updates) => handleElementUpdate(element.id, updates)}
               onDelete={() => onDeleteElement(element.id)}
+              onSignatureClick={onSignatureClick}
             />
           ))}
         </div>

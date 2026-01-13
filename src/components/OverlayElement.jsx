@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { X } from 'lucide-react'
 
-export default function OverlayElement({ element, onUpdate, onDelete }) {
+export default function OverlayElement({ element, onUpdate, onDelete, onSignatureClick }) {
   const elementRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isSelected, setIsSelected] = useState(false)
@@ -76,6 +76,13 @@ export default function OverlayElement({ element, onUpdate, onDelete }) {
     onUpdate({ checked: !element.checked })
   }
 
+  const handleSignaturePlaceholderClick = (e) => {
+    e.stopPropagation()
+    if (!element.data && onSignatureClick) {
+      onSignatureClick(element.id)
+    }
+  }
+
   const renderContent = () => {
     switch (element.type) {
       case 'signature':
@@ -89,9 +96,12 @@ export default function OverlayElement({ element, onUpdate, onDelete }) {
                 draggable={false}
               />
             ) : (
-              <div className="px-4 py-2 bg-amber-50 border-2 border-dashed border-amber-400 rounded text-amber-600 text-sm flex items-center gap-2 min-w-[150px]">
+              <div
+                onClick={handleSignaturePlaceholderClick}
+                className="px-4 py-2 bg-amber-50 border-2 border-dashed border-amber-400 rounded text-amber-600 text-sm flex items-center gap-2 min-w-[150px] cursor-pointer hover:bg-amber-100 hover:border-amber-500 transition-colors"
+              >
                 <span className="text-lg">✍️</span>
-                <span>Sign here</span>
+                <span>Click to sign</span>
               </div>
             )}
           </div>

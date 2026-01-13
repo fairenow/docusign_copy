@@ -3,6 +3,9 @@
  * Detects interactive form fields (AcroForms) and visual patterns in PDF documents
  */
 
+// Base scale used for rendering - must match useDocument.js
+const BASE_SCALE = 1.5
+
 // Field type constants
 export const FIELD_TYPES = {
   TEXT: 'text',
@@ -18,19 +21,14 @@ export const FIELD_TYPES = {
 const SIGNATURE_PATTERNS = [
   /signature/i,
   /sign here/i,
-  /signed/i,
   /^sign$/i,
-  /signatory/i,
-  /autograph/i
+  /signatory/i
 ]
 
 const DATE_PATTERNS = [
-  /date/i,
-  /dated/i,
-  /day of/i,
-  /mm\/dd/i,
-  /dd\/mm/i,
-  /yyyy/i
+  /^date:/i,
+  /^date$/i,
+  /dated:/i
 ]
 
 const INITIAL_PATTERNS = [
@@ -39,15 +37,12 @@ const INITIAL_PATTERNS = [
   /^init$/i
 ]
 
+// More strict checkbox patterns - only match actual checkbox indicators
 const CHECKBOX_PATTERNS = [
-  /agree/i,
-  /accept/i,
-  /confirm/i,
-  /acknowledge/i,
-  /consent/i,
-  /check/i,
-  /select/i,
-  /yes\/no/i
+  /^\s*\[\s*\]\s*/,      // [ ] at start
+  /^\s*\(\s*\)\s*/,      // ( ) at start
+  /^□/,                   // Empty box character
+  /^☐/                    // Ballot box character
 ]
 
 /**
@@ -130,7 +125,10 @@ export async function extractPDFFormFields(pdfDoc) {
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
       const page = await pdfDoc.getPage(pageNum)
       const annotations = await page.getAnnotations()
-      const viewport = page.getViewport({ scale: 1.5 })
+
+      // Get viewports at different scales for coordinate conversion
+      const baseViewport = page.getViewport({ scale: 1 })
+      const scaledViewport = page.getViewport({ scale: BASE_SCALE })
 
       // Filter for widget annotations (form fields)
       const formAnnotations = annotations.filter(annot =>
@@ -139,13 +137,14 @@ export async function extractPDFFormFields(pdfDoc) {
 
       for (const annot of formAnnotations) {
         // Convert PDF coordinates to canvas coordinates
+        // PDF rect is [x1, y1, x2, y2] where y increases upward
         const [x1, y1, x2, y2] = annot.rect
 
-        // PDF coordinates start from bottom-left, convert to top-left
-        const canvasX = x1 * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const canvasY = viewport.height - (y2 * (viewport.height / page.getViewport({ scale: 1 }).height))
-        const width = (x2 - x1) * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const height = (y2 - y1) * (viewport.height / page.getViewport({ scale: 1 }).height)
+        // Scale coordinates to match canvas rendering
+        const canvasX = x1 * BASE_SCALE
+        const canvasY = scaledViewport.height - (y2 * BASE_SCALE)
+        const width = (x2 - x1) * BASE_SCALE
+        const height = (y2 - y1) * BASE_SCALE
 
         const detectedType = detectFieldType(
           annot.fieldName || annot.alternativeText,
@@ -189,7 +188,7 @@ export async function detectFieldsFromContent(pdfDoc) {
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
       const page = await pdfDoc.getPage(pageNum)
       const textContent = await page.getTextContent()
-      const viewport = page.getViewport({ scale: 1.5 })
+      const scaledViewport = page.getViewport({ scale: BASE_SCALE })
 
       let lastY = -1
       let lineText = ''
@@ -200,11 +199,13 @@ export async function detectFieldsFromContent(pdfDoc) {
         if (!item.str) continue
 
         const transform = item.transform
-        const x = transform[4] * 1.5
-        const y = viewport.height - (transform[5] * 1.5)
+        const x = transform[4] * BASE_SCALE
+        const y = scaledViewport.height - (transform[5] * BASE_SCALE)
+        const itemWidth = (item.width || 0) * BASE_SCALE
+        const itemHeight = (item.height || 10) * BASE_SCALE
 
-        // Check if this is a new line
-        if (Math.abs(y - lastY) > 10) {
+        // Check if this is a new line (Y changed significantly)
+        if (Math.abs(y - lastY) > 15) {
           // Process previous line
           if (lineText.trim()) {
             const field = analyzeLineForFields(lineText, lineItems, pageNum, detectedFields.length)
@@ -214,11 +215,11 @@ export async function detectFieldsFromContent(pdfDoc) {
           }
 
           lineText = item.str
-          lineItems = [{ text: item.str, x, y, width: item.width * 1.5, height: item.height * 1.5 }]
+          lineItems = [{ text: item.str, x, y, width: itemWidth, height: itemHeight }]
           lastY = y
         } else {
           lineText += ' ' + item.str
-          lineItems.push({ text: item.str, x, y, width: item.width * 1.5, height: item.height * 1.5 })
+          lineItems.push({ text: item.str, x, y, width: itemWidth, height: itemHeight })
         }
       }
 
@@ -241,38 +242,44 @@ export async function detectFieldsFromContent(pdfDoc) {
  * Analyze a line of text for potential form fields
  */
 function analyzeLineForFields(lineText, lineItems, pageNum, index) {
-  const text = lineText.toLowerCase()
+  const text = lineText.toLowerCase().trim()
 
-  // Look for signature line patterns
+  // Skip very short lines
+  if (text.length < 3) return null
+
+  // Get first and last items for positioning
+  const firstItem = lineItems[0]
+  const lastItem = lineItems[lineItems.length - 1]
+  if (!firstItem || !lastItem) return null
+
+  // Look for signature line patterns (e.g., "Signature:", "Sign here", etc.)
   if (SIGNATURE_PATTERNS.some(p => p.test(text))) {
-    const lastItem = lineItems[lineItems.length - 1]
     return {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Signature'),
       type: FIELD_TYPES.SIGNATURE,
       page: pageNum,
-      x: Math.round(lastItem.x + lastItem.width + 20),
-      y: Math.round(lastItem.y - 5),
-      width: 200,
-      height: 50,
+      x: Math.round(lastItem.x + (lastItem.width || 50) + 20),
+      y: Math.round(lastItem.y - 10),
+      width: 180,
+      height: 40,
       required: false,
       source: 'content-analysis'
     }
   }
 
-  // Look for date patterns
+  // Look for date patterns (strict - only "Date:" style)
   if (DATE_PATTERNS.some(p => p.test(text))) {
-    const lastItem = lineItems[lineItems.length - 1]
     return {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Date'),
       type: FIELD_TYPES.DATE,
       page: pageNum,
-      x: Math.round(lastItem.x + lastItem.width + 10),
-      y: Math.round(lastItem.y - 2),
-      width: 120,
+      x: Math.round(lastItem.x + (lastItem.width || 30) + 10),
+      y: Math.round(lastItem.y - 5),
+      width: 100,
       height: 25,
       required: false,
       source: 'content-analysis'
@@ -281,60 +288,35 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
 
   // Look for initial patterns
   if (INITIAL_PATTERNS.some(p => p.test(text))) {
-    const lastItem = lineItems[lineItems.length - 1]
     return {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Initials'),
       type: FIELD_TYPES.INITIALS,
       page: pageNum,
-      x: Math.round(lastItem.x + lastItem.width + 10),
-      y: Math.round(lastItem.y - 2),
-      width: 60,
-      height: 30,
+      x: Math.round(lastItem.x + (lastItem.width || 30) + 10),
+      y: Math.round(lastItem.y - 5),
+      width: 50,
+      height: 25,
       required: false,
       source: 'content-analysis'
     }
   }
 
-  // Look for checkbox patterns with empty boxes or brackets
-  if (CHECKBOX_PATTERNS.some(p => p.test(text)) ||
-      /\[\s*\]|\(\s*\)|□|☐/.test(lineText)) {
-    const firstItem = lineItems[0]
+  // Look for checkbox patterns - only actual checkbox characters at start of line
+  if (CHECKBOX_PATTERNS.some(p => p.test(lineText))) {
     return {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
-      label: extractLabel(lineText, 'Checkbox'),
+      label: extractLabel(lineText.replace(/^[\s\[\]\(\)□☐]+/, ''), 'Checkbox'),
       type: FIELD_TYPES.CHECKBOX,
       page: pageNum,
-      x: Math.round(firstItem.x - 25),
+      x: Math.round(firstItem.x - 5),
       y: Math.round(firstItem.y),
-      width: 20,
-      height: 20,
+      width: 18,
+      height: 18,
       required: false,
       source: 'content-analysis'
-    }
-  }
-
-  // Look for underline patterns that indicate text fields
-  // Common patterns: _________, ____________, Name: _______
-  if (/_{3,}/.test(lineText) || /:\s*$/.test(lineText.trim())) {
-    const colonMatch = lineText.match(/^([^:]+):\s*/)
-    if (colonMatch) {
-      const lastItem = lineItems[lineItems.length - 1]
-      return {
-        id: `detected-field-${pageNum}-${index}`,
-        name: '',
-        label: colonMatch[1].trim() || 'Text Field',
-        type: FIELD_TYPES.TEXT,
-        page: pageNum,
-        x: Math.round(lastItem.x + lastItem.width + 10),
-        y: Math.round(lastItem.y - 2),
-        width: 150,
-        height: 25,
-        required: false,
-        source: 'content-analysis'
-      }
     }
   }
 
