@@ -3,12 +3,19 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // pdf.js 4 ships modern syntax (top-level await, private fields)
   optimizeDeps: {
-    include: ['pdfjs-dist']
+    esbuildOptions: { target: 'es2022' }
   },
   build: {
-    commonjsOptions: {
-      include: [/pdfjs-dist/, /node_modules/]
+    target: 'es2022',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          pdfjs: ['pdfjs-dist'],
+          react: ['react', 'react-dom']
+        }
+      }
     }
   }
 })

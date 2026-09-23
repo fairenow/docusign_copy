@@ -1,11 +1,11 @@
 import { useState } from 'react'
 
 export default function TextOptions({ onApply }) {
-  const [fontSize, setFontSize] = useState('14')
+  const [fontSize, setFontSize] = useState('12')
   const [color, setColor] = useState('#000000')
 
   const handleApply = () => {
-    onApply({ fontSize, color })
+    onApply({ fontSize: Number(fontSize), color })
   }
 
   return (
@@ -18,11 +18,12 @@ export default function TextOptions({ onApply }) {
             onChange={(e) => setFontSize(e.target.value)}
             className="w-full p-2 bg-dark-800 border border-dark-600 rounded-lg text-gray-200 text-sm"
           >
-            <option value="12">12px</option>
-            <option value="14">14px</option>
-            <option value="16">16px</option>
-            <option value="18">18px</option>
-            <option value="24">24px</option>
+            <option value="10">10 pt</option>
+            <option value="12">12 pt</option>
+            <option value="14">14 pt</option>
+            <option value="16">16 pt</option>
+            <option value="18">18 pt</option>
+            <option value="24">24 pt</option>
           </select>
         </div>
         <div className="flex-1">

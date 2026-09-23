@@ -5,9 +5,15 @@ import TextOptions from './TextOptions'
 import DetectedFieldsPanel from './DetectedFieldsPanel'
 
 export default function Sidebar({
-  onAddElement,
   hasDocument,
   fileType,
+  activePanel,
+  onActivePanelChange,
+  onAddSignature,
+  onAddText,
+  onAddDate,
+  onAddInitials,
+  onAddCheckbox,
   detectedFields = [],
   isDetecting = false,
   onPlaceField,
@@ -15,82 +21,26 @@ export default function Sidebar({
   onDismissDetected,
   onRedetect
 }) {
-  const [activePanel, setActivePanel] = useState(null)
   const [showDetectedFields, setShowDetectedFields] = useState(true)
 
   const togglePanel = (panel) => {
-    setActivePanel(activePanel === panel ? null : panel)
+    onActivePanelChange(activePanel === panel ? null : panel)
   }
 
-  const handleAddSignature = (signatureData) => {
+  // Every add action needs a document to add to
+  const requireDocument = (action) => (...args) => {
     if (!hasDocument) {
       alert('Please upload a document first')
       return
     }
-    onAddElement({
-      type: 'signature',
-      data: signatureData,
-      x: 100,
-      y: 100
-    })
+    action(...args)
   }
 
-  const handleAddText = (options) => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'text',
-      text: '',
-      x: 100,
-      y: 100,
-      fontSize: options.fontSize,
-      color: options.color
-    })
-  }
-
-  const handleAddDate = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'date',
-      text: new Date().toLocaleDateString(),
-      x: 100,
-      y: 100
-    })
-  }
-
-  const handleAddInitials = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    const initials = prompt('Enter your initials:')
-    if (initials) {
-      onAddElement({
-        type: 'initials',
-        text: initials,
-        x: 100,
-        y: 100
-      })
-    }
-  }
-
-  const handleAddCheckbox = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'checkbox',
-      checked: false,
-      x: 100,
-      y: 100
-    })
-  }
+  const handleAddSignature = requireDocument(onAddSignature)
+  const handleAddText = requireDocument(onAddText)
+  const handleAddDate = requireDocument(onAddDate)
+  const handleAddInitials = requireDocument(onAddInitials)
+  const handleAddCheckbox = requireDocument(onAddCheckbox)
 
   return (
     <aside className="w-72 bg-dark-800 border-r border-dark-700 flex flex-col flex-shrink-0">

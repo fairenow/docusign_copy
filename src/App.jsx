@@ -1,39 +1,62 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import DocumentViewer from './components/DocumentViewer'
 import Toolbar from './components/Toolbar'
 import LoadingOverlay from './components/LoadingOverlay'
 import { useDocument } from './hooks/useDocument'
+import { createElement, elementFromDetected } from './lib/fields'
+import { renderTypedSignature } from './lib/signatureImage'
 
 function App() {
   const [elements, setElements] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(false)
-  
+  const [activePanel, setActivePanel] = useState(null)
+  // Signature/initials created in this session, reused for "Click to sign" placeholders
+  const [savedSignature, setSavedSignature] = useState(null)
+  const [savedInitials, setSavedInitials] = useState(null)
+  // Placeholder waiting for the user to create a signature in the sidebar
+  const [pendingSignId, setPendingSignId] = useState(null)
+
   const {
     file,
-    fileType,
+    pdfBytes,
     pdfDoc,
+    pageSizes,
     totalPages,
-    docxHtml,
+    sourceType,
     loadFile,
-    renderPage,
-    canvasRef,
     detectedFields,
     isDetecting,
     clearDetectedFields,
     redetectFields
   } = useDocument()
 
-  const addElement = useCallback((element) => {
-    setElements(prev => [...prev, { ...element, id: Date.now(), page: currentPage }])
-  }, [currentPage])
+  // Warn before leaving with unsaved work
+  useEffect(() => {
+    if (!elements.length) return
+    const onBeforeUnload = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [elements.length])
+
+  const addElement = useCallback((type, props = {}) => {
+    const pageSize = pageSizes[currentPage - 1]
+    if (!pageSize) return
+    setElements(prev => {
+      // Stagger new fields so they don't stack exactly on top of each other
+      const onPage = prev.filter(el => el.page === currentPage).length
+      const y = props.y ?? 0.2 + (onPage % 10) * 0.05
+      return [...prev, createElement(type, { page: currentPage, pageSize }, { ...props, y })]
+    })
+  }, [currentPage, pageSizes])
 
   const updateElement = useCallback((id, updates) => {
-    setElements(prev => prev.map(el => 
-      el.id === id ? { ...el, ...updates } : el
-    ))
+    setElements(prev => prev.map(el => (el.id === id ? { ...el, ...updates } : el)))
   }, [])
 
   const deleteElement = useCallback((id) => {
@@ -41,154 +64,68 @@ function App() {
   }, [])
 
   const clearAllElements = useCallback(() => {
-    if (window.confirm('Remove all added fields?')) {
-      setElements([])
-    }
+    if (window.confirm('Remove all added fields?')) setElements([])
   }, [])
 
-  // Place a detected field as an element
-  const placeDetectedField = useCallback((field) => {
-    const elementBase = {
-      id: Date.now() + Math.random(),
-      page: field.page,
-      x: field.x,
-      y: field.y
+  const getInitials = useCallback(async () => {
+    if (savedInitials) return savedInitials
+    const text = window.prompt('Enter your initials:')?.trim()
+    if (!text) return null
+    const image = await renderTypedSignature(text)
+    const initials = { ...image, text }
+    setSavedInitials(initials)
+    return initials
+  }, [savedInitials])
+
+  const handleSignatureCreated = useCallback((signature) => {
+    setSavedSignature(signature)
+    if (pendingSignId) {
+      updateElement(pendingSignId, { data: signature.data })
+      setPendingSignId(null)
+    } else {
+      addElement('signature', { data: signature.data, aspect: signature.aspect })
     }
+    setActivePanel(null)
+  }, [pendingSignId, addElement, updateElement])
 
-    switch (field.type) {
-      case 'signature':
-        setElements(prev => [...prev, {
-          ...elementBase,
-          type: 'signature',
-          data: null // User will need to add signature
-        }])
-        break
-      case 'text':
-        setElements(prev => [...prev, {
-          ...elementBase,
-          type: 'text',
-          text: field.value || '',
-          fontSize: 14,
-          color: '#000000'
-        }])
-        break
-      case 'date':
-        setElements(prev => [...prev, {
-          ...elementBase,
-          type: 'date',
-          text: new Date().toLocaleDateString()
-        }])
-        break
-      case 'initials':
-        const initials = prompt('Enter your initials:')
-        if (initials) {
-          setElements(prev => [...prev, {
-            ...elementBase,
-            type: 'initials',
-            text: initials
-          }])
-        }
-        break
-      case 'checkbox':
-      case 'radio':
-        setElements(prev => [...prev, {
-          ...elementBase,
-          type: 'checkbox',
-          checked: false
-        }])
-        break
-      default:
-        // Default to text field
-        setElements(prev => [...prev, {
-          ...elementBase,
-          type: 'text',
-          text: '',
-          fontSize: 14,
-          color: '#000000'
-        }])
+  // Fill an empty signature/initials placeholder
+  const handleSignElement = useCallback(async (element) => {
+    if (element.type === 'initials') {
+      const initials = await getInitials()
+      if (initials) updateElement(element.id, { data: initials.data, text: initials.text })
+      return
     }
-  }, [])
-
-  // Place all detected fields at once
-  const placeAllDetectedFields = useCallback((fields) => {
-    const newElements = []
-    let initialsPrompted = false
-    let initialsText = ''
-
-    for (const field of fields) {
-      const elementBase = {
-        id: Date.now() + Math.random() + newElements.length,
-        page: field.page,
-        x: field.x,
-        y: field.y
-      }
-
-      switch (field.type) {
-        case 'signature':
-          newElements.push({
-            ...elementBase,
-            type: 'signature',
-            data: null
-          })
-          break
-        case 'text':
-          newElements.push({
-            ...elementBase,
-            type: 'text',
-            text: field.value || '',
-            fontSize: 14,
-            color: '#000000'
-          })
-          break
-        case 'date':
-          newElements.push({
-            ...elementBase,
-            type: 'date',
-            text: new Date().toLocaleDateString()
-          })
-          break
-        case 'initials':
-          if (!initialsPrompted) {
-            initialsText = prompt('Enter your initials:') || ''
-            initialsPrompted = true
-          }
-          if (initialsText) {
-            newElements.push({
-              ...elementBase,
-              type: 'initials',
-              text: initialsText
-            })
-          }
-          break
-        case 'checkbox':
-        case 'radio':
-          newElements.push({
-            ...elementBase,
-            type: 'checkbox',
-            checked: false
-          })
-          break
-        default:
-          newElements.push({
-            ...elementBase,
-            type: 'text',
-            text: '',
-            fontSize: 14,
-            color: '#000000'
-          })
-      }
+    if (savedSignature) {
+      updateElement(element.id, { data: savedSignature.data })
+    } else {
+      setPendingSignId(element.id)
+      setActivePanel('signature')
     }
+  }, [getInitials, savedSignature, updateElement])
 
-    setElements(prev => [...prev, ...newElements])
-  }, [])
+  const handleAddInitials = useCallback(async () => {
+    const initials = await getInitials()
+    if (initials) addElement('initials', { data: initials.data, text: initials.text, aspect: initials.aspect })
+  }, [getInitials, addElement])
+
+  const placeDetectedFields = useCallback((fields) => {
+    const placed = fields
+      .filter(field => pageSizes[field.page - 1])
+      .map(field => elementFromDetected(field, pageSizes[field.page - 1], { initials: savedInitials }))
+    setElements(prev => [...prev, ...placed])
+  }, [pageSizes, savedInitials])
 
   const handleFileLoad = async (uploadedFile) => {
+    if (elements.length && !window.confirm('Loading a new document will discard the fields you placed. Continue?')) {
+      return
+    }
     setLoading(true)
     try {
       await loadFile(uploadedFile)
       setElements([])
       setCurrentPage(1)
       setZoom(1)
+      setPendingSignId(null)
     } catch (err) {
       console.error(err)
       alert('Error loading file: ' + err.message)
@@ -196,35 +133,57 @@ function App() {
     setLoading(false)
   }
 
-  const handlePageChange = async (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage)
-      await renderPage(newPage, zoom)
-    }
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage)
   }
 
-  const handleZoomChange = async (newZoom) => {
-    const clampedZoom = Math.max(0.5, Math.min(3, newZoom))
-    setZoom(clampedZoom)
-    if (fileType === 'pdf') {
-      await renderPage(currentPage, clampedZoom)
+  const handleZoomChange = (newZoom) => {
+    setZoom(Math.max(0.5, Math.min(3, newZoom)))
+  }
+
+  const handleDownload = async () => {
+    const { findIncompleteElements, buildSignedPdf, downloadPdf } = await import('./lib/exportPdf')
+    const incomplete = findIncompleteElements(elements)
+    if (incomplete.length) {
+      setCurrentPage(incomplete[0].page)
+      alert(`${incomplete.length} signature/initials field${incomplete.length > 1 ? 's are' : ' is'} still empty. Click the highlighted field to sign, or remove it.`)
+      return
     }
+
+    setLoading(true)
+    try {
+      const bytes = await buildSignedPdf(pdfBytes, elements)
+      downloadPdf(bytes, file.name)
+    } catch (err) {
+      console.error('Download error:', err)
+      alert('Error generating PDF: ' + err.message)
+    }
+    setLoading(false)
   }
 
   return (
     <div className="flex h-screen">
       <Sidebar
-        onAddElement={addElement}
         hasDocument={!!file}
-        fileType={fileType}
+        fileType={sourceType}
+        activePanel={activePanel}
+        onActivePanelChange={(panel) => {
+          setActivePanel(panel)
+          if (panel !== 'signature') setPendingSignId(null)
+        }}
+        onAddSignature={handleSignatureCreated}
+        onAddText={(options) => addElement('text', options)}
+        onAddDate={() => addElement('date')}
+        onAddInitials={handleAddInitials}
+        onAddCheckbox={() => addElement('checkbox')}
         detectedFields={detectedFields}
         isDetecting={isDetecting}
-        onPlaceField={placeDetectedField}
-        onPlaceAllFields={placeAllDetectedFields}
+        onPlaceField={(field) => placeDetectedFields([field])}
+        onPlaceAllFields={placeDetectedFields}
         onDismissDetected={clearDetectedFields}
         onRedetect={redetectFields}
       />
-      
+
       <main className="flex-1 flex flex-col overflow-hidden">
         {file && (
           <Toolbar
@@ -232,29 +191,23 @@ function App() {
             currentPage={currentPage}
             totalPages={totalPages}
             zoom={zoom}
-            fileType={fileType}
             onPageChange={handlePageChange}
             onZoomChange={handleZoomChange}
             onClearAll={clearAllElements}
-            onDownload={() => {}}
-            elements={elements}
-            canvasRef={canvasRef}
-            docxHtml={docxHtml}
-            pdfDoc={pdfDoc}
-            setLoading={setLoading}
+            onDownload={handleDownload}
           />
         )}
-        
+
         <DocumentViewer
           file={file}
-          fileType={fileType}
-          docxHtml={docxHtml}
-          canvasRef={canvasRef}
+          pdfDoc={pdfDoc}
+          pageSizes={pageSizes}
           elements={elements}
           currentPage={currentPage}
           zoom={zoom}
           onUpdateElement={updateElement}
           onDeleteElement={deleteElement}
+          onSignElement={handleSignElement}
           onFileUpload={handleFileLoad}
         />
       </main>

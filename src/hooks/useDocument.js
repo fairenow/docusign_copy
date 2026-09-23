@@ -1,76 +1,23 @@
-import { useState, useRef, useCallback } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import * as mammoth from 'mammoth'
+import { useState, useCallback } from 'react'
+import { loadPdfDocument } from '../lib/pdfjs'
 import { detectFormFields } from '../utils/formFieldDetector'
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 
 export function useDocument() {
   const [file, setFile] = useState(null)
-  const [fileType, setFileType] = useState(null)
+  const [sourceType, setSourceType] = useState(null)
+  const [pdfBytes, setPdfBytes] = useState(null)
   const [pdfDoc, setPdfDoc] = useState(null)
-  const [totalPages, setTotalPages] = useState(1)
-  const [docxHtml, setDocxHtml] = useState('')
+  // Displayed (rotation-applied) size of each page in PDF points
+  const [pageSizes, setPageSizes] = useState([])
   const [detectedFields, setDetectedFields] = useState([])
   const [isDetecting, setIsDetecting] = useState(false)
-  const canvasRef = useRef(null)
 
-  const loadFile = useCallback(async (uploadedFile) => {
-    const ext = uploadedFile.name.split('.').pop().toLowerCase()
-    
-    if (!['pdf', 'docx'].includes(ext)) {
-      throw new Error('Please upload a PDF or DOCX file')
-    }
-
-    setFile(uploadedFile)
-    setFileType(ext)
-
-    if (ext === 'pdf') {
-      await loadPDF(uploadedFile)
-    } else {
-      await loadDOCX(uploadedFile)
-    }
-  }, [])
-
-  const loadPDF = async (uploadedFile) => {
-    const arrayBuffer = await uploadedFile.arrayBuffer()
-
-    try {
-      const doc = await pdfjsLib.getDocument({
-        data: arrayBuffer,
-        useWorkerFetch: false,
-        isEvalSupported: false
-      }).promise
-
-      setPdfDoc(doc)
-      setTotalPages(doc.numPages)
-      setDocxHtml('')
-
-      // Render first page
-      await renderPageInternal(doc, 1, 1)
-
-      // Automatically detect form fields
-      await detectFieldsInDocument(doc)
-    } catch (err) {
-      console.error('PDF load error:', err)
-      // Fallback loading
-      const doc = await pdfjsLib.getDocument(arrayBuffer).promise
-      setPdfDoc(doc)
-      setTotalPages(doc.numPages)
-      await renderPageInternal(doc, 1, 1)
-
-      // Try to detect fields even with fallback loading
-      await detectFieldsInDocument(doc)
-    }
-  }
-
-  const detectFieldsInDocument = async (doc) => {
+  const detectFields = useCallback(async (doc) => {
     if (!doc) return
-
     setIsDetecting(true)
     setDetectedFields([])
-
     try {
       const result = await detectFormFields(doc)
       setDetectedFields(result.allFields)
@@ -78,57 +25,60 @@ export function useDocument() {
       console.warn('Field detection error:', err)
       setDetectedFields([])
     }
-
     setIsDetecting(false)
-  }
-
-  const clearDetectedFields = useCallback(() => {
-    setDetectedFields([])
   }, [])
 
-  const redetectFields = useCallback(async () => {
-    if (pdfDoc) {
-      await detectFieldsInDocument(pdfDoc)
+  const loadFile = useCallback(async (uploadedFile) => {
+    const ext = uploadedFile.name.split('.').pop().toLowerCase()
+    if (!['pdf', 'docx'].includes(ext)) {
+      throw new Error('Please upload a PDF or DOCX file')
     }
-  }, [pdfDoc])
+    if (uploadedFile.size > MAX_FILE_SIZE) {
+      throw new Error('File is larger than 50 MB')
+    }
 
-  const renderPageInternal = async (doc, pageNum, zoom) => {
-    const page = await doc.getPage(pageNum)
-    const viewport = page.getViewport({ scale: 1.5 * zoom })
-    
-    const canvas = canvasRef.current
-    if (!canvas) return
-    
-    canvas.width = viewport.width
-    canvas.height = viewport.height
-    
-    const ctx = canvas.getContext('2d')
-    await page.render({ canvasContext: ctx, viewport }).promise
-  }
+    let bytes
+    if (ext === 'pdf') {
+      bytes = new Uint8Array(await uploadedFile.arrayBuffer())
+    } else {
+      const { docxToPdf } = await import('../lib/docxToPdf')
+      bytes = await docxToPdf(uploadedFile)
+    }
 
-  const renderPage = useCallback(async (pageNum, zoom = 1) => {
-    if (!pdfDoc) return
-    await renderPageInternal(pdfDoc, pageNum, zoom)
-  }, [pdfDoc])
+    const doc = await loadPdfDocument(bytes)
+    const sizes = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      const { width, height } = page.getViewport({ scale: 1 })
+      sizes.push({ width, height })
+    }
 
-  const loadDOCX = async (uploadedFile) => {
-    const arrayBuffer = await uploadedFile.arrayBuffer()
-    const result = await mammoth.convertToHtml({ arrayBuffer })
-    
-    setDocxHtml(result.value)
-    setPdfDoc(null)
-    setTotalPages(1)
-  }
+    pdfDoc?.destroy()
+    setFile(uploadedFile)
+    setSourceType(ext)
+    setPdfBytes(bytes)
+    setPdfDoc(doc)
+    setPageSizes(sizes)
+
+    // Field detection only makes sense for real PDFs (a converted DOCX has no form fields)
+    if (ext === 'pdf') {
+      detectFields(doc)
+    } else {
+      setDetectedFields([])
+    }
+  }, [pdfDoc, detectFields])
+
+  const clearDetectedFields = useCallback(() => setDetectedFields([]), [])
+  const redetectFields = useCallback(() => detectFields(pdfDoc), [detectFields, pdfDoc])
 
   return {
     file,
-    fileType,
+    sourceType,
+    pdfBytes,
     pdfDoc,
-    totalPages,
-    docxHtml,
+    pageSizes,
+    totalPages: pageSizes.length,
     loadFile,
-    renderPage,
-    canvasRef,
     detectedFields,
     isDetecting,
     clearDetectedFields,

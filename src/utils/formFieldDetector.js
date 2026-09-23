@@ -39,14 +39,15 @@ const INITIAL_PATTERNS = [
   /^init$/i
 ]
 
+// Word boundaries so e.g. "Agreement" or "checkout" don't look like checkboxes
 const CHECKBOX_PATTERNS = [
-  /agree/i,
-  /accept/i,
-  /confirm/i,
-  /acknowledge/i,
-  /consent/i,
-  /check/i,
-  /select/i,
+  /\bagree\b/i,
+  /\baccept\b/i,
+  /\bconfirm\b/i,
+  /\backnowledge\b/i,
+  /\bconsent\b/i,
+  /\bcheck\b/i,
+  /\bselect\b/i,
   /yes\/no/i
 ]
 
@@ -138,14 +139,12 @@ export async function extractPDFFormFields(pdfDoc) {
       )
 
       for (const annot of formAnnotations) {
-        // Convert PDF coordinates to canvas coordinates
-        const [x1, y1, x2, y2] = annot.rect
-
-        // PDF coordinates start from bottom-left, convert to top-left
-        const canvasX = x1 * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const canvasY = viewport.height - (y2 * (viewport.height / page.getViewport({ scale: 1 }).height))
-        const width = (x2 - x1) * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const height = (y2 - y1) * (viewport.height / page.getViewport({ scale: 1 }).height)
+        // Convert PDF coordinates to viewport coordinates (handles rotation and crop offsets)
+        const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle(annot.rect)
+        const canvasX = Math.min(vx1, vx2)
+        const canvasY = Math.min(vy1, vy2)
+        const width = Math.abs(vx2 - vx1)
+        const height = Math.abs(vy2 - vy1)
 
         const detectedType = detectFieldType(
           annot.fieldName || annot.alternativeText,
@@ -167,7 +166,9 @@ export async function extractPDFFormFields(pdfDoc) {
           readOnly: !!(annot.fieldFlags && (annot.fieldFlags & 1)),
           value: annot.fieldValue || '',
           options: annot.options || [],
-          source: 'acroform'
+          source: 'acroform',
+          pageWidth: viewport.width,
+          pageHeight: viewport.height
         })
       }
     }
@@ -199,9 +200,7 @@ export async function detectFieldsFromContent(pdfDoc) {
       for (const item of textContent.items) {
         if (!item.str) continue
 
-        const transform = item.transform
-        const x = transform[4] * 1.5
-        const y = viewport.height - (transform[5] * 1.5)
+        const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5])
 
         // Check if this is a new line
         if (Math.abs(y - lastY) > 10) {
@@ -209,7 +208,7 @@ export async function detectFieldsFromContent(pdfDoc) {
           if (lineText.trim()) {
             const field = analyzeLineForFields(lineText, lineItems, pageNum, detectedFields.length)
             if (field) {
-              detectedFields.push(field)
+              detectedFields.push({ ...field, pageWidth: viewport.width, pageHeight: viewport.height })
             }
           }
 
@@ -226,7 +225,7 @@ export async function detectFieldsFromContent(pdfDoc) {
       if (lineText.trim()) {
         const field = analyzeLineForFields(lineText, lineItems, pageNum, detectedFields.length)
         if (field) {
-          detectedFields.push(field)
+          detectedFields.push({ ...field, pageWidth: viewport.width, pageHeight: viewport.height })
         }
       }
     }
