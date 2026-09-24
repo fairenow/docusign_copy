@@ -10,7 +10,7 @@ import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
-import { nextFieldY } from '../lib/fields'
+import { FIELD_LABELS, nextFieldY, placeField } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
@@ -64,6 +64,9 @@ export default function EnvelopeEditorPage() {
   const [suggestions, setSuggestions] = useState(null)
   const [suggesting, setSuggesting] = useState(false)
   const [suggestNotice, setSuggestNotice] = useState(null)
+  // Field type picked up from the toolbar, waiting to be clicked onto the page
+  const [placingType, setPlacingType] = useState(null)
+  const [layouts, setLayouts] = useState([])
 
   // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
   const reload = useCallback(async () => {
@@ -182,16 +185,37 @@ export default function EnvelopeEditorPage() {
   }
 
   // Fields -------------------------------------------------------------------
-  const addField = (type) => {
-    const pageSize = pageSizes[currentPage - 1]
-    if (!pageSize || (!activeRecipientId && type !== 'prefill')) return
-    const field = newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) })
+  const insertField = (field) => {
     update({ fields: [...draft.fields, field] })
     // Highlight the new field but stay on the current tab, so several can be placed in a row.
     // "Fill in now" opens its settings, since it needs text straight away.
-    if (type === 'prefill') selectField(field.id)
+    if (field.type === 'prefill') selectField(field.id)
     else setSelectedFieldId(field.id)
   }
+
+  // With a mouse, a field type is picked up and follows the pointer until it is clicked onto
+  // the page (sitting on the line below it). Touch screens have no hover: it is added at once.
+  const addField = (type) => {
+    const pageSize = pageSizes[currentPage - 1]
+    if (!pageSize || (!activeRecipientId && type !== 'prefill')) return
+    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+      setPlacingType(current => (current === type ? null : type))
+      getAllLayouts().then(setLayouts)
+      return
+    }
+    insertField(newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) }))
+  }
+
+  // The rectangle a field being placed would take with the pointer at (x, y): its left edge at
+  // the pointer, centred vertically, then onto a line close below
+  const placementRect = useCallback((type, pageNumber, x, y) => {
+    const pageSize = pageSizes[pageNumber - 1]
+    const { w, h } = placeField(type, { page: pageNumber, pageSize })
+    const rect = { x: Math.min(Math.max(x, 0), 1 - w), y: Math.min(Math.max(y - h / 2, 0), 1 - h), w, h }
+    const layout = layouts[pageNumber - 1]
+    const snapped = layout && type !== 'checkbox' ? snapToLine(rect, layout) : null
+    return snapped ? { ...rect, ...snapped } : rect
+  }, [pageSizes, layouts])
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
   const selectField = useCallback((id) => {
@@ -214,6 +238,14 @@ export default function EnvelopeEditorPage() {
       return patch ? { ...d, fields: d.fields.map(f => (f.id === field.id ? { ...f, ...patch } : f)) } : d
     })
   }, [getLayout])
+
+  // Esc puts back a field type that was picked up
+  useEffect(() => {
+    if (!placingType) return
+    const onKeyDown = (e) => { if (e.key === 'Escape') setPlacingType(null) }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [placingType])
 
   // Suggest fields ------------------------------------------------------------
   const suggest = async () => {
@@ -368,6 +400,21 @@ export default function EnvelopeEditorPage() {
   if (!draft) return <FullPageMessage title="Loading…" />
 
   const activeRecipient = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer')
+  // A picked-up field shows where it would go, in its signer's color, until clicked into place
+  const placing = placingType && editable ? {
+    rectAt: (pageNumber, x, y) => placementRect(placingType, pageNumber, x, y),
+    render: () => (
+      <PlaceholderField
+        field={{ type: placingType, required: placingType !== 'checkbox' }}
+        color={placingType === 'prefill' ? '#475569' : activeRecipient?.color ?? RECIPIENT_COLORS[0]}
+        assignee={placingType === 'prefill' ? 'you, now' : activeRecipient?.name || 'this signer'}
+      />
+    ),
+    onPlace: (pageNumber, rect) => {
+      insertField(newField(placingType, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] }, activeRecipientId, rect))
+      setPlacingType(null)
+    }
+  } : null
   const selectedField = editable ? draft.fields.find(f => f.id === selectedFieldId) : null
   const saveStatus = saveState.saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'
   const panelTab = selectedField ? tab : 'recipients'
@@ -477,6 +524,11 @@ export default function EnvelopeEditorPage() {
         )}
       </div>
 
+      {placing && (
+        <p role="status" className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-900">
+          Click on the page to place the {FIELD_LABELS[placingType].toLowerCase()} field. Press Esc to cancel.
+        </p>
+      )}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
       {templateSaved && (
         <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
@@ -491,7 +543,7 @@ export default function EnvelopeEditorPage() {
 
       <div className="flex-1 flex min-h-0">
         <div className={`flex-1 min-w-0 min-h-0 ${mobileView === 'panel' ? 'hidden md:flex' : 'flex'}`}>
-        {editable && <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
+        {editable && <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} activeType={placingType} />}
 
         {/* Document */}
         {pdfError ? (
@@ -516,6 +568,7 @@ export default function EnvelopeEditorPage() {
             onUpdateElement={updateField}
             onDeleteElement={deleteField}
             onElementGestureEnd={snapField}
+            placing={placing}
           />
         )}
 

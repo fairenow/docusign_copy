@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
+import { addField } from './placeField'
 
 let db
 
@@ -22,8 +23,8 @@ test('save a prepared envelope as a template, then start a new envelope from it'
   await page.getByRole('button', { name: 'Add recipient' }).click()
   await page.getByLabel('Recipient name').fill('Bob Signer')
   await page.getByLabel('Recipient email').fill('bob@example.com')
-  await page.getByRole('button', { name: 'Signature', exact: true }).click()
-  await page.getByRole('button', { name: 'Text', exact: true }).click()
+  await addField(page, 'Signature')
+  await addField(page, 'Text')
   await page.getByLabel('Remind signers').selectOption({ label: 'Every week' })
   await page.getByLabel('Expires after').selectOption({ label: '14 days' })
   await page.getByLabel('Let signers adjust their fields').check()
@@ -86,7 +87,7 @@ test('a template can be saved before the people are known', async ({ page }) => 
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
   await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByRole('button', { name: 'Add recipient' }).click()
-  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await addField(page, 'Signature')
 
   await page.getByRole('button', { name: 'Save as template' }).click()
   const dialog = page.getByRole('dialog', { name: 'Save as template' })
@@ -103,7 +104,7 @@ test('the sender can stay a fixed person on the template', async ({ page }) => {
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
   await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByLabel('I need to sign this document').check()
-  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await addField(page, 'Signature')
   await page.getByRole('button', { name: 'Save as template' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Save as template' })

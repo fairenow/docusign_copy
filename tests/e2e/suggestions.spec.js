@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
 import { makeSignaturePagePdf, SIGNATURE_PAGE_LINES } from './fixtures'
+import { addField } from './placeField'
 
 let db
 
@@ -81,7 +82,7 @@ test('Suggest fields finds the blank lines and who fills each one in', async ({ 
 
 test('a field dropped near a line snaps onto it; Alt places it freely', async ({ page }) => {
   await openSignaturePage(page)
-  await page.getByRole('button', { name: 'Date signed', exact: true }).click()
+  await addField(page, 'Date signed')
   const field = page.locator('[data-field-type="date"]')
   const documentPage = page.getByTestId('document-page').first()
   const { its, date } = SIGNATURE_PAGE_LINES
@@ -120,4 +121,41 @@ test('a field dropped near a line snaps onto it; Alt places it freely', async ({
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
   const saved = lastSave().p_fields.find(f => f.type === 'date')
   expect(Math.abs(bottomPt(saved) - (its - 7))).toBeLessThan(1.5)
+})
+
+test('a picked-up field follows the pointer, sits on the line under it and is placed with a click', async ({ page }) => {
+  await openSignaturePage(page)
+  const documentPage = page.getByTestId('document-page').first()
+  const { date } = SIGNATURE_PAGE_LINES
+  const layer = documentPage.getByTestId('placement-layer')
+  const pointAt = async (x, y) => {
+    const scale = (await documentPage.boundingBox()).width / 612
+    return { position: { x: x * scale, y: y * scale } }
+  }
+
+  // Esc puts it back
+  await page.getByRole('button', { name: 'Date signed', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Click on the page to place the date signed field' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('placement-layer')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Date signed', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Date signed', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  // Hover a few points above Carol's date line: the preview sits on the line
+  await layer.hover(await pointAt(400, date - 30))
+  await layer.hover(await pointAt(400, date - 6))
+  const preview = page.getByTestId('placement-preview')
+  await expect(preview).toBeVisible()
+  await expect.poll(async () => {
+    const [p, b] = [await preview.boundingBox(), await documentPage.boundingBox()]
+    return Math.round((p.y + p.height - b.y) / (b.width / 612))
+  }).toBe(date - 1)
+
+  await layer.click(await pointAt(400, date - 6))
+  await expect(page.getByTestId('placement-layer')).toHaveCount(0)
+  const field = page.locator('[data-field-type="date"]')
+  await expect(field).toHaveCount(1)
+  const [f, b] = [await field.boundingBox(), await documentPage.boundingBox()]
+  expect(Math.round((f.y + f.height - b.y) / (b.width / 612))).toBe(date - 1)
+  expect(Math.round((f.x - b.x) / (b.width / 612))).toBe(400)
 })

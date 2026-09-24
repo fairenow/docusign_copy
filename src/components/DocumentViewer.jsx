@@ -31,7 +31,10 @@ export default function DocumentViewer({
   onUpdateElement,
   onDeleteElement,
   onActivateElement,
-  onElementGestureEnd // (element, kind, event) after a field was moved or resized
+  onElementGestureEnd, // (element, kind, event) after a field was moved or resized
+  // Placing a new field: { rectAt(pageNumber, x, y) -> rect, render(rect), onPlace(pageNumber, rect) }.
+  // The field follows the pointer as a preview and a click puts it there.
+  placing = null
 }) {
   const scrollRef = useRef(null)
   const pageRefs = useRef([])
@@ -40,6 +43,9 @@ export default function DocumentViewer({
   const selectedId = controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId
   const setSelectedId = onSelectedIdChange ?? setInternalSelectedId
   const scale = BASE_SCALE * zoom
+  // Where the field being placed would go: { page, rect } under the pointer
+  const [preview, setPreview] = useState(null)
+  useEffect(() => { if (!placing) setPreview(null) }, [placing])
 
   // Scroll to a page chosen outside the viewer (the page the user scrolled to is already shown)
   useEffect(() => {
@@ -135,9 +141,51 @@ export default function DocumentViewer({
                 )
               })}
             </div>
+            {placing && (
+              <PlacementLayer
+                pageNumber={pageNumber}
+                placing={placing}
+                preview={preview?.page === pageNumber ? preview.rect : null}
+                onPreview={setPreview}
+              />
+            )}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * Above a page while a field is being placed: the preview follows the pointer and a click
+ * places the field (on top of fields already there, so they do not catch the click).
+ */
+function PlacementLayer({ pageNumber, placing, preview, onPreview }) {
+  const rectAt = (e) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    return placing.rectAt(pageNumber, (e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height)
+  }
+  return (
+    <div
+      className="absolute inset-0 z-10 cursor-crosshair"
+      data-testid="placement-layer"
+      onPointerMove={(e) => onPreview({ page: pageNumber, rect: rectAt(e) })}
+      onPointerLeave={() => onPreview(null)}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        if (e.button !== undefined && e.button !== 0) return
+        placing.onPlace(pageNumber, rectAt(e))
+      }}
+    >
+      {preview && (
+        <div
+          className="absolute pointer-events-none opacity-80"
+          style={{ left: `${preview.x * 100}%`, top: `${preview.y * 100}%`, width: `${preview.w * 100}%`, height: `${preview.h * 100}%` }}
+          data-testid="placement-preview"
+        >
+          {placing.render(preview)}
+        </div>
+      )}
     </div>
   )
 }

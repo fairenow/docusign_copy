@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { ALICE, BOB, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
+import { addField } from './placeField'
 
 let db
 
@@ -49,7 +50,7 @@ test('owner sends an envelope; only the first signer is emailed in sequential or
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').nth(i).fill(name)
     await page.getByLabel('Recipient email').nth(i).fill(email)
-    await page.getByRole('button', { name: 'Signature', exact: true }).click()
+    await addField(page, 'Signature')
   }
   await expect(page.getByText('Everything is in place.')).toBeVisible()
 
@@ -195,7 +196,7 @@ test('"I need to sign this document" adds you as the first signer', async ({ pag
   await expect(page.getByLabel('Recipient name').first()).toHaveValue(ALICE.name)
   await expect(page.getByLabel('Recipient email').first()).toHaveValue(ALICE.email)
   await expect(page.getByText('Adding to the current page for')).toContainText(ALICE.name)
-  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await addField(page, 'Signature')
 
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved')

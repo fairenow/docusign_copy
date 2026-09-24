@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
 import { pdfFile } from './fixtures'
+import { addField } from './placeField'
 
 let db
 
@@ -19,7 +20,7 @@ test('the sender fills in the other company\'s name; signers see it but cannot c
   await expect(page.getByTestId('document-page').first()).toBeVisible()
 
   // Works before any signer is added
-  await page.getByRole('button', { name: 'Fill in now' }).click()
+  await addField(page, 'Fill in now')
   const box = page.locator('[data-field-type="prefill"] input')
   await expect(box).toBeVisible()
   await page.getByLabel('What is it? (e.g. Company name)').fill('Company name')
@@ -28,7 +29,7 @@ test('the sender fills in the other company\'s name; signers see it but cannot c
   await page.getByRole('button', { name: 'Add recipient' }).click()
   await page.getByLabel('Recipient name').fill('Carol Client')
   await page.getByLabel('Recipient email').fill('carol@client.com')
-  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await addField(page, 'Signature')
 
   // Sending waits for the text
   await expect(page.getByText('Fill in "Company name" before sending.')).toBeVisible()

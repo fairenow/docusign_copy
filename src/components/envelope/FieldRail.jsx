@@ -7,7 +7,7 @@ import { FIELD_ICONS } from '../fieldIcons'
  * for the selected signer, whose color and initials are shown at the top. "Fill in now"
  * fields are for the sender, so they need no signer.
  */
-export default function FieldRail({ recipient, documentReady, onAdd }) {
+export default function FieldRail({ recipient, documentReady, onAdd, activeType = null }) {
   const disabled = !recipient || !documentReady
   const hint = !documentReady ? 'Loading the document…' : !recipient ? 'Add a signer first' : null
 
@@ -28,8 +28,9 @@ export default function FieldRail({ recipient, documentReady, onAdd }) {
             type="button"
             disabled={disabled}
             onClick={() => onAdd(type)}
+            aria-pressed={activeType === type}
             title={hint ?? `Add ${FIELD_LABELS[type].toLowerCase()} for ${recipient.name || 'this signer'}`}
-            className="w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            className={`w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent ${activeType === type ? 'bg-blue-50 ring-2 ring-blue-500' : ''}`}
           >
             <Icon size={20} style={recipient ? { color: recipient.color } : undefined} aria-hidden="true" />
             <span className="text-[11px] leading-tight text-center">{FIELD_LABELS[type]}</span>
@@ -45,8 +46,9 @@ export default function FieldRail({ recipient, documentReady, onAdd }) {
             type="button"
             disabled={!documentReady}
             onClick={() => onAdd(type)}
+            aria-pressed={activeType === type}
             title={documentReady ? 'Add text you type now, e.g. the other company\'s name' : 'Loading the document…'}
-            className="w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            className={`w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent ${activeType === type ? 'bg-blue-50 ring-2 ring-blue-500' : ''}`}
           >
             <Icon size={20} className="text-slate-600" aria-hidden="true" />
             <span className="text-[11px] leading-tight text-center">{FIELD_LABELS[type]}</span>

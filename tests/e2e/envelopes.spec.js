@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { PDFDocument } from 'pdf-lib'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
+import { addField } from './placeField'
 
 let db
 
@@ -84,8 +85,8 @@ test.describe('envelopes', () => {
     await page.getByLabel('Recipient name').fill('Bob Signer')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
     await expect(page.getByText('Adding to the current page for')).toContainText('Bob Signer')
-    await page.getByRole('button', { name: 'Signature', exact: true }).click()
-    await page.getByRole('button', { name: 'Date signed', exact: true }).click()
+    await addField(page, 'Signature')
+    await addField(page, 'Date signed')
     await expect(page.getByTestId('field')).toHaveCount(2)
     await expect(page.getByTestId('field').first()).toContainText('Signature *')
     // Clicking a field opens its settings; recipients are one tab away
@@ -96,7 +97,7 @@ test.describe('envelopes', () => {
     // Fields on page 2 (rotated) too: the page buttons scroll to it and new fields go there
     await page.getByTitle('Next page').click()
     await expect(page.getByTestId('page-indicator')).toHaveText('Page 2 of 2')
-    await page.getByRole('button', { name: 'Initials', exact: true }).click()
+    await addField(page, 'Initials')
     await expect(page.locator('[data-page="2"] [data-testid="field"]')).toHaveCount(1)
     await expect(page.getByTestId('field')).toHaveCount(3)
 
@@ -135,7 +136,7 @@ test.describe('envelopes', () => {
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').fill('Bob')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
-    await page.getByRole('button', { name: 'Signature', exact: true }).click()
+    await addField(page, 'Signature')
 
     const field = page.getByTestId('field')
     const box = await field.boundingBox()
@@ -197,7 +198,7 @@ test.describe('envelopes', () => {
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').fill('Bob')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
-    await page.getByRole('button', { name: 'Signature', exact: true }).click()
+    await addField(page, 'Signature')
     await expect(page.getByTestId('field')).toHaveCount(1)
 
     await page.getByLabel('Recipient role').selectOption('cc')
@@ -206,7 +207,7 @@ test.describe('envelopes', () => {
 
     await page.getByLabel('Recipient role').selectOption('signer')
     await page.getByLabel('Select Bob').click()
-    await page.getByRole('button', { name: 'Text', exact: true }).click()
+    await addField(page, 'Text')
     page.once('dialog', d => d.accept())
     await page.getByTitle('Remove recipient').click()
     await expect(page.getByTestId('recipient')).toHaveCount(0)
