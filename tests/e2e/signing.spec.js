@@ -180,3 +180,73 @@ test('owner sees progress, resends a link, and downloads the signed PDF when com
   await page.getByRole('button', { name: 'Download signed PDF' }).click()
   expect((await download).suggestedFilename()).toBe('Offer letter_signed.pdf')
 })
+
+test('"I need to sign this document" adds you as the first signer', async ({ page }) => {
+  await signInAs(page, ALICE)
+  await page.goto('/')
+  await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Add recipient' }).click()
+  await page.getByLabel('Recipient name').fill('Carol Client')
+  await page.getByLabel('Recipient email').fill('carol@client.com')
+
+  await page.getByLabel('I need to sign this document').check()
+  await expect(page.getByLabel('Recipient name').first()).toHaveValue(ALICE.name)
+  await expect(page.getByLabel('Recipient email').first()).toHaveValue(ALICE.email)
+  await expect(page.getByText('Adding to the current page for')).toContainText(ALICE.name)
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
+  const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
+  expect(save.p_recipients.map(r => [r.email, r.role, r.routing_order])).toEqual([[ALICE.email, 'signer', 1], ['carol@client.com', 'signer', 2]])
+  expect(save.p_fields[0].recipient_id).toBe(save.p_recipients[0].id)
+
+  // Unchecking removes you (and your fields)
+  page.once('dialog', d => d.accept())
+  await page.getByLabel('I need to sign this document').uncheck()
+  await expect(page.getByTestId('recipient')).toHaveCount(1)
+  await expect(page.getByTestId('field')).toHaveCount(0)
+})
+
+test('team members save a signature once and reuse it; manage it on My signatures', async ({ page }) => {
+  const first = await seedSent({ signers: [{ name: BOB.name, email: BOB.email }], signingOrder: 'parallel' })
+  await signInAs(page, BOB)
+  await page.goto(`/envelopes/${first.id}/sign`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.locator('[data-field-type="signature"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Adopt your signature' })
+  await expect(dialog.getByLabel('Save to my signatures for next time')).toBeChecked()
+  await dialog.getByRole('button', { name: 'Adopt and sign' }).click()
+  await expect.poll(() => db.savedSignatures.length).toBe(1)
+  expect(db.savedSignatures[0]).toMatchObject({ kind: 'signature', image: expect.stringMatching(/^data:image\/png;base64,/) })
+
+  // Next document: the saved signature is one click away
+  const second = await seedSent({ signers: [{ name: BOB.name, email: BOB.email }], signingOrder: 'parallel' })
+  await page.goto(`/envelopes/${second.id}/sign`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.locator('[data-field-type="signature"]').click()
+  await page.getByRole('button', { name: 'Use saved signature 1' }).click()
+  await expect(page.locator('[data-field-type="signature"] img')).toHaveAttribute('src', db.savedSignatures[0].image)
+  expect(db.savedSignatures).toHaveLength(1) // reusing does not save a copy
+
+  // My signatures lists it and can delete it
+  await page.goto('/signatures')
+  await expect(page.getByRole('img', { name: 'Saved signature 1' })).toBeVisible()
+  page.once('dialog', d => d.accept())
+  await page.getByTitle('Delete signature').click()
+  await expect(page.getByTestId('saved-signature')).toContainText('No saved signature yet')
+  expect(db.savedSignatures).toHaveLength(0)
+})
+
+test('signers with only a link are not offered saving', async ({ page }) => {
+  const { token } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
+  await page.goto(`/sign/${token}`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.locator('[data-field-type="signature"]').click()
+  await expect(page.getByRole('dialog').getByLabel('Save to my signatures for next time')).toHaveCount(0)
+  expect(db.calls.some(c => c.table === 'saved_signatures')).toBe(false)
+})

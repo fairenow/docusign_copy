@@ -92,6 +92,7 @@ The database schema lives in `supabase/migrations/` and is applied to the projec
 | `fields` | Fields assigned to recipients; positions are page fractions (0–1) |
 | `audit_events` | Append-only audit trail for the certificate of completion |
 | `templates`, `template_roles`, `template_fields` | Reusable documents |
+| `saved_signatures` | A team member's saved signatures and initials (only they can see them; up to 5 of each) |
 
 Access rules (row level security):
 

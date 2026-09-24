@@ -7,7 +7,7 @@ import {
   subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
-  draftFromEnvelope, moveRecipient, newField, newRecipient, renumberRecipients,
+  addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
 import { nextFieldY } from '../lib/fields'
@@ -30,7 +30,7 @@ import ErrorBanner from '../components/ErrorBanner'
  */
 export default function EnvelopeEditorPage() {
   const { envelopeId } = useParams()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
 
   const [envelope, setEnvelope] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -137,6 +137,21 @@ export default function EnvelopeEditorPage() {
       fields: d.fields.filter(f => f.recipientId !== id)
     }))
     if (activeRecipientId === id) setActiveRecipientId(null)
+  }
+
+  // "I need to sign this document": you are a signer, first in order by default
+  const me = draft ? recipientByEmail(draft.recipients, user?.email) : undefined
+  const signingMyself = {
+    checked: me?.role === 'signer',
+    onChange: (checked) => {
+      if (checked) {
+        const recipients = addSelfAsSigner(draft.recipients, { name: profile?.full_name || user.email.split('@')[0], email: user.email })
+        update({ recipients })
+        setActiveRecipientId(recipientByEmail(recipients, user.email).id)
+      } else if (me) {
+        removeRecipient(me.id)
+      }
+    }
   }
 
   // Fields -------------------------------------------------------------------
@@ -416,6 +431,7 @@ export default function EnvelopeEditorPage() {
                       onRemove={removeRecipient}
                       onMove={(id, delta) => update({ recipients: moveRecipient(draft.recipients, id, delta) })}
                       onSigningOrderChange={(signingOrder) => update({ signingOrder })}
+                      signingMyself={signingMyself}
                     />
                     <p className="text-xs text-gray-500">
                       {activeRecipient

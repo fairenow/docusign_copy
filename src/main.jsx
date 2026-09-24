@@ -31,7 +31,10 @@ const router = createBrowserRouter([
   },
   {
     element: <RequireAuth><AppLayout /></RequireAuth>,
-    children: [{ path: '/', element: <DashboardPage /> }]
+    children: [
+      { path: '/', element: <DashboardPage /> },
+      { path: '/signatures', lazy: lazyPage(() => import('./pages/SignaturesPage')) }
+    ]
   },
   { path: '*', element: <Navigate to="/" replace /> }
 ])

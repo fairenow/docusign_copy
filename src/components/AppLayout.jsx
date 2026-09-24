@@ -18,6 +18,7 @@ export default function AppLayout() {
           <Brand />
           <nav className="flex gap-1">
             <NavLink to="/" end className={navClass}>Envelopes</NavLink>
+            <NavLink to="/signatures" className={navClass}>My signatures</NavLink>
             <NavLink to="/quick-sign" className={navClass}>Quick sign</NavLink>
           </nav>
         </div>

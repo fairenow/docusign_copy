@@ -8,7 +8,9 @@ import LoadingOverlay from '../components/LoadingOverlay'
 import { useDocument } from '../hooks/useDocument'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import { createElement, elementFromDetected, nextFieldY } from '../lib/fields'
-import { renderTypedSignature } from '../lib/signatureImage'
+import { renderTypedSignature, signatureFromImage } from '../lib/signatureImage'
+import { useAuth } from '../auth/useAuth'
+import { useSavedSignatures } from '../hooks/useSavedSignatures'
 
 /**
  * Single-user signing: open a document, fill and sign it, download the result.
@@ -25,6 +27,21 @@ export default function QuickSignPage() {
   const [savedInitials, setSavedInitials] = useState(null)
   // Placeholder waiting for the user to create a signature in the sidebar
   const [pendingSignId, setPendingSignId] = useState(null)
+
+  // Signed-in team members start with their newest saved signature and initials
+  const { user } = useAuth()
+  const { saved } = useSavedSignatures(Boolean(user))
+  useEffect(() => {
+    let cancelled = false
+    const newest = (kind) => saved.find(s => s.kind === kind)
+    ;(async () => {
+      const [signature, initials] = await Promise.all(['signature', 'initials'].map(kind => newest(kind) && signatureFromImage(newest(kind).image)))
+      if (cancelled) return
+      if (signature) setSavedSignature(current => current ?? signature)
+      if (initials) setSavedInitials(current => current ?? { ...initials, text: '' })
+    })().catch(err => console.error('Could not load saved signatures:', err))
+    return () => { cancelled = true }
+  }, [saved])
 
   const {
     file,

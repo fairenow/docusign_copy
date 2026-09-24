@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { ChevronRight, CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
+import { useSavedSignatures } from '../hooks/useSavedSignatures'
+import { useAuth } from '../auth/useAuth'
 import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel } from '../../supabase/functions/_shared/signing.js'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
@@ -10,7 +12,7 @@ import FillField from '../components/FillField'
 import FullPageMessage from '../components/FullPageMessage'
 import ErrorBanner from '../components/ErrorBanner'
 import Modal from '../components/Modal'
-import SignaturePanel from '../components/SignaturePanel'
+import AdoptSignature from '../components/AdoptSignature'
 import Brand from '../components/Brand'
 
 const STATE_MESSAGES = {
@@ -43,6 +45,11 @@ export default function SigningPage() {
   const [error, setError] = useState(null)
   const [done, setDone] = useState(null) // 'signed' | 'declined'
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
+  // Team members signing as themselves can reuse and save signatures
+  const { user } = useAuth()
+  const canSaveSignatures = Boolean(user?.email && session?.recipient?.email &&
+    user.email.toLowerCase() === session.recipient.email.toLowerCase())
+  const { saved: savedSignatures, save: saveSignature } = useSavedSignatures(canSaveSignatures)
 
   useEffect(() => {
     let cancelled = false
@@ -115,10 +122,14 @@ export default function SigningPage() {
     }
   }, [adopted, setValue])
 
-  const handleAdopt = ({ data }) => {
-    setAdopted(a => ({ ...a, [adopting.type]: data }))
-    setValue(adopting.fieldId, data)
+  const handleAdopt = (image, remember) => {
+    const { type, fieldId } = adopting
+    setAdopted(a => ({ ...a, [type]: image }))
+    setValue(fieldId, image)
     setAdopting(null)
+    if (remember) {
+      saveSignature(type, image).catch(err => setError(`Your ${type} was added, but could not be saved for next time: ${err.message}`))
+    }
   }
 
   const renderField = useCallback((element, ctx) => {
@@ -272,10 +283,12 @@ export default function SigningPage() {
               ? 'Draw or type your signature. It will be placed wherever you click a signature field.'
               : 'Draw or type your initials.'}
           </p>
-          <SignaturePanel
-            onApply={handleAdopt}
+          <AdoptSignature
+            kind={adopting.type}
             defaultTypedName={adopting.type === 'signature' ? session.recipient.name : initialsOf(session.recipient.name)}
-            applyLabel="Adopt and sign"
+            saved={savedSignatures}
+            canSave={canSaveSignatures}
+            onAdopt={handleAdopt}
           />
         </Modal>
       )}

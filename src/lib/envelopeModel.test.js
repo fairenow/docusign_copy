@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient,
+  draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient, addSelfAsSigner, recipientByEmail,
   validateForSave, validateForSend, envelopeGroup, currentSigners, RECIPIENT_COLORS
 } from './envelopeModel'
 
@@ -43,6 +43,17 @@ describe('recipients', () => {
     const moved = moveRecipient(list, 'r3', -1)
     expect(moved.map(r => [r.id, r.routingOrder])).toEqual([['r1', 1], ['r3', 2], ['r2', 3]])
     expect(moveRecipient(list, 'r1', -1)).toBe(list)
+  })
+
+  it('adds the sender as the first signer, or makes an existing recipient a signer', () => {
+    const list = [signer(), signer({ id: 'r2', email: 'cc@x.com', role: 'cc', routingOrder: 2 })]
+    const added = addSelfAsSigner(list, { name: 'Alice', email: 'alice@flmlnk.com' })
+    expect(added.map(r => [r.name, r.role, r.routingOrder])).toEqual([['Alice', 'signer', 1], ['Bob', 'signer', 2], ['Bob', 'cc', 3]])
+    expect(recipientByEmail(added, 'ALICE@flmlnk.com').name).toBe('Alice')
+
+    const promoted = addSelfAsSigner(list, { name: 'Me', email: 'CC@x.com' })
+    expect(promoted).toHaveLength(2)
+    expect(promoted[1]).toMatchObject({ id: 'r2', role: 'signer', routingOrder: 2 })
   })
 })
 

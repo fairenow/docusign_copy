@@ -67,3 +67,11 @@ export function trimCanvas(canvas, padding = 4) {
   out.getContext('2d').drawImage(canvas, left, top, w, h, 0, 0, w, h)
   return { data: out.toDataURL('image/png'), aspect: w / h }
 }
+
+/** A saved signature image as { data, aspect } (width / height), like the signature pad returns. */
+export async function signatureFromImage(dataUrl) {
+  const image = new Image()
+  image.src = dataUrl
+  await image.decode()
+  return { data: dataUrl, aspect: image.naturalWidth / image.naturalHeight || 3 }
+}

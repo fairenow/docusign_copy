@@ -39,6 +39,7 @@ export function createMockDb() {
     audit: [],
     tokens: new Map(), // raw token -> recipient id
     emails: [],
+    savedSignatures: [],
     files: new Map(),
     calls: []
   }
@@ -140,6 +141,20 @@ export async function installMockSupabase(page, db) {
     }
 
     if (table === 'profiles' && method === 'GET') return respond(applyFilters(db.profiles, params))
+
+    if (table === 'saved_signatures') {
+      if (method === 'GET') return respond([...db.savedSignatures].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      if (method === 'POST') {
+        const row = { id: randomUUID(), kind: body.kind, image: body.image, created_at: now() }
+        db.savedSignatures.push(row)
+        return respond([row])
+      }
+      if (method === 'DELETE') {
+        const doomed = new Set(applyFilters(db.savedSignatures, params).map(r => r.id))
+        db.savedSignatures = db.savedSignatures.filter(r => !doomed.has(r.id))
+        return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+      }
+    }
     if (table === 'audit_events' && method === 'GET') return respond(applyFilters(db.audit, params))
 
     if (table === 'envelopes') {

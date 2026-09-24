@@ -179,3 +179,22 @@ export async function listAuditEvents(envelopeId) {
     .eq('envelope_id', envelopeId)
     .order('id'))
 }
+
+// ---------------------------------------------------------------------------
+// Saved signatures (private to the signed-in user)
+// ---------------------------------------------------------------------------
+
+const SAVED_COLUMNS = 'id, kind, image, created_at'
+
+export async function listSavedSignatures() {
+  return unwrap(await client().from('saved_signatures').select(SAVED_COLUMNS).order('created_at', { ascending: false }))
+}
+
+/** kind: 'signature' | 'initials'; image: PNG data URL */
+export async function saveSignature(kind, image) {
+  return unwrap(await client().from('saved_signatures').insert({ kind, image }).select(SAVED_COLUMNS).single())
+}
+
+export async function deleteSavedSignature(id) {
+  unwrap(await client().from('saved_signatures').delete().eq('id', id))
+}

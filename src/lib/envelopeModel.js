@@ -114,6 +114,23 @@ export function renumberRecipients(recipients) {
   return recipients.map((r, i) => ({ ...r, routingOrder: i + 1 }))
 }
 
+/** The recipient with this email (case-insensitive), if any. */
+export function recipientByEmail(recipients, email) {
+  const target = email?.toLowerCase()
+  return target ? recipients.find(r => r.email.trim().toLowerCase() === target) : undefined
+}
+
+/**
+ * "I need to sign this document": add the sender as the first signer (they can reorder).
+ * If they are already a recipient, they become a signer instead of being added twice.
+ */
+export function addSelfAsSigner(recipients, { name, email }) {
+  const existing = recipientByEmail(recipients, email)
+  if (existing) return recipients.map(r => (r === existing ? { ...r, role: 'signer' } : r))
+  const me = { ...newRecipient(recipients), name, email }
+  return renumberRecipients([me, ...recipients])
+}
+
 export function moveRecipient(recipients, id, delta) {
   const index = recipients.findIndex(r => r.id === id)
   const target = index + delta

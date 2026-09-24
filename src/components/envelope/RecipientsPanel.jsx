@@ -14,15 +14,26 @@ export default function RecipientsPanel({
   onChange,
   onRemove,
   onMove,
-  onSigningOrderChange
+  onSigningOrderChange,
+  signingMyself, // { checked, onChange } for "I need to sign this document"
 }) {
   const sequential = signingOrder === 'sequential'
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold text-gray-900">Who should complete this document?</h2>
-        {!readOnly && (
+      <h2 className="text-sm font-semibold text-gray-900 mb-2">Who should complete this document?</h2>
+      {!readOnly && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          {signingMyself && (
+            <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={signingMyself.checked}
+                onChange={(e) => signingMyself.onChange(e.target.checked)}
+              />
+              I need to sign this document
+            </label>
+          )}
           <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
             <input
               type="checkbox"
@@ -31,8 +42,8 @@ export default function RecipientsPanel({
             />
             Sign in order
           </label>
-        )}
-      </div>
+        </div>
+      )}
 
       <ol className="space-y-2">
         {recipients.map((r, index) => {
