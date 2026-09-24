@@ -49,7 +49,7 @@ test.describe('sign-in', () => {
     await expect(page.getByRole('alert')).toHaveText('Email link is invalid or has expired')
   })
 
-  for (const next of ['//evil.example.com', '/%5Cevil.example.com', 'https://evil.example.com']) {
+  for (const next of ['//evil.example.com', '/%5Cevil.example.com', 'https://evil.example.com', '/%09/evil.example.com', '/%0A/evil.example.com', '/%20//evil.example.com']) {
     test(`ignores off-site next parameter ${next}`, async ({ page }) => {
       await signIn(page)
       await page.goto(`/login?next=${next}`)

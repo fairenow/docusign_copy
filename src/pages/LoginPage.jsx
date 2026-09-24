@@ -5,10 +5,10 @@ import { ALLOWED_EMAIL_DOMAIN, isSupabaseConfigured } from '../lib/supabase'
 import Brand from '../components/Brand'
 import ErrorBanner from '../components/ErrorBanner'
 
-// Only allow same-site relative paths as the post-login destination.
-// Browsers treat "\" like "/", so "/\evil.com" would be protocol-relative too.
+// The post-login destination must be a plain in-app path ("/envelopes/…?x=y"): no "//host",
+// backslashes, spaces or control characters, which browsers can turn into another site's address
 function safeNext(value) {
-  return value && value.startsWith('/') && !/^\/[/\\]/.test(value) ? value : '/'
+  return value && /^\/(?![/\\])[\w\-./?=&%#~]*$/.test(value) ? value : '/'
 }
 
 const DOMAIN_ONLY = `Only @${ALLOWED_EMAIL_DOMAIN} email addresses can sign in.`
