@@ -5,6 +5,7 @@
  * Row level security itself is verified against the real database, not here.
  */
 import { randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
 
 export const SUPABASE_URL = 'https://e2e-test.supabase.co'
 export const STORAGE_KEY = 'sb-e2e-test-auth-token'
@@ -211,6 +212,7 @@ export async function installMockSupabase(page, db) {
   })
 
   await installMockSigningApi(page, db)
+  await installMockConverter(page, db)
 
   // Realtime is not needed for these flows; refuse the socket quickly
   await page.routeWebSocket(/e2e-test\.supabase\.co/, ws => ws.close())
@@ -255,6 +257,19 @@ function issueTokens(db, env) {
 function isTurn(db, r, env) {
   return env.signing_order === 'parallel' || !db.recipients.some(o =>
     o.envelope_id === env.id && o.role === 'signer' && o.status !== 'signed' && o.routing_order < r.routing_order)
+}
+
+// Stand-in for the convert-document function: returns what LibreOffice produced for the fixture
+async function installMockConverter(page, db) {
+  const converted = await readFile(new URL('./fixtures/consent.libreoffice.pdf', import.meta.url))
+  await page.route(`${SUPABASE_URL}/functions/v1/convert-document*`, async (route, request) => {
+    if (request.method() === 'OPTIONS') return route.fallback()
+    const url = new URL(request.url())
+    const user = requestUser(request)
+    db.calls.push({ type: 'function', action: 'convert', name: url.searchParams.get('name'), user: user?.email, bytes: request.postDataBuffer()?.length ?? 0 })
+    if (!user) return json(route, 401, { error: 'Please sign in' })
+    return route.fulfill({ status: 200, contentType: 'application/pdf', headers: { 'access-control-allow-origin': '*' }, body: converted })
+  })
 }
 
 async function installMockSigningApi(page, db) {

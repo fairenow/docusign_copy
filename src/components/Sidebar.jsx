@@ -8,7 +8,6 @@ import DetectedFieldsPanel from './DetectedFieldsPanel'
 
 export default function Sidebar({
   hasDocument,
-  fileType,
   activePanel,
   onActivePanelChange,
   onAddSignature,
@@ -78,7 +77,7 @@ export default function Sidebar({
         )}
 
         {/* Re-detect button for PDF files when no fields shown */}
-        {hasDocument && fileType === 'pdf' && !showDetectedFields && detectedFields.length === 0 && !isDetecting && (
+        {hasDocument && !showDetectedFields && detectedFields.length === 0 && !isDetecting && (
           <button
             onClick={() => {
               setShowDetectedFields(true)

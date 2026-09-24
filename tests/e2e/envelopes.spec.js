@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { PDFDict, PDFDocument, PDFName } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 
@@ -264,20 +264,31 @@ test('quick sign still fills and downloads a PDF without an account', async ({ p
   expect(out.getPageCount()).toBe(2)
 })
 
-test('Word documents keep their layout: pages, page breaks and searchable text', async ({ page }) => {
-  await page.goto('/quick-sign')
-  await page.getByTestId('file-input').setInputFiles('tests/e2e/fixtures/consent.docx')
-  await expect(page.getByTestId('document-page').first()).toBeVisible()
-  // Three pages of flowing text, then the signature page after the explicit page break
-  await expect(page.getByText('1 / 4')).toBeVisible()
+test('Word documents are converted on the server, exactly as LibreOffice lays them out', async ({ page }) => {
+  await signIn(page)
+  await page.goto('/')
+  await page.getByTestId('new-envelope-input').setInputFiles('tests/e2e/fixtures/consent.docx')
+  await expect(page).toHaveURL(/\/envelopes\/[0-9a-f-]{36}$/)
+  await expect(page.getByTestId('document-page')).toHaveCount(4)
+  await expect(page.getByTestId('page-indicator')).toHaveText('Page 1 of 4')
 
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Download PDF' }).click()
-  const bytes = await (await import('node:fs/promises')).readFile(await (await download).path())
-  const out = await PDFDocument.load(bytes)
-  expect(out.getPageCount()).toBe(4)
-  expect(out.getPage(0).getSize()).toEqual({ width: 612, height: 792 })
-  // The page text is kept (invisible) so the PDF stays searchable
-  const fonts = out.getPage(0).node.Resources().lookup(PDFName.of('Font'), PDFDict)
-  expect(fonts.keys().length).toBeGreaterThan(0)
+  const convert = db.calls.find(c => c.action === 'convert')
+  expect(convert).toMatchObject({ name: 'consent.docx', user: ALICE.email })
+  expect(convert.bytes).toBeGreaterThan(1000)
+  // The uploaded document is the converter's PDF, byte for byte (the upload wraps it in form data)
+  const stored = db.files.get(`documents/${db.envelopes[0].id}/original.pdf`)
+  const expected = await (await import('node:fs/promises')).readFile('tests/e2e/fixtures/consent.libreoffice.pdf')
+  expect(stored.indexOf(expected)).toBeGreaterThanOrEqual(0)
+  expect(db.envelopes[0]).toMatchObject({ title: 'consent', page_count: 4 })
+})
+
+test('Quick sign asks you to sign in before converting a Word document', async ({ page }) => {
+  await page.goto('/quick-sign')
+  page.once('dialog', d => {
+    expect(d.message()).toContain('Sign in to upload Word documents, or upload a PDF instead.')
+    d.accept()
+  })
+  await page.getByTestId('file-input').setInputFiles('tests/e2e/fixtures/consent.docx')
+  await expect.poll(() => db.calls.some(c => c.action === 'convert')).toBe(false)
+  await expect(page.getByTestId('document-page')).toHaveCount(0)
 })

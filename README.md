@@ -131,6 +131,27 @@ Edge Function secrets (Supabase dashboard → Edge Functions → Secrets):
 | `EMAIL_FROM` | `DocSign <sign@yourdomain.com>` (a domain verified in Resend) |
 | `RESEND_API_KEY` | `re_...` |
 
+### Word documents (LibreOffice converter)
+
+PDFs are used exactly as uploaded. Word (`.docx`, `.doc`), OpenDocument (`.odt`) and RTF files
+are converted to PDF on the server by LibreOffice, so their layout matches the original; nothing is
+re-rendered in the browser. The browser sends the file to the `convert-document` Edge Function
+(signed-in team members only), which forwards it to a private
+[Gotenberg](https://github.com/gotenberg/gotenberg) container (LibreOffice behind basic auth). The
+image ships fonts metric-compatible with Calibri, Cambria, Arial, Times New Roman and Courier, so
+line breaks and page breaks match Word; fonts embedded in the document are used as-is.
+
+Converter on Railway (one-time):
+
+1. New project → **Deploy a Docker image** → `gotenberg/gotenberg:8`.
+2. Variables: `API_ENABLE_BASIC_AUTH=true`, `GOTENBERG_API_BASIC_AUTH_USERNAME=docsign`,
+   `GOTENBERG_API_BASIC_AUTH_PASSWORD=<long random password>`, `API_TIMEOUT=120s`.
+3. Settings → Networking → **Generate domain** on port `3000`.
+4. Supabase → Edge Functions → Secrets: `CONVERTER_URL=https://<railway domain>`,
+   `CONVERTER_USERNAME=docsign`, `CONVERTER_PASSWORD=<same password>`.
+
+Until those secrets are set, Word uploads show a clear message asking for a PDF instead.
+
 ### Sign-in
 
 Team members sign in with an emailed one-time link (Supabase Auth, PKCE, so the link must be

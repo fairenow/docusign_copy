@@ -48,7 +48,6 @@ export default function QuickSignPage() {
     pdfBytes,
     pdfDoc,
     pageSizes,
-    sourceType,
     error: documentError,
     loadFile,
     detectedFields,
@@ -181,7 +180,6 @@ export default function QuickSignPage() {
     <div className="flex h-screen">
       <Sidebar
         hasDocument={!!file}
-        fileType={sourceType}
         activePanel={activePanel}
         onActivePanelChange={(panel) => {
           setActivePanel(panel)

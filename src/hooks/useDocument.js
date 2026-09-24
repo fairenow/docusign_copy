@@ -8,7 +8,6 @@ import { usePdf } from './usePdf'
  */
 export function useDocument() {
   const [file, setFile] = useState(null)
-  const [sourceType, setSourceType] = useState(null)
   const [pdfBytes, setPdfBytes] = useState(null)
   const [detectedFields, setDetectedFields] = useState([])
   const [isDetecting, setIsDetecting] = useState(false)
@@ -26,16 +25,15 @@ export function useDocument() {
     setIsDetecting(false)
   }, [])
 
-  // Detection only makes sense for real PDFs (a converted DOCX has no form fields)
+  // Converted documents are real PDFs with text too, so detection works for every upload
   useEffect(() => {
-    if (pdfDoc && sourceType === 'pdf') detectFields(pdfDoc)
+    if (pdfDoc) detectFields(pdfDoc)
     else setDetectedFields([])
-  }, [pdfDoc, sourceType, detectFields])
+  }, [pdfDoc, detectFields])
 
   const loadFile = useCallback(async (uploadedFile) => {
-    const { bytes, sourceType: type } = await fileToPdfBytes(uploadedFile)
+    const { bytes } = await fileToPdfBytes(uploadedFile)
     setFile(uploadedFile)
-    setSourceType(type)
     setPdfBytes(bytes)
   }, [])
 
@@ -44,7 +42,6 @@ export function useDocument() {
 
   return {
     file,
-    sourceType,
     pdfBytes,
     pdfDoc,
     pageSizes,

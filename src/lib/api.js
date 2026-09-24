@@ -147,14 +147,28 @@ export function subscribeToEnvelopeChanges(onChange, envelopeId = null) {
  * Call a signing-api route. Works both for signed-in team members (their session is sent)
  * and for external signers using a link (identified by the token in the body).
  */
+// FunctionsHttpError carries the response; surface the server's message
+async function functionError(error) {
+  const message = await error.context?.json?.().then(b => b?.error).catch(() => null)
+  return new Error(message || error.message)
+}
+
 async function signingApi(route, body) {
   const { data, error } = await client().functions.invoke(`signing-api/${route}`, { body })
-  if (error) {
-    // FunctionsHttpError carries the response; surface the server's message
-    const message = await error.context?.json?.().then(b => b?.error).catch(() => null)
-    throw new Error(message || error.message)
-  }
+  if (error) throw await functionError(error)
   return data
+}
+
+/**
+ * Convert a Word/OpenDocument/RTF file to PDF on the server (LibreOffice), so the pages
+ * look exactly like the original. Team members only.
+ */
+export async function convertDocumentToPdf(file) {
+  const { data: { session } } = await client().auth.getSession()
+  if (!session) throw new Error('Sign in to upload Word documents, or upload a PDF instead.')
+  const { data, error } = await client().functions.invoke(`convert-document?name=${encodeURIComponent(file.name)}`, { body: file })
+  if (error) throw await functionError(error)
+  return new Uint8Array(await data.arrayBuffer())
 }
 
 /** A signer is identified by their link token, or (team members) by envelope id + session. */

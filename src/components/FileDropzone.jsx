@@ -35,7 +35,7 @@ export default function FileDropzone({ onFile }) {
       </div>
       <h3 className="text-xl text-gray-800 mb-2">Upload Document</h3>
       <p className="text-gray-500 mb-4">Drop your file here or click to browse</p>
-      <p className="text-sm text-gray-500">PDF or DOCX, up to 50 MB</p>
+      <p className="text-sm text-gray-500">PDF or Word document (.docx, .doc, .odt, .rtf)</p>
       <input ref={inputRef} type="file" accept={ACCEPTED_FILE_TYPES} onChange={handleSelect} className="hidden" data-testid="file-input" />
     </div>
   )
