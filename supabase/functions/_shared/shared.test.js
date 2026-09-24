@@ -101,11 +101,13 @@ describe('pdf stamping and certificate', () => {
       { type: 'signature', page: 1, x: 0.1, y: 0.8, w: 0.3, h: 0.05, value: PNG, font_size: 12 },
       { type: 'text', page: 2, x: 0.1, y: 0.1, w: 0.3, h: 0.03, value: 'Jane Doe – 日本', font_size: 12 },
       { type: 'checkbox', page: 1, x: 0.1, y: 0.5, w: 0.02, h: 0.02, value: 'true', font_size: 12 },
-      { type: 'date', page: 1, x: 0.5, y: 0.8, w: 0.2, h: 0.03, value: '09/24/2026', font_size: 12 }
+      { type: 'date', page: 1, x: 0.5, y: 0.8, w: 0.2, h: 0.03, value: '09/24/2026', font_size: 12 },
+      // The sender's "Fill in now" text is stored in `prefill`, not `value`
+      { type: 'prefill', page: 1, x: 0.1, y: 0.2, w: 0.4, h: 0.03, value: null, prefill: 'Acme Holdings LLC', font_size: 12 }
     ]
     const elements = elementsFromFieldRows(rows)
     expect(elements.map(e => [e.type, e.data ?? e.text ?? e.checked])).toEqual([
-      ['signature', PNG], ['text', 'Jane Doe – 日本'], ['checkbox', true], ['date', '09/24/2026']
+      ['signature', PNG], ['text', 'Jane Doe – 日本'], ['checkbox', true], ['date', '09/24/2026'], ['prefill', 'Acme Holdings LLC']
     ])
     await stampFields(doc, elements) // unencodable characters are dropped, not fatal
     const reloaded = await PDFDocument.load(await doc.save())

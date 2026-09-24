@@ -12,10 +12,14 @@ export const DEFAULT_SIZES = {
   initials: { width: 60, height: 30 },
   text: { width: 160, height: 22 },
   date: { width: 110, height: 22 },
-  checkbox: { width: 14, height: 14 }
+  checkbox: { width: 14, height: 14 },
+  prefill: { width: 180, height: 18 }
 }
 
 export const FIELD_TYPES = ['signature', 'initials', 'text', 'date', 'checkbox']
+
+/** Fields a sender fills in before sending (envelopes only) */
+export const SENDER_FIELD_TYPES = ['prefill']
 
 export { FIELD_LABELS, DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'
 import { DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'

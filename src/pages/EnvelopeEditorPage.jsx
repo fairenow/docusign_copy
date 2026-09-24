@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, LayoutTemplate, PenLine, RotateCw, Save, Send } from 'lucide-react'
+import { ArrowLeft, Download, LayoutTemplate, PenLine, RotateCw, Save, Send, Sparkles } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
   downloadDocument, downloadSignedPdf, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveAsTemplate, saveDraft,
@@ -11,11 +11,16 @@ import {
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
 import { nextFieldY } from '../lib/fields'
+import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
+import { usePageLayouts } from '../hooks/usePageLayouts'
 import { usePdf } from '../hooks/usePdf'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
 import PlaceholderField from '../components/envelope/PlaceholderField'
+import PrefillField from '../components/envelope/PrefillField'
+import SuggestedField from '../components/envelope/SuggestedField'
+import SuggestionsPanel from '../components/envelope/SuggestionsPanel'
 import FullPageMessage from '../components/FullPageMessage'
 import RecipientsPanel from '../components/envelope/RecipientsPanel'
 import FieldRail from '../components/envelope/FieldRail'
@@ -51,6 +56,11 @@ export default function EnvelopeEditorPage() {
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [templateSaved, setTemplateSaved] = useState(false)
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
+  const { getLayout, getAllLayouts } = usePageLayouts(pdfDoc)
+  // Fields found on the document, waiting to be reviewed and added
+  const [suggestions, setSuggestions] = useState(null)
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestNotice, setSuggestNotice] = useState(null)
 
   // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
   const reload = useCallback(async () => {
@@ -163,11 +173,13 @@ export default function EnvelopeEditorPage() {
   // Fields -------------------------------------------------------------------
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
-    if (!pageSize || !activeRecipientId) return
+    if (!pageSize || (!activeRecipientId && type !== 'prefill')) return
     const field = newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) })
     update({ fields: [...draft.fields, field] })
-    // Highlight the new field but stay on the current tab, so several can be placed in a row
-    setSelectedFieldId(field.id)
+    // Highlight the new field but stay on the current tab, so several can be placed in a row.
+    // "Fill in now" opens its settings, since it needs text straight away.
+    if (type === 'prefill') selectField(field.id)
+    else setSelectedFieldId(field.id)
   }
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
@@ -179,6 +191,53 @@ export default function EnvelopeEditorPage() {
   const updateField = useCallback((id, patch) => {
     setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }))
   }, [])
+
+  // A field dropped near a line sits on it (hold Alt to place it freely)
+  const snapField = useCallback(async (element, kind, event) => {
+    if (kind !== 'move' || event?.altKey || element.suggestion || element.type === 'checkbox') return
+    const layout = await getLayout(element.page)
+    if (!layout) return
+    setDraft(d => {
+      const field = d.fields.find(f => f.id === element.id)
+      const patch = field && snapToLine(field, layout)
+      return patch ? { ...d, fields: d.fields.map(f => (f.id === field.id ? { ...f, ...patch } : f)) } : d
+    })
+  }, [getLayout])
+
+  // Suggest fields ------------------------------------------------------------
+  const suggest = async () => {
+    setSuggesting(true)
+    setSuggestNotice(null)
+    try {
+      const layouts = await getAllLayouts()
+      const found = suggestFields(layouts, draft.fields, { company: companyFromEmail(user?.email) })
+      const me = recipientByEmail(draft.recipients, user?.email)
+      setSuggestions(found.length ? assignSuggestions(found, draft.recipients, me) : null)
+      if (!found.length) setSuggestNotice('No blank lines or placeholders found. Place fields from the left.')
+      setTab('recipients')
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  const changeSuggestion = (id, patch) => setSuggestions(list => list.map(s => (s.id === id ? { ...s, ...patch } : s)))
+  const removeSuggestion = (id) => setSuggestions(list => {
+    const rest = list.filter(s => s.id !== id)
+    return rest.length ? rest : null
+  })
+
+  // Add the suggestions that say who fills them in; unclear ones stay for review
+  const acceptSuggestions = () => {
+    const signerIds = new Set(draft.recipients.filter(r => r.role === 'signer').map(r => r.id))
+    const ready = suggestions.filter(s => s.type === 'prefill' || signerIds.has(s.recipientId))
+    const added = ready.map(s => ({
+      ...newField(s.type, { page: s.page, pageSize: pageSizes[s.page - 1] }, s.recipientId, { x: s.x, y: s.y, w: s.w, h: s.h, label: s.label }),
+      ...(s.fontSize && { fontSize: s.fontSize })
+    }))
+    update({ fields: [...draft.fields, ...added] })
+    const rest = suggestions.filter(s => !ready.includes(s))
+    setSuggestions(rest.length ? rest : null)
+  }
 
   const deleteField = useCallback((id) => {
     setDraft(d => ({ ...d, fields: d.fields.filter(f => f.id !== id) }))
@@ -269,10 +328,23 @@ export default function EnvelopeEditorPage() {
     () => new Map((draft?.recipients ?? []).map(r => [r.id, r])),
     [draft?.recipients]
   )
-  const renderField = useCallback((field) => {
+  const renderField = useCallback((field, { scale }) => {
+    if (field.suggestion) {
+      const color = field.type === 'prefill' ? '#475569' : recipientsById.get(field.recipientId)?.color ?? '#7c3aed'
+      return <SuggestedField suggestion={field} color={color} />
+    }
+    if (field.type === 'prefill') {
+      return <PrefillField field={field} scale={scale} readOnly={!editable} onChange={(text) => updateField(field.id, { text })} />
+    }
     const r = recipientsById.get(field.recipientId)
     return <PlaceholderField field={field} color={r?.color ?? RECIPIENT_COLORS[0]} assignee={r?.name || r?.email || 'Unassigned'} />
-  }, [recipientsById])
+  }, [recipientsById, editable, updateField])
+
+  // Suggestions show on the page as outlines until they are added
+  const viewerElements = useMemo(() => {
+    const fields = draft?.fields ?? []
+    return suggestions ? [...fields, ...suggestions.map(s => ({ ...s, suggestion: true, fixed: true }))] : fields
+  }, [draft?.fields, suggestions])
 
   if (loadError) {
     return (
@@ -369,7 +441,7 @@ export default function EnvelopeEditorPage() {
       </header>
 
       {/* Toolbar */}
-      <div className="h-11 px-4 bg-white border-b border-gray-200 flex items-center flex-shrink-0">
+      <div className="h-11 px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
         <PageControls
           currentPage={currentPage}
           totalPages={pageSizes.length}
@@ -377,6 +449,16 @@ export default function EnvelopeEditorPage() {
           onPageChange={setCurrentPage}
           onZoomChange={setZoom}
         />
+        {editable && (
+          <button
+            onClick={suggest}
+            disabled={!pdfDoc || suggesting}
+            title="Find the blank lines and placeholders and suggest fields for them"
+            className="ml-auto btn-secondary px-3 py-1.5 rounded-md text-sm flex items-center gap-2"
+          >
+            <Sparkles size={15} className="text-violet-600" /> {suggesting ? 'Reading the document…' : 'Suggest fields'}
+          </button>
+        )}
       </div>
 
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
@@ -406,7 +488,7 @@ export default function EnvelopeEditorPage() {
           <DocumentViewer
             pdfDoc={pdfDoc}
             pageSizes={pageSizes}
-            elements={draft.fields}
+            elements={viewerElements}
             currentPage={currentPage}
             onPageChange={setCurrentPage}
             zoom={zoom}
@@ -416,6 +498,7 @@ export default function EnvelopeEditorPage() {
             onSelectedIdChange={selectField}
             onUpdateElement={updateField}
             onDeleteElement={deleteField}
+            onElementGestureEnd={snapField}
           />
         )}
 
@@ -449,6 +532,17 @@ export default function EnvelopeEditorPage() {
                   <p className="text-sm text-gray-500">Select a field on the document to change who fills it in, its label, or whether it is required.</p>
                 ) : (
                   <>
+                    {suggestNotice && <p role="status" className="text-sm text-gray-600">{suggestNotice}</p>}
+                    {suggestions && (
+                      <SuggestionsPanel
+                        suggestions={suggestions}
+                        recipients={draft.recipients}
+                        onChange={changeSuggestion}
+                        onRemove={removeSuggestion}
+                        onAccept={acceptSuggestions}
+                        onDismiss={() => setSuggestions(null)}
+                      />
+                    )}
                     <RecipientsPanel
                       recipients={draft.recipients}
                       signingOrder={draft.signingOrder}
@@ -466,6 +560,7 @@ export default function EnvelopeEditorPage() {
                       {activeRecipient
                         ? <>Adding to the current page for <span className="font-medium" style={{ color: activeRecipient.color }}>{activeRecipient.name || 'this signer'}</span>. Pick a field on the left.</>
                         : 'Add a signer, then pick fields on the left to place them.'}
+                      {' '}Fields snap onto the line you drop them on; hold Alt to place one freely.
                     </p>
                     <MessageField value={draft.message} onChange={(message) => update({ message })} />
                     <ReminderSettings

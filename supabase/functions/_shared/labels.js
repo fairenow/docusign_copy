@@ -10,7 +10,9 @@ export const FIELD_LABELS = {
   initials: 'Initials',
   text: 'Text',
   date: 'Date signed',
-  checkbox: 'Checkbox'
+  checkbox: 'Checkbox',
+  // Text the sender types before sending; printed into the document
+  prefill: 'Fill in now'
 }
 
 export const ACTION_LABELS = {

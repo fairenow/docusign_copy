@@ -76,6 +76,10 @@ export default function SigningPage() {
 
   const fields = useMemo(() => session?.fields ?? [], [session])
   const adjustable = session?.envelope?.allow_signer_adjustments === true
+  // Text the sender filled in: part of the document, not something to sign
+  const prefilled = useMemo(() => (session?.prefilled ?? []).map(p => ({
+    ...p, type: 'prefill', fontSize: p.font_size, fixed: true, locked: true
+  })), [session])
   // Required fields still to fill in, in document order ("Date signed" fills itself)
   const remaining = useMemo(() => fields.filter(f => !isFieldComplete(f, values[f.id])), [fields, values])
   const incompleteIds = useMemo(() => new Set(remaining.map(f => f.id)), [remaining])
@@ -91,7 +95,7 @@ export default function SigningPage() {
     locked: f.type === 'date',
     fixed: !signerCanMove(f, adjustable),
     checked: f.type === 'checkbox' ? values[f.id] === 'true' : undefined
-  })), [fields, values, positions, adjustable])
+  })).concat(prefilled), [fields, values, positions, adjustable, prefilled])
 
   const setValue = useCallback((id, value) => setValues(v => ({ ...v, [id]: value })), [])
 
@@ -177,7 +181,7 @@ export default function SigningPage() {
     return (
       <div
         className={`w-full h-full ${incomplete ? 'ring-2 ring-amber-400' : ''}`}
-        title={`${fieldLabel(element)}${element.required ? ' (required)' : ''}${element.data ? ' · click to change' : ''}`}
+        title={element.type === 'prefill' ? 'Filled in by the sender' : `${fieldLabel(element)}${element.required ? ' (required)' : ''}${element.data ? ' · click to change' : ''}`}
       >
         <FillField
           {...ctx}

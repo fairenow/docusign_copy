@@ -10,7 +10,8 @@ const RENDER_MARGIN = '1200px 0px'
  * currentPage is the page in view: scrolling reports it through onPageChange, and changing
  * it from outside (e.g. page buttons) scrolls to that page.
  * renderField(element, { isSelected, scale, containerSize, onUpdate }) draws a field's content;
- * onActivateElement(element) runs when a field is clicked without being dragged.
+ * onActivateElement(element) runs when a field is clicked without being dragged, and
+ * onElementGestureEnd(element, kind, event) when a move ('move') or resize ('resize') ends.
  * readOnly (or element.fixed for one field): fields can be selected but not moved, resized or
  * deleted. Without onDeleteElement, fields can be moved and resized but not deleted (e.g. a
  * signer adjusting their own fields).
@@ -29,7 +30,8 @@ export default function DocumentViewer({
   onSelectedIdChange,
   onUpdateElement,
   onDeleteElement,
-  onActivateElement
+  onActivateElement,
+  onElementGestureEnd // (element, kind, event) after a field was moved or resized
 }) {
   const scrollRef = useRef(null)
   const pageRefs = useRef([])
@@ -126,6 +128,7 @@ export default function DocumentViewer({
                     onUpdate={onUpdate}
                     onDelete={onDeleteElement && (() => onDeleteElement(element.id))}
                     onActivate={() => onActivateElement?.(element)}
+                    onGestureEnd={(kind, e) => onElementGestureEnd?.(element, kind, e)}
                   >
                     {renderField(element, { isSelected, scale, containerSize: displaySize, onUpdate })}
                   </OverlayElement>

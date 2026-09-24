@@ -5,7 +5,8 @@ const BORDER_COLORS = {
   initials: 'border-purple-500',
   text: 'border-blue-500',
   date: 'border-green-500',
-  checkbox: 'border-blue-500'
+  checkbox: 'border-blue-500',
+  prefill: 'border-transparent'
 }
 
 /** A field as filled in on the page (Quick sign): signature image, text input, checkbox. */
@@ -42,6 +43,17 @@ function FillContent({ element, scale, containerSize, onUpdate }) {
           className="overlay-text-input w-full h-full bg-white/80 px-0.5"
           style={{ fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px`, color: element.color || '#000' }}
         />
+      )
+
+    // Filled in by the sender; printed on white, exactly as in the signed document
+    case 'prefill':
+      return (
+        <div
+          className="w-full h-full bg-white px-0.5 flex items-center whitespace-nowrap overflow-hidden text-gray-900 cursor-default"
+          style={{ fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px` }}
+        >
+          {element.text}
+        </div>
       )
 
     case 'checkbox': {

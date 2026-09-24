@@ -76,6 +76,10 @@ export async function stampFields(doc, elements) {
         page.drawImage(image, { x: x + (w - iw) / 2, y: y + (h - ih) / 2, width: iw, height: ih })
         break
       }
+      // Sender's "Fill in now" text is printed on white, so it can cover a placeholder
+      case 'prefill':
+        page.drawRectangle({ x, y, width: w, height: h, color: rgb(1, 1, 1) })
+      // falls through
       case 'text':
       case 'date': {
         const text = encodable(font, el.text || '')
@@ -111,7 +115,7 @@ export function elementsFromFieldRows(rows) {
     h: row.h,
     fontSize: row.font_size,
     data: row.type === 'signature' || row.type === 'initials' ? row.value : undefined,
-    text: row.type === 'text' || row.type === 'date' ? row.value ?? '' : undefined,
+    text: row.type === 'prefill' ? row.prefill ?? '' : row.type === 'text' || row.type === 'date' ? row.value ?? '' : undefined,
     checked: row.type === 'checkbox' ? row.value === 'true' : undefined
   }))
 }

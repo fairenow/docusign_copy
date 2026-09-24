@@ -1,10 +1,11 @@
-import { FIELD_LABELS, FIELD_TYPES } from '../../lib/fields'
+import { FIELD_LABELS, FIELD_TYPES, SENDER_FIELD_TYPES } from '../../lib/fields'
 import { initialsOf } from '../../../supabase/functions/_shared/signing.js'
 import { FIELD_ICONS } from '../fieldIcons'
 
 /**
  * Vertical field toolbar on the left of the editor. Fields are added to the page in view
- * for the selected signer, whose color and initials are shown at the top.
+ * for the selected signer, whose color and initials are shown at the top. "Fill in now"
+ * fields are for the sender, so they need no signer.
  */
 export default function FieldRail({ recipient, documentReady, onAdd }) {
   const disabled = !recipient || !documentReady
@@ -31,6 +32,23 @@ export default function FieldRail({ recipient, documentReady, onAdd }) {
             className="w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <Icon size={20} style={recipient ? { color: recipient.color } : undefined} aria-hidden="true" />
+            <span className="text-[11px] leading-tight text-center">{FIELD_LABELS[type]}</span>
+          </button>
+        )
+      })}
+      <div className="w-10 border-t border-gray-200 my-2" role="separator" />
+      {SENDER_FIELD_TYPES.map(type => {
+        const Icon = FIELD_ICONS[type]
+        return (
+          <button
+            key={type}
+            type="button"
+            disabled={!documentReady}
+            onClick={() => onAdd(type)}
+            title={documentReady ? 'Add text you type now, e.g. the other company\'s name' : 'Loading the document…'}
+            className="w-16 py-2 rounded-lg flex flex-col items-center gap-1 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            <Icon size={20} className="text-slate-600" aria-hidden="true" />
             <span className="text-[11px] leading-tight text-center">{FIELD_LABELS[type]}</span>
           </button>
         )

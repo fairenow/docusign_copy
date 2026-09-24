@@ -172,6 +172,9 @@ export async function installMockSupabase(page, db) {
           db.templateFields.push({ ...pickFieldLayout(f), template_id: id, role_id: roleId })
         }
       }
+      for (const f of db.fields.filter(x => x.envelope_id === env.id && x.type === 'prefill')) {
+        db.templateFields.push({ ...pickFieldLayout(f), template_id: id, role_id: null, prefill: f.prefill })
+      }
       return json(route, 200, id)
     }
 
@@ -195,6 +198,9 @@ export async function installMockSupabase(page, db) {
         for (const f of db.templateFields.filter(x => x.role_id === role.id)) {
           db.fields.push({ ...pickFieldLayout(f), id: randomUUID(), envelope_id: id, recipient_id: recipientId })
         }
+      }
+      for (const f of db.templateFields.filter(x => x.template_id === t.id && x.type === 'prefill')) {
+        db.fields.push({ ...pickFieldLayout(f), id: randomUUID(), envelope_id: id, recipient_id: null, prefill: f.prefill })
       }
       return json(route, 200, id)
     }
@@ -414,6 +420,10 @@ async function installMockSigningApi(page, db) {
         envelope: { id: env.id, title: env.title, message: env.message, allow_signer_adjustments: env.allow_signer_adjustments, sender: ALICE.name },
         recipient: { id: recipient.id, name: recipient.name, email: recipient.email },
         fields: state === 'ready' ? myFields : [],
+        prefilled: state === 'ready'
+          ? db.fields.filter(f => f.envelope_id === env.id && f.type === 'prefill')
+            .map(f => ({ id: f.id, page: f.page, x: f.x, y: f.y, w: f.w, h: f.h, font_size: f.font_size, text: f.prefill }))
+          : [],
         documentUrl: state === 'ready' ? `${SUPABASE_URL}/storage/v1/object/sign/documents/${env.original_path}?token=signed` : null
       })
     }

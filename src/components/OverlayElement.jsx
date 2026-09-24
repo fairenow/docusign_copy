@@ -19,6 +19,7 @@ export default function OverlayElement({
   onUpdate,
   onDelete,
   onActivate,
+  onGestureEnd, // (kind, event) after a field was moved or resized
   children
 }) {
   const gesture = useRef(null)
@@ -72,10 +73,11 @@ export default function OverlayElement({
     }
   }
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
     const g = gesture.current
     gesture.current = null
     if (g && !g.moved && g.kind !== 'resize') onActivate?.()
+    if (g?.moved) onGestureEnd?.(g.kind, e)
   }
 
   const handleVisibility = isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'

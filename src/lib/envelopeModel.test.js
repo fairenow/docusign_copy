@@ -21,7 +21,16 @@ describe('row mapping', () => {
     expect(draft.message).toBe('')
     expect(draft.recipients.map(r => r.id)).toEqual(['r1', 'r2'])
     expect(draft.recipients[0].color).toBe(RECIPIENT_COLORS[0])
-    expect(fieldToRow(draft.fields[0])).toEqual({ ...envelope.fields[0], label: null })
+    expect(fieldToRow(draft.fields[0])).toEqual({ ...envelope.fields[0], label: null, prefill: null })
+  })
+
+  it('keeps "Fill in now" text and never assigns it to a recipient', () => {
+    const page = { page: 1, pageSize: { width: 612, height: 792 } }
+    const f = newField('prefill', page, 'r1', { label: 'Company name' })
+    expect(f).toMatchObject({ type: 'prefill', recipientId: null, label: 'Company name', text: '' })
+    expect(fieldToRow({ ...f, text: ' Acme LLC ' })).toMatchObject({ recipient_id: null, prefill: 'Acme LLC', label: 'Company name' })
+    const [back] = draftFromEnvelope({ title: 'T', signing_order: 'parallel', recipients: [], fields: [fieldToRow({ ...f, text: 'Acme LLC' })] }).fields
+    expect(back).toMatchObject({ type: 'prefill', text: 'Acme LLC', recipientId: null })
   })
 
   it('trims recipient input and blank labels', () => {
@@ -87,6 +96,14 @@ describe('validation', () => {
       'Recipient 1 needs an email address.',
       'Cat needs an email address.'
     ])
+  })
+
+  it('saves an empty "Fill in now" field but needs its text to send', () => {
+    const prefill = field({ id: 'p1', type: 'prefill', recipientId: null, label: 'Company name', text: ' ' })
+    const d = draft({ fields: [field(), prefill] })
+    expect(validateForSave(d)).toEqual([])
+    expect(validateForSend(d)).toEqual(['Fill in "Company name" before sending.'])
+    expect(validateForSend(draft({ fields: [field(), { ...prefill, text: 'Acme LLC' }] }))).toEqual([])
   })
 
   it('requires a signature for every signer and no fields for CCs before sending', () => {

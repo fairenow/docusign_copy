@@ -49,7 +49,8 @@ export function fieldFromRow(row) {
     recipientId: row.recipient_id,
     required: row.required,
     label: row.label ?? '',
-    fontSize: row.font_size
+    fontSize: row.font_size,
+    ...(row.type === 'prefill' && { text: row.prefill ?? '' })
   }
 }
 
@@ -65,7 +66,8 @@ export function fieldToRow(field) {
     h: field.h,
     required: field.required,
     label: field.label?.trim() || null,
-    font_size: field.fontSize
+    font_size: field.fontSize,
+    prefill: field.type === 'prefill' ? field.text?.trim() || null : null
   }
 }
 
@@ -91,15 +93,21 @@ export function draftFromEnvelope(envelope) {
  * Only the properties stored in the database are kept.
  */
 export function newField(type, placement, recipientId, props = {}) {
+  const prefill = type === 'prefill'
   return {
     ...placeField(type, placement, props),
-    recipientId,
+    // "Fill in now" fields belong to no recipient: the sender types their text
+    recipientId: prefill ? null : recipientId,
     // A checkbox is an optional choice by default; everything else must be filled in
     required: type !== 'checkbox',
-    label: '',
-    fontSize: DEFAULT_FONT_SIZE
+    label: props.label ?? '',
+    fontSize: DEFAULT_FONT_SIZE,
+    ...(prefill && { text: props.text ?? '' })
   }
 }
+
+/** Name of a "Fill in now" field in messages: its label, or a generic one. */
+export const prefillName = (field) => field.label?.trim() || 'Fill in now'
 
 // ---------------------------------------------------------------------------
 // Reminders and expiration
@@ -195,8 +203,12 @@ export function validateForSave({ title, recipients, fields }) {
     }
   })
 
+  for (const f of fields) {
+    if (f.type === 'prefill' && (f.text ?? '').trim().length > 500) problems.push(`"${prefillName(f)}" must be 500 characters or fewer.`)
+  }
+
   const ids = new Set(recipients.map(r => r.id))
-  const orphans = fields.filter(f => !ids.has(f.recipientId)).length
+  const orphans = fields.filter(f => f.type !== 'prefill' && !ids.has(f.recipientId)).length
   if (orphans) problems.push(`${orphans} field${orphans > 1 ? 's are' : ' is'} not assigned to a recipient.`)
   return problems
 }
@@ -211,6 +223,9 @@ export function validateForSend(draft) {
     if (!r.name.trim()) problems.push(`Recipient ${i + 1} needs a name.`)
     if (!r.email.trim()) problems.push(`${who} needs an email address.`)
   })
+  for (const f of draft.fields) {
+    if (f.type === 'prefill' && !(f.text ?? '').trim()) problems.push(`Fill in "${prefillName(f)}" before sending.`)
+  }
   const signers = draft.recipients.filter(r => r.role === 'signer')
   if (!signers.length) problems.push('Add at least one signer.')
 
