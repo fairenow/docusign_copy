@@ -23,14 +23,15 @@ export async function finalizeEnvelope(envelopeId: string) {
   if (error) throw error
   if (envelope.status !== 'sent') return { status: envelope.status }
 
-  const { data: events, error: eventsError } = await admin
-    .from('audit_events')
-    .select('created_at, action, ip, recipient_id, actor_user_id')
-    .eq('envelope_id', envelopeId)
-    .order('id')
+  const [{ data: events, error: eventsError }, { data: file, error: downloadError }] = await Promise.all([
+    admin
+      .from('audit_events')
+      .select('created_at, action, ip, recipient_id, actor_user_id')
+      .eq('envelope_id', envelopeId)
+      .order('id'),
+    admin.storage.from('documents').download(envelope.original_path)
+  ])
   if (eventsError) throw eventsError
-
-  const { data: file, error: downloadError } = await admin.storage.from('documents').download(envelope.original_path)
   if (downloadError) throw downloadError
 
   // deno-lint-ignore no-explicit-any
@@ -58,13 +59,23 @@ export async function finalizeEnvelope(envelopeId: string) {
   doc.setTitle(envelope.title)
   doc.setModificationDate(new Date())
   // Copy into a plain ArrayBuffer-backed array for hashing and upload
-  const bytes = new Uint8Array(await doc.save())
-  const finalSha = await sha256Hex(bytes)
+  let bytes = new Uint8Array(await doc.save())
+  const signedPath = `${envelopeId}/signed.pdf`
 
+  // Never overwrite: a concurrent finalize (background step + owner retry) could otherwise replace
+  // the file after the other one recorded its hash. If a signed copy already exists (a concurrent
+  // run, or an earlier run that stopped before completing), use that copy so file and hash agree.
   const { error: uploadError } = await admin.storage
     .from('documents')
-    .upload(`${envelopeId}/signed.pdf`, new Blob([bytes], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' })
-  if (uploadError) throw uploadError
+    .upload(signedPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: false, contentType: 'application/pdf' })
+  if (uploadError) {
+    const { status, statusCode } = uploadError as { status?: number; statusCode?: string }
+    if (status !== 409 && statusCode !== '409') throw uploadError
+    const { data: existing, error: existingError } = await admin.storage.from('documents').download(signedPath)
+    if (existingError) throw existingError
+    bytes = new Uint8Array(await existing.arrayBuffer())
+  }
+  const finalSha = await sha256Hex(bytes)
 
   try {
     await rpc('svc_mark_completed', { p_envelope_id: envelopeId, p_final_sha256: finalSha })

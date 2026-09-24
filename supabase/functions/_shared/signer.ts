@@ -1,6 +1,6 @@
 import { HttpError, requireUuid } from './http.ts'
 import { sha256Hex } from './crypto.ts'
-import { getUser } from './supabase.ts'
+import { admin, getUser } from './supabase.ts'
 
 const TOKEN = /^[A-Za-z0-9_-]{32,128}$/
 
@@ -24,7 +24,6 @@ export async function signerArgs(req: Request, body: Record<string, unknown>) {
 /** The envelope a signer belongs to (look this up before signing: signing deletes the token). */
 export async function envelopeIdForSigner(args: { p_token_hash: string | null; p_envelope_id: string | null }) {
   if (args.p_envelope_id) return args.p_envelope_id
-  const { admin } = await import('./supabase.ts')
   const { data } = await admin
     .from('recipient_tokens')
     .select('recipient:recipients (envelope_id)')

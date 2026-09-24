@@ -88,9 +88,17 @@ class PageWriter {
     if (this.y - height < MARGIN) this.newPage()
   }
 
+  lines(value, { size = 10, font = this.regular, maxWidth = CONTENT_WIDTH } = {}) {
+    return wrap(encodable(font, String(value ?? '')), font, size, maxWidth)
+  }
+
+  /** Height text() will use, so multi-column blocks can be kept on one page. */
+  height(value, options = {}) {
+    return this.lines(value, options).length * ((options.size ?? 10) + 4)
+  }
+
   text(value, { x = MARGIN, size = 10, font = this.regular, color = INK, maxWidth = CONTENT_WIDTH } = {}) {
-    const lines = wrap(encodable(font, String(value ?? '')), font, size, maxWidth)
-    for (const line of lines) {
+    for (const line of this.lines(value, { size, font, maxWidth })) {
       this.ensure(size + 4)
       this.page.drawText(line, { x, y: this.y - size, size, font, color })
       this.y -= size + 4
@@ -121,7 +129,10 @@ class PageWriter {
 
   keyValues(rows) {
     for (const [key, value] of rows) {
-      this.ensure(16)
+      this.ensure(Math.max(
+        this.height(key, { size: 9, font: this.bold, maxWidth: 150 }),
+        this.height(value, { size: 9, maxWidth: CONTENT_WIDTH - 160 })
+      ) + 2)
       const top = this.y
       this.text(key, { size: 9, font: this.bold, color: MUTED, maxWidth: 150 })
       const afterKey = this.y
@@ -132,9 +143,7 @@ class PageWriter {
   }
 
   recipient(r, signatureImage) {
-    this.ensure(110)
-    const top = this.y
-    this.text(`${r.name} <${r.email}>`, { size: 10, font: this.bold, maxWidth: CONTENT_WIDTH - 170 })
+    const name = `${r.name} <${r.email}>`
     const status = r.role === 'cc' ? 'Received a copy' : r.status === 'signed' ? 'Signed' : r.status
     const details = [
       ['Status', status],
@@ -144,9 +153,15 @@ class PageWriter {
       ['IP address', r.signer_ip ?? '—'],
       ['Browser', r.signer_user_agent ?? '—']
     ]
-    for (const [key, value] of r.role === 'cc' ? details.slice(0, 1) : details) {
-      this.text(`${key}: ${value}`, { size: 8, color: MUTED, maxWidth: CONTENT_WIDTH - 170 })
-    }
+    const lines = (r.role === 'cc' ? details.slice(0, 1) : details).map(([key, value]) => `${key}: ${value}`)
+    const detailOptions = { size: 8, color: MUTED, maxWidth: CONTENT_WIDTH - 170 }
+    // Keep the whole block (and the signature drawn beside it at `top`) on one page
+    const blockHeight = this.height(name, { size: 10, font: this.bold, maxWidth: CONTENT_WIDTH - 170 }) +
+      lines.reduce((sum, line) => sum + this.height(line, detailOptions), 0)
+    this.ensure(Math.max(blockHeight, signatureImage ? 60 : 0) + 20)
+    const top = this.y
+    this.text(name, { size: 10, font: this.bold, maxWidth: CONTENT_WIDTH - 170 })
+    for (const line of lines) this.text(line, detailOptions)
 
     if (signatureImage) {
       const boxW = 150
@@ -172,7 +187,8 @@ class PageWriter {
     ]
     const header = ['Time', 'Event', 'By', 'IP address']
     const drawRow = (cells, font, color) => {
-      this.ensure(14)
+      // Reserve the tallest cell so every cell of the row lands on the same page
+      this.ensure(Math.max(...cells.map((cell, i) => this.height(cell, { size: 8, font, maxWidth: cols[i].width - 6 }))) + 2)
       const top = this.y
       let x = MARGIN
       let bottom = top

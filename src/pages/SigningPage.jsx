@@ -97,8 +97,11 @@ export default function SigningPage() {
     if (first) goToField(first)
   }, [consented, pdfDoc, pageSizes.length, remaining, fields, goToField])
 
+  // The next incomplete field after the selected one, in document order (fields come sorted by
+  // page, y, x), wrapping around to the first
   const goToNext = () => {
-    const next = remaining.find(f => f.page > currentPage || (f.page === currentPage && f.id !== selectedId)) ?? remaining[0]
+    const position = fields.findIndex(f => f.id === selectedId)
+    const next = remaining.find(f => (position >= 0 ? fields.indexOf(f) > position : f.page >= currentPage)) ?? remaining[0]
     if (next) goToField(next)
   }
 
@@ -166,7 +169,12 @@ export default function SigningPage() {
   }
 
   if (loadError) {
-    return <FullPageMessage title="This link cannot be used">{loadError}</FullPageMessage>
+    return (
+      <FullPageMessage title="This link cannot be used">
+        {loadError}. Signing links work once and expire with the envelope. If you already signed, you will receive
+        the completed document by email; otherwise ask the sender for a new link.
+      </FullPageMessage>
+    )
   }
   if (!session) return <FullPageMessage title="Loading…" />
 

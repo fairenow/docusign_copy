@@ -64,9 +64,15 @@ export function requireUuid(value: unknown, name: string): string {
 export function clientIp(req: Request): string | null {
   const raw = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip')?.trim()
   if (!raw) return null
-  const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/
-  const ipv6 = /^[0-9a-f:]+$/i
-  return ipv4.test(raw) || (ipv6.test(raw) && raw.includes(':')) ? raw : null
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(raw)) return raw.split('.').every(octet => Number(octet) <= 255) ? raw : null
+  if (!/^[0-9a-f:.]+$/i.test(raw) || !raw.includes(':')) return null
+  try {
+    // The URL parser rejects malformed IPv6 (e.g. "1:2" or ":::"), which Postgres' inet would too
+    new URL(`http://[${raw}]/`)
+    return raw
+  } catch {
+    return null
+  }
 }
 
 export function userAgent(req: Request): string | null {

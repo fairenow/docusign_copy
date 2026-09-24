@@ -124,14 +124,17 @@ export async function voidEnvelope(envelopeId, reason) {
  * Realtime respects RLS, so only rows the user may see are delivered.
  * @returns {() => void} unsubscribe
  */
-export function subscribeToEnvelopeChanges(onChange) {
+export function subscribeToEnvelopeChanges(onChange, envelopeId = null) {
   if (!supabase) return () => {}
+  // With an envelope id, only changes to that envelope and its recipients are delivered
+  const envelopeFilter = envelopeId ? { filter: `id=eq.${envelopeId}` } : {}
+  const recipientFilter = envelopeId ? { filter: `envelope_id=eq.${envelopeId}` } : {}
   const channel = supabase
     // Unique per subscription: channel() returns an existing channel with the same topic, and a
     // remount (StrictMode, quick navigation) would otherwise reuse one that is still leaving
     .channel(`envelope-changes-${crypto.randomUUID()}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'envelopes' }, onChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'recipients' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'envelopes', ...envelopeFilter }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'recipients', ...recipientFilter }, onChange)
     .subscribe()
   return () => { supabase.removeChannel(channel) }
 }

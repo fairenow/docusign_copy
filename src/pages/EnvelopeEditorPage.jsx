@@ -83,12 +83,12 @@ export default function EnvelopeEditorPage() {
     const unsubscribe = subscribeToEnvelopeChanges(() => {
       clearTimeout(timer)
       timer = setTimeout(() => reload().catch(() => {}), 500)
-    })
+    }, envelopeId)
     return () => {
       clearTimeout(timer)
       unsubscribe()
     }
-  }, [isSent, reload])
+  }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
   const dirty = useMemo(
