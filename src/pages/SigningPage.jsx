@@ -6,7 +6,7 @@ import { usePdf } from '../hooks/usePdf'
 import { fitWidthZoom } from '../lib/viewer'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
-import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel } from '../../supabase/functions/_shared/signing.js'
+import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel, limitAdjustment } from '../../supabase/functions/_shared/signing.js'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
 import FillField from '../components/FillField'
@@ -136,15 +136,15 @@ export default function SigningPage() {
     }
   }, [adopted, setValue])
 
-  // Signers may move and resize their own fields; only the geometry is kept
+  // Signers may nudge and resize their own fields a little (see limitAdjustment); only the
+  // geometry is kept
   const moveField = useCallback((id, patch) => {
     const field = fields.find(f => f.id === id)
     if (!field) return
     setPositions(p => {
-      const current = { x: field.x, y: field.y, w: field.w, h: field.h, ...p[id] }
-      const next = { ...current }
+      const next = { x: field.x, y: field.y, w: field.w, h: field.h, ...p[id] }
       for (const key of ['x', 'y', 'w', 'h']) if (typeof patch[key] === 'number') next[key] = patch[key]
-      return { ...p, [id]: next }
+      return { ...p, [id]: limitAdjustment(field, next) }
     })
   }, [fields])
 

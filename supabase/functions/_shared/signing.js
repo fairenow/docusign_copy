@@ -73,3 +73,25 @@ export function validateSigningValues(fields, input) {
   }
   return { values, problems: [...new Set(problems)] }
 }
+
+/**
+ * How far signers may adjust their own fields while signing: a short move and between half and
+ * twice the size the sender chose. svc_complete_signing enforces the same limits (and also
+ * refuses covering another signer's field), so a signer cannot restyle the document.
+ */
+export const ADJUSTMENT_LIMITS = { moveX: 0.15, moveY: 0.10, minScale: 0.5, maxScale: 2 }
+
+/** Keep a move/resize (page fractions) within ADJUSTMENT_LIMITS and on the page. */
+export function limitAdjustment(original, next) {
+  const { moveX, moveY, minScale, maxScale } = ADJUSTMENT_LIMITS
+  const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
+  // The size is capped so the field can still sit within its allowed moving range
+  const w = clamp(next.w, original.w * minScale, Math.min(original.w * maxScale, 1 - Math.max(0, original.x - moveX)))
+  const h = clamp(next.h, original.h * minScale, Math.min(original.h * maxScale, 1 - Math.max(0, original.y - moveY)))
+  return {
+    x: clamp(next.x, Math.max(0, original.x - moveX), Math.min(1 - w, original.x + moveX)),
+    y: clamp(next.y, Math.max(0, original.y - moveY), Math.min(1 - h, original.y + moveY)),
+    w,
+    h
+  }
+}

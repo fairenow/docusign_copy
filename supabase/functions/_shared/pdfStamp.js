@@ -13,6 +13,9 @@ import {
   pushGraphicsState,
   popGraphicsState,
   concatTransformationMatrix,
+  rectangle,
+  clip,
+  endPath,
   EncryptedPDFError
 } from 'pdf-lib'
 import { DEFAULT_FONT_SIZE } from './labels.js'
@@ -53,7 +56,14 @@ export async function stampFields(doc, elements) {
     const x = el.x * dispW
     const y = dispH - el.y * dispH - h
 
-    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(...matrix))
+    // Nothing drawn for a field may reach outside its box (1pt margin keeps borders whole)
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(...matrix),
+      rectangle(x - 1, y - 1, w + 2, h + 2),
+      clip(),
+      endPath()
+    )
 
     switch (el.type) {
       case 'signature':

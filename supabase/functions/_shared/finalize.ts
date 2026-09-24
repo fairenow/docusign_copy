@@ -41,7 +41,12 @@ export async function finalizeEnvelope(envelopeId: string) {
   // deno-lint-ignore no-explicit-any
   const nameOf = (e: any) => recipients.find((r: any) => r.id === e.recipient_id)?.name ?? (e.actor_user_id === envelope.owner_id ? ownerName : '')
 
-  const [doc, logo] = await Promise.all([loadPdf(new Uint8Array(await file.arrayBuffer())), fetchLogo()])
+  // The certificate states this fingerprint, so the document must still be the one that was sent
+  const original = new Uint8Array(await file.arrayBuffer())
+  if (envelope.original_sha256 && await sha256Hex(original) !== envelope.original_sha256) {
+    throw new Error('The document no longer matches the one that was sent. Void this envelope and send it again.')
+  }
+  const [doc, logo] = await Promise.all([loadPdf(original), fetchLogo()])
   await stampFields(doc, elementsFromFieldRows(envelope.fields))
   await appendCertificate(doc, {
     envelope: { ...envelope, completed_at: new Date().toISOString() },

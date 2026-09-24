@@ -12,11 +12,13 @@ export async function submitSigning(req: Request): Promise<Response> {
     throw new HttpError(400, 'values must be an object')
   }
   // Types, required fields and ownership are enforced by the database. Here: booleans become
-  // strings, and image values must really decode as PNGs (or the final PDF could not be built).
+  // strings, text is trimmed (as the database does), and image values must really decode as
+  // PNGs (or the final PDF could not be built).
   const values: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(body.values as Record<string, unknown>)) {
-    values[key] = typeof value === 'boolean' ? String(value) : value
-    if (typeof value === 'string' && value.startsWith('data:image/')) await assertPng(value)
+    const clean = typeof value === 'string' ? value.trim() : typeof value === 'boolean' ? String(value) : value
+    values[key] = clean
+    if (typeof clean === 'string' && /^data:/i.test(clean)) await assertPng(clean)
   }
 
   const result = await rpc<{ envelope_id: string; complete: boolean; notify: SigningLink[] }>('svc_complete_signing', {

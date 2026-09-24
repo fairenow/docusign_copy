@@ -311,6 +311,50 @@ test('signers can move and resize their own fields, and the new positions are sa
   expect(db.audit.some(a => a.action === 'fields_adjusted')).toBe(true)
 })
 
+test('a signer cannot drag a field far away or stretch it over the page', async ({ page }) => {
+  const { token, recipients } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
+  await page.goto(`/sign/${token}`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  const field = page.locator('[data-field-type="signature"]')
+  await expect(field).toBeVisible()
+
+  // The page scrolls to the first field when it opens; wait until it has settled
+  let box = null
+  await expect.poll(async () => {
+    const previous = box
+    box = await field.boundingBox()
+    return previous && previous.x === box.x && previous.y === box.y
+  }).toBe(true)
+
+  // Drag far up and left (the drag selects the field), then pull its resize corner far out
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(2, 2, { steps: 10 })
+  await page.mouse.up()
+  const handle = await field.getByTitle('Drag to resize').boundingBox()
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+  await page.mouse.down()
+  const view = page.viewportSize()
+  await page.mouse.move(view.width - 2, view.height - 2, { steps: 10 })
+  await page.mouse.up()
+
+  await field.click()
+  await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
+  await page.locator('[data-field-type="text"] input').fill('Head of Sales')
+  await page.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+
+  // Seeded at x 0.1, y 0.7, 0.3 x 0.06: it moved and grew, but at most 0.15 / 0.10 away and
+  // to twice the size (the pointer went much further)
+  const sig = db.fields.find(f => f.recipient_id === recipients[0].id && f.type === 'signature')
+  expect(sig.x).toBeCloseTo(0, 5)
+  expect(sig.y).toBeCloseTo(0.6, 5)
+  expect(sig.w).toBeGreaterThan(0.3)
+  expect(sig.w).toBeLessThanOrEqual(0.6 + 1e-6)
+  expect(sig.h).toBeLessThanOrEqual(0.12 + 1e-6)
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 

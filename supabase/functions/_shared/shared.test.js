@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument, StandardFonts, degrees } from 'pdf-lib'
 import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminderEmail, expiredEmail } from './emails.js'
-import { validateSigningValues, isFieldComplete } from './signing.js'
+import { validateSigningValues, isFieldComplete, limitAdjustment } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
 import { readFileSync } from 'node:fs'
@@ -164,5 +164,32 @@ describe('retryWhenTokenIsTooNew', () => {
     const fetchOnce = retryWhenTokenIsTooNew(async () => { calls++; return reply(401, '{"message":"JWT expired"}') }, { delayMs: 1 })
     expect((await fetchOnce('u')).status).toBe(401)
     expect(calls).toBe(1)
+  })
+})
+
+describe('limitAdjustment', () => {
+  const field = { x: 0.1, y: 0.7, w: 0.3, h: 0.06 }
+
+  it('keeps small nudges and resizes as they are', () => {
+    expect(limitAdjustment(field, { x: 0.15, y: 0.72, w: 0.4, h: 0.08 })).toEqual({ x: 0.15, y: 0.72, w: 0.4, h: 0.08 })
+  })
+
+  it('stops a field from being dragged far or taking over the page', () => {
+    const r = limitAdjustment(field, { x: 0, y: 0, w: 1, h: 1 })
+    expect(r.w).toBeCloseTo(0.6)
+    expect(r.h).toBeCloseTo(0.12)
+    expect(r.x).toBeCloseTo(0)
+    expect(r.y).toBeCloseTo(0.6)
+    const far = limitAdjustment(field, { x: 0.9, y: 0.99, w: 0.3, h: 0.06 })
+    expect(far.x).toBeCloseTo(0.25)
+    expect(far.y).toBeCloseTo(0.8)
+  })
+
+  it('never shrinks below half size and always stays on the page', () => {
+    const edge = { x: 0.7, y: 0.9, w: 0.3, h: 0.1 }
+    const r = limitAdjustment(edge, { x: 0.7, y: 0.9, w: 0.9, h: 0.01 })
+    expect(r.h).toBeCloseTo(0.05)
+    expect(r.x + r.w).toBeLessThanOrEqual(1)
+    expect(Math.abs(r.x - edge.x)).toBeLessThanOrEqual(0.15 + 1e-9)
   })
 })

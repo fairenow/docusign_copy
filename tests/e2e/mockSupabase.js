@@ -6,6 +6,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { ADJUSTMENT_LIMITS } from '../../supabase/functions/_shared/signing.js'
 
 export const SUPABASE_URL = 'https://e2e-test.supabase.co'
 export const STORAGE_KEY = 'sb-e2e-test-auth-token'
@@ -430,6 +431,12 @@ async function installMockSigningApi(page, db) {
       for (const key of [...Object.keys(body.values), ...Object.keys(positions)]) if (!myFields.some(f => f.id === key)) return fail(400, `Unknown field ${key}`)
       for (const [id, p] of Object.entries(positions)) {
         if (p.x < 0 || p.y < 0 || p.x + p.w > 1.000001 || p.y + p.h > 1.000001) return fail(400, 'Fields must stay on the page')
+        const f = myFields.find(x => x.id === id)
+        const { moveX, moveY, minScale, maxScale } = ADJUSTMENT_LIMITS
+        if (Math.abs(p.x - f.x) > moveX + 1e-6 || Math.abs(p.y - f.y) > moveY + 1e-6 ||
+            p.w < f.w * minScale - 1e-6 || p.w > f.w * maxScale + 1e-6 || p.h < f.h * minScale - 1e-6 || p.h > f.h * maxScale + 1e-6) {
+          return fail(400, 'Fields can only be moved a short distance from where the sender placed them')
+        }
         Object.assign(myFields.find(f => f.id === id), { x: p.x, y: p.y, w: p.w, h: p.h })
       }
       if (Object.keys(positions).length) addAudit(db, env.id, 'fields_adjusted', recipient.id)
