@@ -349,7 +349,13 @@ async function installMockSigningApi(page, db) {
 
     if (action === 'submit') {
       if (body.consent !== true) return fail(400, 'You must agree to sign electronically')
-      for (const key of Object.keys(body.values)) if (!myFields.some(f => f.id === key)) return fail(400, `Unknown field ${key}`)
+      const positions = body.positions ?? {}
+      for (const key of [...Object.keys(body.values), ...Object.keys(positions)]) if (!myFields.some(f => f.id === key)) return fail(400, `Unknown field ${key}`)
+      for (const [id, p] of Object.entries(positions)) {
+        if (p.x < 0 || p.y < 0 || p.x + p.w > 1.000001 || p.y + p.h > 1.000001) return fail(400, 'Fields must stay on the page')
+        Object.assign(myFields.find(f => f.id === id), { x: p.x, y: p.y, w: p.w, h: p.h })
+      }
+      if (Object.keys(positions).length) addAudit(db, env.id, 'fields_adjusted', recipient.id)
       for (const f of myFields) {
         const v = body.values[f.id]
         if (f.required && f.type !== 'date' && (v === undefined || v === '' || (f.type === 'checkbox' && v !== 'true'))) {

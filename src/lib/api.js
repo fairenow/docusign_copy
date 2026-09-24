@@ -173,7 +173,7 @@ export async function convertDocumentToPdf(file) {
 
 /** A signer is identified by their link token, or (team members) by envelope id + session. */
 export const getSigningSession = (identity) => signingApi('session', identity)
-export const submitSigning = (identity, values, consent) => signingApi('submit', { ...identity, values, consent })
+export const submitSigning = (identity, values, consent, positions = {}) => signingApi('submit', { ...identity, values, consent, positions })
 export const declineSigning = (identity, reason) => signingApi('decline', { ...identity, reason })
 
 export const sendEnvelope = (envelopeId) => signingApi('send', { envelopeId })

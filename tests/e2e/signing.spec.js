@@ -276,3 +276,37 @@ test('signers can change or remove a signature they already placed', async ({ pa
   await expect(field.locator('img')).toHaveCount(0)
   await expect(page.getByTestId('remaining')).toHaveText('2 required fields left')
 })
+
+test('signers can move and resize their own fields, and the new positions are saved', async ({ page }) => {
+  const { token, recipients } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
+  await page.goto(`/sign/${token}`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  const field = page.locator('[data-field-type="signature"]')
+  await expect(field).toBeVisible()
+  // Signers cannot delete fields
+  await field.hover()
+  await expect(field.getByTitle('Remove field')).toHaveCount(0)
+
+  // Drag the signature box down and to the right, then sign it
+  const box = await field.boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 5 })
+  await page.mouse.up()
+  const moved = await field.boundingBox()
+  expect(moved.x).toBeGreaterThan(box.x + 100)
+  await field.click()
+  await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
+  await page.locator('[data-field-type="text"] input').fill('Head of Sales')
+  await page.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+
+  const sig = db.fields.find(f => f.recipient_id === recipients[0].id && f.type === 'signature')
+  const submit = db.calls.find(c => c.action === 'submit').body
+  expect(Object.keys(submit.positions)).toEqual([sig.id])
+  expect(sig.x).toBeGreaterThan(0.1)
+  expect(sig.y).toBeGreaterThan(0.7)
+  expect(sig.x + sig.w).toBeLessThanOrEqual(1)
+  expect(db.audit.some(a => a.action === 'fields_adjusted')).toBe(true)
+})

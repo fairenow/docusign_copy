@@ -6,7 +6,7 @@ import { clamp, MIN_SIZE } from '../lib/fields'
 const CLICK_TOLERANCE = 3
 
 /**
- * Frame around one field on the page: selection, move, resize and delete.
+ * Frame around one field on the page: selection, move, resize and (when onDelete is given) delete.
  * What the field looks like is up to `children`; what a click does is up to `onActivate`.
  */
 export default function OverlayElement({
@@ -109,14 +109,14 @@ export default function OverlayElement({
             <GripVertical size={12} />
           </div>
 
-          <button
+          {onDelete && <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onDelete() }}
             className={`absolute -top-2.5 -right-2.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white transition-opacity ${handleVisibility}`}
             title="Remove field"
           >
             <X size={12} />
-          </button>
+          </button>}
 
           <div
             className={`absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-sm cursor-nwse-resize touch-none ${handleVisibility}`}

@@ -36,6 +36,8 @@ export default function SigningPage() {
   const [pdfBytes, setPdfBytes] = useState(null)
   const [consented, setConsented] = useState(false)
   const [values, setValues] = useState({})
+  // Where the signer moved or resized their fields: { [fieldId]: { x, y, w, h } }
+  const [positions, setPositions] = useState({})
   const [adopted, setAdopted] = useState({ signature: null, initials: null })
   const [adopting, setAdopting] = useState(null) // { type, fieldId }
   const [selectedId, setSelectedId] = useState(null)
@@ -79,13 +81,14 @@ export default function SigningPage() {
   // Elements for the shared field renderer, with this signer's current values
   const elements = useMemo(() => fields.map(f => ({
     ...f,
+    ...positions[f.id],
     fontSize: f.font_size,
     data: f.type === 'signature' || f.type === 'initials' ? values[f.id] ?? null : undefined,
     text: f.type === 'date' ? signingDate() : f.type === 'text' ? values[f.id] ?? '' : undefined,
     // "Date signed" is filled in by the server when you finish
     locked: f.type === 'date',
     checked: f.type === 'checkbox' ? values[f.id] === 'true' : undefined
-  })), [fields, values])
+  })), [fields, values, positions])
 
   const setValue = useCallback((id, value) => setValues(v => ({ ...v, [id]: value })), [])
 
@@ -123,6 +126,18 @@ export default function SigningPage() {
       else setAdopting({ type: element.type, fieldId: element.id })
     }
   }, [adopted, setValue])
+
+  // Signers may move and resize their own fields; only the geometry is kept
+  const moveField = useCallback((id, patch) => {
+    const field = fields.find(f => f.id === id)
+    if (!field) return
+    setPositions(p => {
+      const current = { x: field.x, y: field.y, w: field.w, h: field.h, ...p[id] }
+      const next = { ...current }
+      for (const key of ['x', 'y', 'w', 'h']) if (typeof patch[key] === 'number') next[key] = patch[key]
+      return { ...p, [id]: next }
+    })
+  }, [fields])
 
   const clearValue = useCallback((id) => setValues(v => {
     const next = { ...v }
@@ -172,7 +187,7 @@ export default function SigningPage() {
     setBusy(true)
     setError(null)
     try {
-      await submitSigning(identity, clean, true)
+      await submitSigning(identity, clean, true, positions)
       setDone('signed')
     } catch (err) {
       setError(err.message)
@@ -267,7 +282,10 @@ export default function SigningPage() {
             <span className="text-sm text-green-700 flex items-center gap-2"><CheckCircle2 size={14} /> All required fields are complete. Click Finish.</span>
           )}
         </div>
-        <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
+        <div className="flex items-center gap-4">
+          <span className="hidden md:inline text-xs text-gray-500">Drag a field to move it, or its corner to resize.</span>
+          <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
+        </div>
       </div>
 
       {error && <ErrorBanner className="mx-5 mt-3">{error}</ErrorBanner>}
@@ -282,7 +300,7 @@ export default function SigningPage() {
           currentPage={currentPage}
           onPageChange={setCurrentPage}
           zoom={zoom}
-          readOnly
+          onUpdateElement={moveField}
           renderField={renderField}
           selectedId={selectedId}
           onSelectedIdChange={setSelectedId}

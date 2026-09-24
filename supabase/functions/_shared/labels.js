@@ -19,6 +19,7 @@ export const ACTION_LABELS = {
   recipient_notified: 'Signing request emailed',
   recipient_reminded: 'Signing link re-sent',
   recipient_viewed: 'Viewed',
+  fields_adjusted: 'Adjusted field positions',
   recipient_signed: 'Signed',
   recipient_declined: 'Declined',
   email_failed: 'Email could not be delivered',

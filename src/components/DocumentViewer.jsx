@@ -13,7 +13,8 @@ const RENDER_MARGIN = '1200px 0px'
  * it from outside (e.g. page buttons) scrolls to that page.
  * renderField(element, { isSelected, scale, containerSize, onUpdate }) draws a field's content;
  * onActivateElement(element) runs when a field is clicked without being dragged.
- * readOnly: fields can be selected but not moved, resized or deleted.
+ * readOnly: fields can be selected but not moved, resized or deleted. Without onDeleteElement,
+ * fields can be moved and resized but not deleted (e.g. a signer adjusting their own fields).
  * Selection can be controlled with selectedId/onSelectedIdChange; otherwise it is internal.
  */
 export default function DocumentViewer({
@@ -66,7 +67,7 @@ export default function DocumentViewer({
 
   // Delete / Backspace removes the selected field (unless typing somewhere)
   useEffect(() => {
-    if (readOnly) return
+    if (readOnly || !onDeleteElement) return
     const onKeyDown = (e) => {
       if (!selectedId) return
       const tag = document.activeElement?.tagName
@@ -124,7 +125,7 @@ export default function DocumentViewer({
                     isSelected={isSelected}
                     onSelect={() => setSelectedId(element.id)}
                     onUpdate={onUpdate}
-                    onDelete={() => onDeleteElement?.(element.id)}
+                    onDelete={onDeleteElement && (() => onDeleteElement(element.id))}
                     onActivate={() => onActivateElement?.(element)}
                   >
                     {renderField(element, { isSelected, scale, containerSize: displaySize, onUpdate })}
