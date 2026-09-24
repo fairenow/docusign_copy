@@ -45,10 +45,10 @@ export default function Sidebar({
   const handleAddCheckbox = requireDocument(onAddCheckbox)
 
   return (
-    <aside className="w-72 bg-dark-800 border-r border-dark-700 flex flex-col flex-shrink-0">
-      <div className="p-5 border-b border-dark-700">
+    <aside className="w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+      <div className="p-5 border-b border-gray-200">
         <h1><Brand className="text-2xl" /></h1>
-        <Link to="/" className="text-xs text-dark-400 hover:text-gray-200">← Envelopes</Link>
+        <Link to="/" className="text-xs text-gray-500 hover:text-gray-900">← Envelopes</Link>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
@@ -70,9 +70,9 @@ export default function Sidebar({
         {hasDocument && !showDetectedFields && detectedFields.length > 0 && (
           <button
             onClick={() => setShowDetectedFields(true)}
-            className="w-full p-3 mb-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-lg text-gray-200 hover:border-blue-500/50 transition-all flex items-center gap-3"
+            className="w-full p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg text-gray-800 hover:border-blue-500/50 transition-all flex items-center gap-3"
           >
-            <Sparkles size={20} className="text-blue-400" />
+            <Sparkles size={20} className="text-blue-600" />
             <span className="text-sm">Show {detectedFields.length} detected fields</span>
           </button>
         )}
@@ -84,7 +84,7 @@ export default function Sidebar({
               setShowDetectedFields(true)
               onRedetect?.()
             }}
-            className="w-full p-3 mb-4 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3"
+            className="w-full p-3 mb-4 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3"
           >
             <Sparkles size={20} />
             <span className="text-sm">Detect Form Fields</span>
@@ -101,7 +101,7 @@ export default function Sidebar({
           className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
             activePanel === 'signature'
               ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-dark-700 border-dark-600 text-gray-200 hover:bg-blue-600 hover:border-blue-600'
+              : 'bg-gray-50 border-gray-300 text-gray-800 hover:bg-blue-600 hover:border-blue-600'
           }`}
         >
           <Pen size={20} />
@@ -118,7 +118,7 @@ export default function Sidebar({
           className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
             activePanel === 'text'
               ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-dark-700 border-dark-600 text-gray-200 hover:bg-blue-600 hover:border-blue-600'
+              : 'bg-gray-50 border-gray-300 text-gray-800 hover:bg-blue-600 hover:border-blue-600'
           }`}
         >
           <Type size={20} />
@@ -132,7 +132,7 @@ export default function Sidebar({
         {/* Date Button */}
         <button
           onClick={handleAddDate}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
         >
           <Calendar size={20} />
           <span>Date Field</span>
@@ -141,7 +141,7 @@ export default function Sidebar({
         {/* Initials Button */}
         <button
           onClick={handleAddInitials}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
         >
           <Hash size={20} />
           <span>Initials</span>
@@ -150,7 +150,7 @@ export default function Sidebar({
         {/* Checkbox Button */}
         <button
           onClick={handleAddCheckbox}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
         >
           <CheckSquare size={20} />
           <span>Checkbox</span>

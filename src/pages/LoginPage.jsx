@@ -54,26 +54,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dark-900 p-8">
-      <div className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-8">
+      <div className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl p-8 text-center">
         <h1 className="mb-2"><Brand className="text-2xl" /></h1>
-        <p className="text-dark-400 text-sm mb-8">Send documents for signature and track them in one place.</p>
+        <p className="text-gray-500 text-sm mb-8">Send documents for signature and track them in one place.</p>
 
         <ErrorBanner>{error}</ErrorBanner>
 
         {sentTo ? (
           <div role="status">
-            <h2 className="text-lg font-semibold text-white mb-2">Check your email</h2>
-            <p className="text-sm text-dark-300">
-              We sent a sign-in link to <span className="text-white">{sentTo}</span>. Open it in this browser to continue.
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Check your email</h2>
+            <p className="text-sm text-gray-600">
+              We sent a sign-in link to <span className="text-gray-900">{sentTo}</span>. Open it in this browser to continue.
             </p>
-            <button onClick={() => setSentTo(null)} className="mt-6 text-sm text-blue-400 hover:underline">
+            <button onClick={() => setSentTo(null)} className="mt-6 text-sm text-blue-600 hover:underline">
               Use a different email
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="text-left">
-            <label htmlFor="email" className="block text-sm text-dark-300 mb-1">Work email</label>
+            <label htmlFor="email" className="block text-sm text-gray-600 mb-1">Work email</label>
             <input
               id="email"
               type="email"
@@ -83,7 +83,7 @@ export default function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder={`you@${ALLOWED_EMAIL_DOMAIN}`}
-              className="w-full px-3 py-2.5 rounded-lg bg-dark-900 border border-dark-600 text-white placeholder-dark-500 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
             />
             <button
               type="submit"
@@ -95,8 +95,8 @@ export default function LoginPage() {
           </form>
         )}
 
-        <p className="mt-8 text-xs text-dark-500">
-          Just need to sign something yourself? <Link to="/quick-sign" className="text-blue-400 hover:underline">Quick sign</Link> works without an account.
+        <p className="mt-8 text-xs text-gray-500">
+          Just need to sign something yourself? <Link to="/quick-sign" className="text-blue-600 hover:underline">Quick sign</Link> works without an account.
         </p>
       </div>
     </div>

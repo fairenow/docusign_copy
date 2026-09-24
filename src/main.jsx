@@ -24,12 +24,14 @@ const router = createBrowserRouter([
     path: '/envelopes/:envelopeId/sign',
     lazy: lazyPage(() => import('./pages/SigningPage'), (Page) => <RequireAuth><Page /></RequireAuth>)
   },
+  // The editor is full screen, like the signing page
+  {
+    path: '/envelopes/:envelopeId',
+    lazy: lazyPage(() => import('./pages/EnvelopeEditorPage'), (Page) => <RequireAuth><Page /></RequireAuth>)
+  },
   {
     element: <RequireAuth><AppLayout /></RequireAuth>,
-    children: [
-      { path: '/', element: <DashboardPage /> },
-      { path: '/envelopes/:envelopeId', lazy: lazyPage(() => import('./pages/EnvelopeEditorPage')) }
-    ]
+    children: [{ path: '/', element: <DashboardPage /> }]
   },
   { path: '*', element: <Navigate to="/" replace /> }
 ])

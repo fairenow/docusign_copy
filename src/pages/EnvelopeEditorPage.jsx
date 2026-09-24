@@ -18,7 +18,7 @@ import PageControls from '../components/PageControls'
 import PlaceholderField from '../components/envelope/PlaceholderField'
 import FullPageMessage from '../components/FullPageMessage'
 import RecipientsPanel from '../components/envelope/RecipientsPanel'
-import FieldPalette from '../components/envelope/FieldPalette'
+import FieldRail from '../components/envelope/FieldRail'
 import FieldProperties from '../components/envelope/FieldProperties'
 import SendChecklist from '../components/envelope/SendChecklist'
 import ActivityPanel from '../components/envelope/ActivityPanel'
@@ -40,6 +40,7 @@ export default function EnvelopeEditorPage() {
   const [saveState, setSaveState] = useState({ saving: false, problems: [], error: null })
   const [activeRecipientId, setActiveRecipientId] = useState(null)
   const [selectedFieldId, setSelectedFieldId] = useState(null)
+  const [tab, setTab] = useState('recipients') // right panel: 'recipients' | 'field'
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
   const [events, setEvents] = useState([])
@@ -144,8 +145,15 @@ export default function EnvelopeEditorPage() {
     if (!pageSize || !activeRecipientId) return
     const field = newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) })
     update({ fields: [...draft.fields, field] })
+    // Highlight the new field but stay on the current tab, so several can be placed in a row
     setSelectedFieldId(field.id)
   }
+
+  // Clicking a field opens its settings; clearing the selection goes back to recipients
+  const selectField = useCallback((id) => {
+    setSelectedFieldId(id)
+    setTab(id ? 'field' : 'recipients')
+  }, [])
 
   const updateField = useCallback((id, patch) => {
     setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }))
@@ -240,7 +248,7 @@ export default function EnvelopeEditorPage() {
   if (loadError) {
     return (
       <FullPageMessage title="Could not open envelope">
-        {loadError} <Link to="/" className="text-blue-400 underline">Back to envelopes</Link>
+        {loadError} <Link to="/" className="text-blue-600 underline">Back to envelopes</Link>
       </FullPageMessage>
     )
   }
@@ -249,32 +257,40 @@ export default function EnvelopeEditorPage() {
   const activeRecipient = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer')
   const selectedField = editable ? draft.fields.find(f => f.id === selectedFieldId) : null
   const saveStatus = saveState.saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'
+  const panelTab = selectedField ? tab : 'recipients'
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Top bar */}
-      <div className="px-5 py-3 bg-dark-800 border-b border-dark-700 flex items-center gap-4">
-        <Link to="/" className="p-1.5 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700" title="Back to envelopes">
+    <div className="h-screen flex flex-col bg-gray-100">
+      {/* Title bar */}
+      <header className="h-16 px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
+        <Link to="/" className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Back to envelopes">
           <ArrowLeft size={18} />
         </Link>
-        {editable ? (
-          <input
-            value={draft.title}
-            onChange={(e) => update({ title: e.target.value })}
-            maxLength={200}
-            className="flex-1 min-w-0 bg-transparent text-lg text-gray-100 font-medium outline-none border-b border-transparent focus:border-dark-500"
-            aria-label="Envelope title"
-          />
-        ) : (
-          <h1 className="flex-1 min-w-0 text-lg text-gray-100 font-medium truncate">{draft.title}</h1>
-        )}
+        <div className="flex-1 min-w-0">
+          {editable ? (
+            <input
+              value={draft.title}
+              onChange={(e) => update({ title: e.target.value })}
+              maxLength={200}
+              className="w-full max-w-xl bg-transparent text-base text-gray-900 font-semibold outline-none rounded px-1 -mx-1 hover:bg-gray-50 focus:bg-gray-50"
+              aria-label="Envelope title"
+            />
+          ) : (
+            <h1 className="text-base text-gray-900 font-semibold truncate">{draft.title}</h1>
+          )}
+          <p className="text-xs text-gray-500 truncate">
+            {editable
+              ? <span className={dirty ? 'text-amber-700' : undefined} data-testid="save-status">{saveStatus}</span>
+              : <span data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>}
+            {envelope.original_filename && <> · {envelope.original_filename}</>}
+          </p>
+        </div>
         {editable ? (
           <>
-            <span className={`text-xs whitespace-nowrap ${dirty ? 'text-amber-300' : 'text-dark-400'}`} data-testid="save-status">{saveStatus}</span>
             <button
               onClick={save}
               disabled={!dirty || saveState.saving}
-              className="px-4 py-2 rounded-lg bg-dark-700 border border-dark-600 text-gray-100 text-sm flex items-center gap-2 hover:bg-dark-600 disabled:opacity-50"
+              className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"
             >
               <Save size={16} /> Save
             </button>
@@ -282,16 +298,15 @@ export default function EnvelopeEditorPage() {
               onClick={handleSend}
               disabled={sendProblems.length > 0 || action.busy === 'send'}
               title={sendProblems.length ? 'Fix the items under "Ready to send?" first' : 'Email signing links'}
-              className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2"
             >
               <Send size={16} /> {action.busy === 'send' ? 'Sending…' : 'Send'}
             </button>
           </>
         ) : (
           <>
-            <span className="text-xs text-dark-400 whitespace-nowrap" data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>
             {mySigningTurn && (
-              <Link to={`/envelopes/${envelopeId}/sign`} className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2">
+              <Link to={`/envelopes/${envelopeId}/sign`} className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2">
                 <PenLine size={16} /> Sign now
               </Link>
             )}
@@ -299,116 +314,155 @@ export default function EnvelopeEditorPage() {
               <button
                 onClick={handleRetryFinalize}
                 disabled={action.busy === 'finalize'}
-                className="px-4 py-2 rounded-lg bg-dark-700 border border-dark-600 text-gray-100 text-sm flex items-center gap-2 hover:bg-dark-600 disabled:opacity-50"
+                className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"
                 title="Everyone has signed; build the final PDF and email copies"
               >
                 <RotateCw size={16} className={action.busy === 'finalize' ? 'animate-spin' : ''} /> Finish document
               </button>
             )}
             {envelope.status === 'completed' && envelope.final_path && (
-              <button onClick={handleDownloadSigned} className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2">
+              <button onClick={handleDownloadSigned} className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2">
                 <Download size={16} /> Download signed PDF
               </button>
             )}
           </>
         )}
+      </header>
+
+      {/* Toolbar */}
+      <div className="h-11 px-4 bg-white border-b border-gray-200 flex items-center flex-shrink-0">
+        <PageControls
+          currentPage={currentPage}
+          totalPages={pageSizes.length}
+          zoom={zoom}
+          onPageChange={setCurrentPage}
+          onZoomChange={setZoom}
+        />
       </div>
 
-      {action.error && <ErrorBanner className="mx-5 mt-3">{action.error}</ErrorBanner>}
+      {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
       {(saveState.problems.length > 0 || saveState.error) && (
-        <div role="alert" className="px-5 py-2 bg-red-500/10 border-b border-red-500/30 text-sm text-red-300">
+        <div role="alert" className="px-4 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700">
           {saveState.error ? `Could not save: ${saveState.error}` : saveState.problems.join(' ')}
         </div>
       )}
 
       <div className="flex-1 flex min-h-0">
-        {/* Left panel */}
-        <aside className="w-80 flex-shrink-0 bg-dark-800 border-r border-dark-700 p-4 space-y-6 overflow-y-auto">
-          {editable ? (
-          <RecipientsPanel
-            recipients={draft.recipients}
-            signingOrder={draft.signingOrder}
-            activeRecipientId={activeRecipientId}
-            readOnly={!editable}
-            onActivate={setActiveRecipientId}
-            onAdd={addRecipient}
-            onChange={changeRecipient}
-            onRemove={removeRecipient}
-            onMove={(id, delta) => update({ recipients: moveRecipient(draft.recipients, id, delta) })}
-            onSigningOrderChange={(signingOrder) => update({ signingOrder })}
-          />
-          ) : (
-            <ActivityPanel
-              recipients={draft.recipients}
-              events={events}
-              canResend={canVoid(envelope, user)}
-              onResend={handleResend}
-              resendingId={action.busy}
-            />
-          )}
-
-          {editable && <FieldPalette recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
-
-          <section>
-            <h2 className="section-heading mb-2">Message to recipients</h2>
-            {editable ? (
-              <textarea
-                value={draft.message}
-                onChange={(e) => update({ message: e.target.value })}
-                maxLength={5000}
-                rows={4}
-                placeholder="Optional note included in the email"
-                className="w-full bg-dark-700 border border-dark-600 rounded-lg p-2 text-sm text-gray-100 placeholder-dark-500 resize-y"
-              />
-            ) : (
-              <p className="text-sm text-dark-400 whitespace-pre-wrap">{draft.message || 'No message.'}</p>
-            )}
-          </section>
-
-          {editable && <SendChecklist problems={sendProblems} />}
-        </aside>
+        {editable && <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
 
         {/* Document */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="px-5 py-2 bg-dark-800 border-b border-dark-700 flex items-center justify-between">
-            <PageControls
-              currentPage={currentPage}
-              totalPages={pageSizes.length}
-              zoom={zoom}
-              onPageChange={setCurrentPage}
-              onZoomChange={setZoom}
-            />
-            <span className="text-xs text-dark-500">{envelope.original_filename}</span>
+        {pdfError ? (
+          <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Could not open the document</h2>
+              <p className="text-sm text-gray-500">{pdfError.message}</p>
+            </div>
           </div>
-          {pdfError ? (
-            <FullPageMessage title="Could not open the document">{pdfError.message}</FullPageMessage>
-          ) : (
-            <DocumentViewer
-              pdfDoc={pdfDoc}
-              pageSizes={pageSizes}
-              elements={draft.fields}
-              currentPage={currentPage}
-              zoom={zoom}
-              renderField={renderField}
-              readOnly={!editable}
-              selectedId={selectedFieldId}
-              onSelectedIdChange={setSelectedFieldId}
-              onUpdateElement={updateField}
-              onDeleteElement={deleteField}
-            />
-          )}
-        </div>
-
-        {selectedField && (
-          <FieldProperties
-            field={selectedField}
-            recipients={draft.recipients}
-            onChange={(patch) => updateField(selectedField.id, patch)}
-            onDelete={() => deleteField(selectedField.id)}
-            onClose={() => setSelectedFieldId(null)}
+        ) : (
+          <DocumentViewer
+            pdfDoc={pdfDoc}
+            pageSizes={pageSizes}
+            elements={draft.fields}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            zoom={zoom}
+            renderField={renderField}
+            readOnly={!editable}
+            selectedId={selectedFieldId}
+            onSelectedIdChange={selectField}
+            onUpdateElement={updateField}
+            onDeleteElement={deleteField}
           />
         )}
+
+        {/* Right panel */}
+        <aside className="w-80 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col min-h-0">
+          {editable ? (
+            <>
+              <div role="tablist" className="flex gap-6 px-4 border-b border-gray-200 flex-shrink-0">
+                {[['recipients', 'Recipients'], ['field', 'Field']].map(([id, label]) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    aria-selected={panelTab === id}
+                    onClick={() => setTab(id)}
+                    className={`py-3 text-sm border-b-2 -mb-px ${panelTab === id ? 'border-blue-600 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                {panelTab === 'field' && selectedField ? (
+                  <FieldProperties
+                    field={selectedField}
+                    recipients={draft.recipients}
+                    onChange={(patch) => updateField(selectedField.id, patch)}
+                    onDelete={() => deleteField(selectedField.id)}
+                    onClose={() => selectField(null)}
+                  />
+                ) : panelTab === 'field' ? (
+                  <p className="text-sm text-gray-500">Select a field on the document to change who fills it in, its label, or whether it is required.</p>
+                ) : (
+                  <>
+                    <RecipientsPanel
+                      recipients={draft.recipients}
+                      signingOrder={draft.signingOrder}
+                      activeRecipientId={activeRecipientId}
+                      readOnly={!editable}
+                      onActivate={setActiveRecipientId}
+                      onAdd={addRecipient}
+                      onChange={changeRecipient}
+                      onRemove={removeRecipient}
+                      onMove={(id, delta) => update({ recipients: moveRecipient(draft.recipients, id, delta) })}
+                      onSigningOrderChange={(signingOrder) => update({ signingOrder })}
+                    />
+                    <p className="text-xs text-gray-500">
+                      {activeRecipient
+                        ? <>Adding to the current page for <span className="font-medium" style={{ color: activeRecipient.color }}>{activeRecipient.name || 'this signer'}</span>. Pick a field on the left.</>
+                        : 'Add a signer, then pick fields on the left to place them.'}
+                    </p>
+                    <MessageField value={draft.message} onChange={(message) => update({ message })} />
+                  </>
+                )}
+              </div>
+              <div className="border-t border-gray-200 p-4 flex-shrink-0">
+                <SendChecklist problems={sendProblems} />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <ActivityPanel
+                recipients={draft.recipients}
+                events={events}
+                canResend={canVoid(envelope, user)}
+                onResend={handleResend}
+                resendingId={action.busy}
+              />
+              <section>
+                <h2 className="section-heading mb-2">Message to recipients</h2>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">{draft.message || 'No message.'}</p>
+              </section>
+            </div>
+          )}
+        </aside>
       </div>
     </div>
+  )
+}
+
+function MessageField({ value, onChange }) {
+  return (
+    <section>
+      <h2 className="section-heading mb-2">Message to recipients</h2>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={5000}
+        rows={4}
+        placeholder="Optional note included in the email"
+        className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm text-gray-900 placeholder-gray-400 resize-y focus:outline-none focus:border-blue-500"
+      />
+    </section>
   )
 }

@@ -42,7 +42,7 @@ test('owner sends an envelope; only the first signer is emailed in sequential or
   await signInAs(page, ALICE)
   await page.goto('/')
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
-  await expect(page.getByTestId('document-page')).toBeVisible()
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
 
   for (const [i, [name, email]] of [['Bob Teammate', BOB.email], ['Carol Client', 'carol@client.com']].entries()) {
     await page.getByRole('button', { name: 'Add recipient' }).click()
@@ -79,7 +79,7 @@ test('signer uses the emailed link: consent, guided fields, adopt signature, fin
   await page.getByLabel('I agree to use electronic records and signatures.').check()
   await cont.click()
 
-  await expect(page.getByTestId('document-page')).toBeVisible()
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
   await expect(page.getByTestId('remaining')).toHaveText('2 required fields left')
   await expect(page.getByRole('button', { name: 'Finish' })).toBeDisabled()
   // "Date signed" shows today's date and cannot be edited

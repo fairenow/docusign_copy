@@ -21,9 +21,9 @@ export default function RecipientsPanel({
   return (
     <section>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="section-heading">Recipients</h2>
+        <h2 className="text-sm font-semibold text-gray-900">Who should complete this document?</h2>
         {!readOnly && (
-          <label className="flex items-center gap-2 text-xs text-dark-400 cursor-pointer">
+          <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
             <input
               type="checkbox"
               checked={sequential}
@@ -40,21 +40,21 @@ export default function RecipientsPanel({
           return (
             <li
               key={r.id}
-              className={`rounded-lg border p-2 ${active ? 'border-blue-500 bg-blue-500/5' : 'border-dark-600 bg-dark-700'}`}
+              className={`rounded-lg border p-2 ${active ? 'border-blue-500 bg-blue-500/5' : 'border-gray-300 bg-gray-50'}`}
               data-testid="recipient"
             >
               <div className="flex items-center gap-2 mb-2">
                 <button
                   type="button"
                   onClick={() => r.role === 'signer' && onActivate(r.id)}
-                  className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-dark-700"
+                  className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-white"
                   style={{ backgroundColor: r.color, boxShadow: active ? `0 0 0 2px ${r.color}` : undefined }}
                   title={r.role === 'signer' ? 'Add fields for this signer' : 'CC recipients do not get fields'}
                   aria-label={`Select ${r.name || `recipient ${index + 1}`}`}
                 />
-                {sequential && <span className="text-xs text-dark-500">{index + 1}.</span>}
+                {sequential && <span className="text-xs text-gray-500">{index + 1}.</span>}
                 {readOnly ? (
-                  <span className="text-sm text-gray-200 truncate flex-1">{r.name}</span>
+                  <span className="text-sm text-gray-800 truncate flex-1">{r.name}</span>
                 ) : (
                   <input
                     value={r.name}
@@ -62,27 +62,27 @@ export default function RecipientsPanel({
                     onFocus={() => r.role === 'signer' && onActivate(r.id)}
                     placeholder="Name"
                     maxLength={200}
-                    className="flex-1 min-w-0 bg-transparent text-sm text-gray-100 placeholder-dark-500 outline-none"
+                    className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
                     aria-label="Recipient name"
                   />
                 )}
                 {readOnly ? (
-                  <span className="text-xs text-dark-400">{RECIPIENT_STATUS[r.status]?.label}</span>
+                  <span className="text-xs text-gray-500">{RECIPIENT_STATUS[r.status]?.label}</span>
                 ) : (
                   <div className="flex items-center">
                     {sequential && (
                       <>
-                        <button type="button" onClick={() => onMove(r.id, -1)} disabled={index === 0} className="p-0.5 text-dark-400 hover:text-white disabled:opacity-30" title="Move up"><ChevronUp size={14} /></button>
-                        <button type="button" onClick={() => onMove(r.id, 1)} disabled={index === recipients.length - 1} className="p-0.5 text-dark-400 hover:text-white disabled:opacity-30" title="Move down"><ChevronDown size={14} /></button>
+                        <button type="button" onClick={() => onMove(r.id, -1)} disabled={index === 0} className="p-0.5 text-gray-500 hover:text-gray-900 disabled:opacity-30" title="Move up"><ChevronUp size={14} /></button>
+                        <button type="button" onClick={() => onMove(r.id, 1)} disabled={index === recipients.length - 1} className="p-0.5 text-gray-500 hover:text-gray-900 disabled:opacity-30" title="Move down"><ChevronDown size={14} /></button>
                       </>
                     )}
-                    <button type="button" onClick={() => onRemove(r.id)} className="p-0.5 text-dark-400 hover:text-red-400" title="Remove recipient"><Trash2 size={14} /></button>
+                    <button type="button" onClick={() => onRemove(r.id)} className="p-0.5 text-gray-500 hover:text-red-600" title="Remove recipient"><Trash2 size={14} /></button>
                   </div>
                 )}
               </div>
 
               {readOnly ? (
-                <p className="text-xs text-dark-400 truncate pl-6">{r.email}{r.role === 'cc' ? ' · CC' : ''}</p>
+                <p className="text-xs text-gray-500 truncate pl-6">{r.email}{r.role === 'cc' ? ' · CC' : ''}</p>
               ) : (
                 <div className="flex gap-2 pl-6">
                   <input
@@ -92,13 +92,13 @@ export default function RecipientsPanel({
                     onFocus={() => r.role === 'signer' && onActivate(r.id)}
                     placeholder="Email"
                     maxLength={320}
-                    className="flex-1 min-w-0 bg-dark-800 border border-dark-600 rounded px-2 py-1 text-xs text-gray-100 placeholder-dark-500"
+                    className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 placeholder-gray-400"
                     aria-label="Recipient email"
                   />
                   <select
                     value={r.role}
                     onChange={(e) => onChange(r.id, { role: e.target.value })}
-                    className="bg-dark-800 border border-dark-600 rounded px-1 py-1 text-xs text-gray-200"
+                    className="bg-white border border-gray-300 rounded px-1 py-1 text-xs text-gray-800"
                     aria-label="Recipient role"
                   >
                     <option value="signer">Signs</option>
@@ -115,7 +115,7 @@ export default function RecipientsPanel({
         <button
           type="button"
           onClick={onAdd}
-          className="mt-2 w-full py-2 rounded-lg border border-dashed border-dark-600 text-sm text-dark-400 hover:text-white hover:border-blue-500 flex items-center justify-center gap-2"
+          className="mt-2 w-full py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 hover:text-gray-900 hover:border-blue-500 flex items-center justify-center gap-2"
         >
           <UserPlus size={14} />
           Add recipient

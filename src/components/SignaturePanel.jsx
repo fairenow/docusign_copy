@@ -87,10 +87,10 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
   }
 
   const tabClass = (active) =>
-    `flex-1 py-2 px-3 rounded-lg text-sm transition-all ${active ? 'bg-blue-600 text-white' : 'bg-dark-800 text-dark-400'}`
+    `flex-1 py-2 px-3 rounded-lg text-sm transition-all ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-500'}`
 
   return (
-    <div className="bg-dark-700 rounded-xl p-4 mb-2">
+    <div className="bg-gray-50 rounded-xl p-4 mb-2">
       <div className="flex gap-2 mb-4">
         <button onClick={() => setMode('draw')} className={tabClass(mode === 'draw')}>Draw</button>
         <button onClick={() => setMode('type')} className={tabClass(mode === 'type')}>Type</button>
@@ -108,7 +108,7 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
             onPointerCancel={stopDrawing}
           />
           {!hasInk && (
-            <span className="absolute inset-x-0 bottom-3 text-center text-xs text-gray-400 pointer-events-none">
+            <span className="absolute inset-x-0 bottom-3 text-center text-xs text-gray-500 pointer-events-none">
               Sign here
             </span>
           )}
@@ -119,13 +119,13 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
           value={typedName}
           onChange={(e) => setTypedName(e.target.value)}
           placeholder="Your Name"
-          className="w-full p-3 bg-white rounded-lg text-3xl text-center mb-3 text-dark-900"
+          className="w-full p-3 bg-white rounded-lg text-3xl text-center mb-3 text-gray-900"
           style={{ fontFamily: SIGNATURE_FONT, fontWeight: 600 }}
         />
       )}
 
       <div className="flex gap-2">
-        <button onClick={clear} className="flex-1 py-2 px-3 bg-dark-600 text-gray-200 rounded-lg text-sm hover:bg-dark-500 transition-all">
+        <button onClick={clear} className="flex-1 py-2 px-3 bg-gray-200 text-gray-800 rounded-lg text-sm hover:bg-gray-300 transition-all">
           Clear
         </button>
         <button onClick={handleApply} className="flex-1 py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all">

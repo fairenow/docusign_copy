@@ -10,20 +10,20 @@ export default function TextOptions({ onApply }) {
   }
 
   return (
-    <div className="bg-dark-700 rounded-xl p-4 mb-2">
+    <div className="bg-gray-50 rounded-xl p-4 mb-2">
       <div className="flex gap-3 mb-4">
         <div className="flex-1">
-          <label className="block text-xs text-dark-400 mb-1">Font Size</label>
+          <label className="block text-xs text-gray-500 mb-1">Font Size</label>
           <select
             value={fontSize}
             onChange={(e) => setFontSize(e.target.value)}
-            className="w-full p-2 bg-dark-800 border border-dark-600 rounded-lg text-gray-200 text-sm"
+            className="w-full p-2 bg-white border border-gray-300 rounded-lg text-gray-800 text-sm"
           >
             {FONT_SIZES.map(size => <option key={size} value={size}>{size} pt</option>)}
           </select>
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-dark-400 mb-1">Color</label>
+          <label className="block text-xs text-gray-500 mb-1">Color</label>
           <input
             type="color"
             value={color}

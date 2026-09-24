@@ -27,15 +27,15 @@ export default function FileDropzone({ onFile }) {
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
       className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all max-w-md w-full cursor-pointer ${
-        isDragOver ? 'border-blue-500 bg-blue-500/10' : 'border-dark-600 hover:border-blue-500 hover:bg-blue-500/5'
+        isDragOver ? 'border-blue-500 bg-blue-500/10' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-500/5'
       }`}
     >
-      <div className="w-16 h-16 mx-auto mb-4 bg-dark-600 rounded-full flex items-center justify-center">
-        <Upload size={32} className="text-dark-400" />
+      <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
+        <Upload size={32} className="text-gray-500" />
       </div>
-      <h3 className="text-xl text-gray-200 mb-2">Upload Document</h3>
-      <p className="text-dark-400 mb-4">Drop your file here or click to browse</p>
-      <p className="text-sm text-dark-500">PDF or DOCX, up to 50 MB</p>
+      <h3 className="text-xl text-gray-800 mb-2">Upload Document</h3>
+      <p className="text-gray-500 mb-4">Drop your file here or click to browse</p>
+      <p className="text-sm text-gray-500">PDF or DOCX, up to 50 MB</p>
       <input ref={inputRef} type="file" accept={ACCEPTED_FILE_TYPES} onChange={handleSelect} className="hidden" data-testid="file-input" />
     </div>
   )

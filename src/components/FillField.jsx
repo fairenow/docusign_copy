@@ -12,7 +12,7 @@ const BORDER_COLORS = {
 export default function FillField({ element, isSelected, scale, containerSize, onUpdate }) {
   const bordered = element.type !== 'checkbox' || isSelected
   return (
-    <div className={`w-full h-full ${bordered ? `border border-dashed ${BORDER_COLORS[element.type]}` : 'border-2 border-gray-800'}`}>
+    <div className={`w-full h-full ${bordered ? `border border-dashed ${BORDER_COLORS[element.type]}` : 'border-2 border-gray-200'}`}>
       <FillContent element={element} scale={scale} containerSize={containerSize} onUpdate={onUpdate} />
     </div>
   )

@@ -185,7 +185,7 @@ export default function SigningPage() {
         {done === 'signed'
           ? 'Your signature has been recorded. Everyone will receive the completed document by email once all signers have finished.'
           : 'The sender has been notified.'}
-        {envelopeId && <p className="mt-4"><Link to="/" className="text-blue-400 underline">Back to envelopes</Link></p>}
+        {envelopeId && <p className="mt-4"><Link to="/" className="text-blue-600 underline">Back to envelopes</Link></p>}
       </FullPageMessage>
     )
   }
@@ -208,30 +208,30 @@ export default function SigningPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-dark-900">
-      <header className="px-5 py-3 bg-dark-800 border-b border-dark-700 flex items-center gap-4">
+    <div className="h-screen flex flex-col bg-gray-100">
+      <header className="px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-4">
         <Brand />
         <div className="flex-1 min-w-0">
-          <p className="text-gray-100 font-medium truncate">{session.envelope.title}</p>
-          <p className="text-xs text-dark-400 truncate">From {session.envelope.sender} · signing as {session.recipient.name}</p>
+          <p className="text-gray-900 font-medium truncate">{session.envelope.title}</p>
+          <p className="text-xs text-gray-500 truncate">From {session.envelope.sender} · signing as {session.recipient.name}</p>
         </div>
-        <button onClick={handleDecline} disabled={busy} className="px-3 py-2 rounded-lg text-sm text-dark-400 hover:text-red-300 disabled:opacity-50">
+        <button onClick={handleDecline} disabled={busy} className="px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-700 disabled:opacity-50">
           Decline
         </button>
         <button
           onClick={handleFinish}
           disabled={busy || remaining.length > 0}
-          className="px-5 py-2 btn-gradient rounded-lg text-white text-sm font-medium disabled:opacity-50"
+          className="px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50"
         >
           {busy ? 'Finishing…' : 'Finish'}
         </button>
       </header>
 
-      <div className="px-5 py-2 bg-dark-800 border-b border-dark-700 flex items-center justify-between gap-4">
+      <div className="px-5 py-2 bg-white border-b border-gray-200 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {remaining.length > 0 ? (
             <>
-              <span className="text-sm text-amber-300" data-testid="remaining">
+              <span className="text-sm text-amber-700" data-testid="remaining">
                 {remaining.length} required field{remaining.length > 1 ? 's' : ''} left
               </span>
               <button onClick={goToNext} className="px-3 py-1.5 rounded-lg bg-amber-400 text-gray-900 text-sm font-medium flex items-center gap-1">
@@ -239,7 +239,7 @@ export default function SigningPage() {
               </button>
             </>
           ) : (
-            <span className="text-sm text-green-300 flex items-center gap-2"><CheckCircle2 size={14} /> All required fields are complete. Click Finish.</span>
+            <span className="text-sm text-green-700 flex items-center gap-2"><CheckCircle2 size={14} /> All required fields are complete. Click Finish.</span>
           )}
         </div>
         <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
@@ -255,6 +255,7 @@ export default function SigningPage() {
           pageSizes={pageSizes}
           elements={elements}
           currentPage={currentPage}
+          onPageChange={setCurrentPage}
           zoom={zoom}
           readOnly
           renderField={renderField}
@@ -266,7 +267,7 @@ export default function SigningPage() {
 
       {adopting && (
         <Modal title={adopting.type === 'signature' ? 'Adopt your signature' : 'Adopt your initials'} onClose={() => setAdopting(null)}>
-          <p className="text-sm text-dark-400 mb-3">
+          <p className="text-sm text-gray-500 mb-3">
             {adopting.type === 'signature'
               ? 'Draw or type your signature. It will be placed wherever you click a signature field.'
               : 'Draw or type your initials.'}
@@ -285,24 +286,24 @@ export default function SigningPage() {
 function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
   const [agreed, setAgreed] = useState(false)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dark-900 p-6">
-      <div className="w-full max-w-lg bg-dark-800 border border-dark-700 rounded-2xl p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
+      <div className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl p-8">
         <Brand className="text-xl" />
-        <h1 className="text-xl text-gray-100 font-semibold mt-6 mb-1">{session.envelope.title}</h1>
-        <p className="text-sm text-dark-400 mb-4">{session.envelope.sender} has asked you, {session.recipient.name}, to review and sign this document.</p>
+        <h1 className="text-xl text-gray-900 font-semibold mt-6 mb-1">{session.envelope.title}</h1>
+        <p className="text-sm text-gray-500 mb-4">{session.envelope.sender} has asked you, {session.recipient.name}, to review and sign this document.</p>
         {session.envelope.message && (
-          <p className="text-sm text-gray-200 whitespace-pre-wrap border-l-2 border-dark-600 pl-3 mb-6">{session.envelope.message}</p>
+          <p className="text-sm text-gray-800 whitespace-pre-wrap border-l-2 border-gray-300 pl-3 mb-6">{session.envelope.message}</p>
         )}
 
-        <div className="bg-dark-700 rounded-lg p-4 text-xs text-dark-400 leading-relaxed mb-4">
-          <p className="font-semibold text-gray-200 mb-1">Electronic record and signature disclosure</p>
+        <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-500 leading-relaxed mb-4">
+          <p className="font-semibold text-gray-800 mb-1">Electronic record and signature disclosure</p>
           By continuing you agree to receive this document electronically and to sign it with an electronic signature,
           which has the same legal effect as a handwritten signature. You can decline to sign instead, or ask the sender
           for a paper copy. Your name, email, IP address, browser and the time of each step are recorded in a certificate
           of completion attached to the final document.
         </div>
 
-        <label className="flex items-start gap-2 text-sm text-gray-200 mb-6 cursor-pointer">
+        <label className="flex items-start gap-2 text-sm text-gray-800 mb-6 cursor-pointer">
           <input type="checkbox" className="mt-1" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
           I agree to use electronic records and signatures.
         </label>
@@ -310,8 +311,8 @@ function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
         {error && <ErrorBanner>{error}</ErrorBanner>}
 
         <div className="flex justify-between">
-          <button onClick={onDecline} disabled={busy} className="px-3 py-2 text-sm text-dark-400 hover:text-red-300">Decline to sign</button>
-          <button onClick={onContinue} disabled={!agreed} className="px-5 py-2 btn-gradient rounded-lg text-white text-sm font-medium disabled:opacity-50">
+          <button onClick={onDecline} disabled={busy} className="px-3 py-2 text-sm text-gray-500 hover:text-red-700">Decline to sign</button>
+          <button onClick={onContinue} disabled={!agreed} className="px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50">
             Continue
           </button>
         </div>

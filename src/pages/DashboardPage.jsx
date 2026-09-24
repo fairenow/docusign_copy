@@ -10,11 +10,11 @@ import LoadingOverlay from '../components/LoadingOverlay'
 import ErrorBanner from '../components/ErrorBanner'
 
 const STATUS_STYLES = {
-  draft: 'bg-dark-600 text-gray-200',
-  sent: 'bg-blue-500/15 text-blue-300',
-  completed: 'bg-green-500/15 text-green-300',
-  declined: 'bg-red-500/15 text-red-300',
-  voided: 'bg-dark-600 text-dark-400 line-through'
+  draft: 'bg-gray-200 text-gray-800',
+  sent: 'bg-blue-500/15 text-blue-700',
+  completed: 'bg-green-500/15 text-green-700',
+  declined: 'bg-red-500/15 text-red-700',
+  voided: 'bg-gray-200 text-gray-500 line-through'
 }
 
 export default function DashboardPage() {
@@ -99,14 +99,14 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 p-6 max-w-6xl w-full mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl text-gray-100 font-semibold">Envelopes</h1>
+        <h1 className="text-2xl text-gray-900 font-semibold">Envelopes</h1>
         <div className="flex gap-2">
-          <button onClick={refresh} className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700" title="Refresh">
+          <button onClick={refresh} className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Refresh">
             <RefreshCw size={18} />
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2"
+            className="px-4 py-2 btn-primary rounded-lg text-white text-sm flex items-center gap-2"
           >
             <FilePlus size={16} />
             New envelope
@@ -115,7 +115,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 border-b border-dark-700" role="tablist">
+      <div className="flex gap-1 mb-4 border-b border-gray-200" role="tablist">
         {ENVELOPE_GROUPS.map(g => (
           <button
             key={g.id}
@@ -123,11 +123,11 @@ export default function DashboardPage() {
             aria-selected={group === g.id}
             onClick={() => setGroup(g.id)}
             className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
-              group === g.id ? 'border-blue-500 text-white' : 'border-transparent text-dark-400 hover:text-gray-200'
+              group === g.id ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
             {g.label}
-            {groups[g.id].length ? <span className="ml-2 text-xs text-dark-500">{groups[g.id].length}</span> : null}
+            {groups[g.id].length ? <span className="ml-2 text-xs text-gray-500">{groups[g.id].length}</span> : null}
           </button>
         ))}
       </div>
@@ -135,11 +135,11 @@ export default function DashboardPage() {
       <ErrorBanner>{error}</ErrorBanner>
 
       {envelopes === null && !error ? (
-        <p className="text-dark-400 text-sm py-12 text-center">Loading…</p>
+        <p className="text-gray-500 text-sm py-12 text-center">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState group={group} onNew={() => fileInputRef.current?.click()} />
       ) : (
-        <ul className="divide-y divide-dark-700 bg-dark-800 border border-dark-700 rounded-xl overflow-hidden">
+        <ul className="divide-y divide-gray-200 bg-white border border-gray-200 rounded-xl overflow-hidden">
           {visible.map(envelope => (
             <EnvelopeRow
               key={envelope.id}
@@ -163,13 +163,13 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
   const updated = formatDateTime(envelope.updated_at)
 
   return (
-    <li className="flex items-center gap-4 px-4 py-3 hover:bg-dark-700/50" data-testid="envelope-row">
+    <li className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50" data-testid="envelope-row">
       <Link
         to={envelopeGroup(envelope, user) === 'action' ? `/envelopes/${envelope.id}/sign` : `/envelopes/${envelope.id}`}
         className="flex-1 min-w-0"
       >
-        <p className="text-gray-100 font-medium truncate">{envelope.title}</p>
-        <p className="text-xs text-dark-400 truncate">
+        <p className="text-gray-900 font-medium truncate">{envelope.title}</p>
+        <p className="text-xs text-gray-500 truncate">
           {recipients.length
             ? recipients.map(r => `${RECIPIENT_STATUS[r.status]?.icon ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
             : 'No recipients yet'}
@@ -178,20 +178,20 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
       <span className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${STATUS_STYLES[envelope.status]}`}>
         {STATUS_LABELS[envelope.status]}
       </span>
-      <span className="text-xs text-dark-500 w-40 text-right whitespace-nowrap">{updated}</span>
+      <span className="text-xs text-gray-500 w-40 text-right whitespace-nowrap">{updated}</span>
       <div className="w-8 flex justify-end">
         {envelope.status === 'completed' && envelope.final_path && (
-          <button onClick={onDownload} className="p-1.5 rounded text-dark-400 hover:text-white hover:bg-dark-700" title="Download signed PDF">
+          <button onClick={onDownload} className="p-1.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Download signed PDF">
             <Download size={16} />
           </button>
         )}
         {canDelete(envelope, user) && (
-          <button onClick={onDelete} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Delete draft">
+          <button onClick={onDelete} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Delete draft">
             <Trash2 size={16} />
           </button>
         )}
         {canVoid(envelope, user) && (
-          <button onClick={onVoid} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Void envelope">
+          <button onClick={onVoid} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Void envelope">
             <Ban size={16} />
           </button>
         )}
@@ -211,9 +211,9 @@ const EMPTY_MESSAGES = {
 function EmptyState({ group, onNew }) {
   return (
     <div className="py-16 text-center">
-      <p className="text-dark-400 mb-4">{EMPTY_MESSAGES[group]}</p>
+      <p className="text-gray-500 mb-4">{EMPTY_MESSAGES[group]}</p>
       {group === 'all' || group === 'draft' ? (
-        <button onClick={onNew} className="text-blue-400 hover:underline text-sm">Upload a document to start an envelope</button>
+        <button onClick={onNew} className="text-blue-600 hover:underline text-sm">Upload a document to start an envelope</button>
       ) : null}
     </div>
   )

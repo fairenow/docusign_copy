@@ -30,13 +30,13 @@ const fieldIcons = {
 
 // Color mapping for field types
 const fieldColors = {
-  [DETECTED_FIELD_TYPES.TEXT]: 'text-blue-400 bg-blue-500/20 border-blue-500/50',
-  [DETECTED_FIELD_TYPES.CHECKBOX]: 'text-green-400 bg-green-500/20 border-green-500/50',
-  [DETECTED_FIELD_TYPES.RADIO]: 'text-purple-400 bg-purple-500/20 border-purple-500/50',
-  [DETECTED_FIELD_TYPES.SIGNATURE]: 'text-amber-400 bg-amber-500/20 border-amber-500/50',
-  [DETECTED_FIELD_TYPES.DATE]: 'text-teal-400 bg-teal-500/20 border-teal-500/50',
-  [DETECTED_FIELD_TYPES.INITIALS]: 'text-pink-400 bg-pink-500/20 border-pink-500/50',
-  [DETECTED_FIELD_TYPES.DROPDOWN]: 'text-indigo-400 bg-indigo-500/20 border-indigo-500/50'
+  [DETECTED_FIELD_TYPES.TEXT]: 'text-blue-600 bg-blue-500/20 border-blue-500/50',
+  [DETECTED_FIELD_TYPES.CHECKBOX]: 'text-green-600 bg-green-500/20 border-green-500/50',
+  [DETECTED_FIELD_TYPES.RADIO]: 'text-purple-600 bg-purple-500/20 border-purple-500/50',
+  [DETECTED_FIELD_TYPES.SIGNATURE]: 'text-amber-600 bg-amber-500/20 border-amber-500/50',
+  [DETECTED_FIELD_TYPES.DATE]: 'text-teal-600 bg-teal-500/20 border-teal-500/50',
+  [DETECTED_FIELD_TYPES.INITIALS]: 'text-pink-600 bg-pink-500/20 border-pink-500/50',
+  [DETECTED_FIELD_TYPES.DROPDOWN]: 'text-indigo-600 bg-indigo-500/20 border-indigo-500/50'
 }
 
 // Label mapping for field types
@@ -52,14 +52,14 @@ const fieldLabels = {
 
 function FieldItem({ field, isSelected, onSelect, onPlace }) {
   const Icon = fieldIcons[field.type] || FileText
-  const colorClass = fieldColors[field.type] || 'text-gray-400 bg-gray-500/20 border-gray-500/50'
+  const colorClass = fieldColors[field.type] || 'text-gray-500 bg-gray-500/20 border-gray-500/50'
 
   return (
     <div
       className={`p-2 rounded-lg border transition-all cursor-pointer mb-2 ${
         isSelected
           ? 'border-blue-500 bg-blue-500/10'
-          : 'border-dark-600 bg-dark-700 hover:border-dark-500'
+          : 'border-gray-300 bg-gray-50 hover:border-gray-400'
       }`}
       onClick={() => onSelect(field.id)}
     >
@@ -68,9 +68,9 @@ function FieldItem({ field, isSelected, onSelect, onPlace }) {
           <Icon size={14} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-200 truncate">{field.label}</p>
-          <p className="text-xs text-dark-400">
-            Page {field.page} {field.required && <span className="text-red-400">*</span>}
+          <p className="text-sm text-gray-800 truncate">{field.label}</p>
+          <p className="text-xs text-gray-500">
+            Page {field.page} {field.required && <span className="text-red-600">*</span>}
           </p>
         </div>
         <button
@@ -91,19 +91,19 @@ function FieldItem({ field, isSelected, onSelect, onPlace }) {
 function FieldTypeSection({ type, fields, selectedFields, onSelect, onPlace, onPlaceAll }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const Icon = fieldIcons[type] || FileText
-  const colorClass = fieldColors[type] || 'text-gray-400'
+  const colorClass = fieldColors[type] || 'text-gray-500'
   const label = fieldLabels[type] || 'Unknown'
 
   return (
     <div className="mb-3">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-dark-700 transition-colors"
+        className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
       >
-        {isExpanded ? <ChevronDown size={16} className="text-dark-400" /> : <ChevronRight size={16} className="text-dark-400" />}
+        {isExpanded ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
         <Icon size={16} className={colorClass.split(' ')[0]} />
-        <span className="text-sm text-gray-200 flex-1 text-left">{label}</span>
-        <span className="text-xs text-dark-400 bg-dark-600 px-2 py-0.5 rounded-full">
+        <span className="text-sm text-gray-800 flex-1 text-left">{label}</span>
+        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
           {fields.length}
         </span>
       </button>
@@ -122,7 +122,7 @@ function FieldTypeSection({ type, fields, selectedFields, onSelect, onPlace, onP
           {fields.length > 1 && (
             <button
               onClick={() => onPlaceAll(fields)}
-              className="w-full p-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded transition-colors"
+              className="w-full p-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-500/10 rounded transition-colors"
             >
               Place all {label.toLowerCase()} fields
             </button>
@@ -172,14 +172,14 @@ export default function DetectedFieldsPanel({
 
   if (isDetecting) {
     return (
-      <div className="bg-dark-800 border border-dark-600 rounded-lg p-4 mb-4">
+      <div className="bg-white border border-gray-300 rounded-lg p-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="animate-spin">
-            <Sparkles size={20} className="text-blue-400" />
+            <Sparkles size={20} className="text-blue-600" />
           </div>
           <div>
-            <p className="text-sm text-gray-200">Analyzing document...</p>
-            <p className="text-xs text-dark-400">Detecting form fields</p>
+            <p className="text-sm text-gray-800">Analyzing document...</p>
+            <p className="text-xs text-gray-500">Detecting form fields</p>
           </div>
         </div>
       </div>
@@ -188,17 +188,17 @@ export default function DetectedFieldsPanel({
 
   if (detectedFields.length === 0) {
     return (
-      <div className="bg-dark-800 border border-dark-600 rounded-lg p-4 mb-4">
-        <div className="flex items-center gap-3 text-dark-400">
+      <div className="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+        <div className="flex items-center gap-3 text-gray-500">
           <AlertCircle size={20} />
           <div>
-            <p className="text-sm text-gray-300">No form fields detected</p>
+            <p className="text-sm text-gray-700">No form fields detected</p>
             <p className="text-xs">Add fields manually using the buttons below</p>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="mt-3 w-full p-2 text-sm text-dark-400 hover:text-gray-300 hover:bg-dark-700 rounded transition-colors"
+          className="mt-3 w-full p-2 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
         >
           Dismiss
         </button>
@@ -207,28 +207,28 @@ export default function DetectedFieldsPanel({
   }
 
   return (
-    <div className="bg-dark-800 border border-dark-600 rounded-lg mb-4 overflow-hidden">
+    <div className="bg-white border border-gray-300 rounded-lg mb-4 overflow-hidden">
       {/* Header */}
-      <div className="p-3 border-b border-dark-600 flex items-center justify-between">
+      <div className="p-3 border-b border-gray-300 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles size={18} className="text-blue-400" />
-          <span className="text-sm font-medium text-gray-200">
+          <Sparkles size={18} className="text-blue-600" />
+          <span className="text-sm font-medium text-gray-800">
             {stats.total} Fields Detected
           </span>
         </div>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-dark-600 rounded transition-colors"
+          className="p-1 hover:bg-gray-200 rounded transition-colors"
         >
-          <X size={16} className="text-dark-400" />
+          <X size={16} className="text-gray-500" />
         </button>
       </div>
 
       {/* Stats Bar */}
-      <div className="px-3 py-2 bg-dark-700/50 border-b border-dark-600 flex gap-2 flex-wrap">
+      <div className="px-3 py-2 bg-gray-50 border-b border-gray-300 flex gap-2 flex-wrap">
         {Object.entries(stats.byType).map(([type, count]) => {
           const Icon = fieldIcons[type] || FileText
-          const colorClass = fieldColors[type] || 'text-gray-400'
+          const colorClass = fieldColors[type] || 'text-gray-500'
           return (
             <div
               key={type}
@@ -242,13 +242,13 @@ export default function DetectedFieldsPanel({
       </div>
 
       {/* View Toggle */}
-      <div className="px-3 py-2 border-b border-dark-600 flex gap-2">
+      <div className="px-3 py-2 border-b border-gray-300 flex gap-2">
         <button
           onClick={() => setViewMode('type')}
           className={`px-3 py-1 rounded text-xs transition-colors ${
             viewMode === 'type'
               ? 'bg-blue-600 text-white'
-              : 'bg-dark-700 text-dark-400 hover:text-gray-300'
+              : 'bg-gray-50 text-gray-500 hover:text-gray-900'
           }`}
         >
           By Type
@@ -258,7 +258,7 @@ export default function DetectedFieldsPanel({
           className={`px-3 py-1 rounded text-xs transition-colors ${
             viewMode === 'page'
               ? 'bg-blue-600 text-white'
-              : 'bg-dark-700 text-dark-400 hover:text-gray-300'
+              : 'bg-gray-50 text-gray-500 hover:text-gray-900'
           }`}
         >
           By Page
@@ -282,10 +282,10 @@ export default function DetectedFieldsPanel({
         ) : (
           Object.entries(fieldsByPage).map(([page, fields]) => (
             <div key={page} className="mb-3">
-              <div className="flex items-center gap-2 p-2 text-sm text-gray-300">
-                <FileText size={14} className="text-dark-400" />
+              <div className="flex items-center gap-2 p-2 text-sm text-gray-700">
+                <FileText size={14} className="text-gray-500" />
                 <span>Page {page}</span>
-                <span className="text-xs text-dark-400">({fields.length} fields)</span>
+                <span className="text-xs text-gray-500">({fields.length} fields)</span>
               </div>
               <div className="ml-4">
                 {fields.map(field => (
@@ -304,7 +304,7 @@ export default function DetectedFieldsPanel({
       </div>
 
       {/* Actions */}
-      <div className="p-3 border-t border-dark-600 space-y-2">
+      <div className="p-3 border-t border-gray-300 space-y-2">
         {selectedFields.length > 0 && (
           <button
             onClick={handlePlaceSelected}
@@ -316,7 +316,7 @@ export default function DetectedFieldsPanel({
         )}
         <button
           onClick={() => onPlaceAllFields(detectedFields)}
-          className="w-full p-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          className="w-full p-2 btn-primary rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
         >
           <Sparkles size={16} />
           Place All Fields

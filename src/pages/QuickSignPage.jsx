@@ -198,7 +198,7 @@ export default function QuickSignPage() {
         )}
 
         {!file ? (
-          <div className="flex-1 flex items-center justify-center bg-dark-700 p-8">
+          <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
             <FileDropzone onFile={handleFileLoad} />
           </div>
         ) : (
@@ -207,6 +207,7 @@ export default function QuickSignPage() {
           pageSizes={pageSizes}
           elements={elements}
           currentPage={currentPage}
+          onPageChange={setCurrentPage}
           zoom={zoom}
           onUpdateElement={updateElement}
           onDeleteElement={deleteElement}

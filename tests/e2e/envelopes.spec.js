@@ -75,7 +75,7 @@ test.describe('envelopes', () => {
     expect(db.envelopes[0]).toMatchObject({ id: envelopeId, title: 'Mutual NDA', page_count: 2, original_path: `${envelopeId}/original.pdf` })
     expect(db.files.has(`documents/${envelopeId}/original.pdf`)).toBe(true)
 
-    await expect(page.getByTestId('document-page')).toBeVisible()
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Signature', exact: true })).toBeDisabled() // no signer yet
     await expect(page.getByTestId('send-problems')).toContainText('Add at least one signer.')
 
@@ -88,12 +88,17 @@ test.describe('envelopes', () => {
     await page.getByRole('button', { name: 'Date signed', exact: true }).click()
     await expect(page.getByTestId('field')).toHaveCount(2)
     await expect(page.getByTestId('field').first()).toContainText('Signature *')
+    // Clicking a field opens its settings; recipients are one tab away
+    await page.getByTestId('field').first().click()
     await expect(page.getByTestId('field-properties')).toBeVisible()
+    await page.getByRole('tab', { name: 'Recipients' }).click()
 
-    // Fields on page 2 (rotated) too
+    // Fields on page 2 (rotated) too: the page buttons scroll to it and new fields go there
     await page.getByTitle('Next page').click()
+    await expect(page.getByTestId('page-indicator')).toHaveText('Page 2 of 2')
     await page.getByRole('button', { name: 'Initials', exact: true }).click()
-    await expect(page.getByTestId('field')).toHaveCount(1)
+    await expect(page.locator('[data-page="2"] [data-testid="field"]')).toHaveCount(1)
+    await expect(page.getByTestId('field')).toHaveCount(3)
 
     await expect(page.getByText('Everything is in place.')).toBeVisible()
     await expect(page.getByTestId('save-status')).toHaveText('Unsaved changes')
@@ -112,7 +117,7 @@ test.describe('envelopes', () => {
     // Reload: everything comes back from the backend
     await page.reload()
     await expect(page.getByLabel('Recipient name')).toHaveValue('Bob Signer')
-    await expect(page.getByTestId('field')).toHaveCount(2)
+    await expect(page.getByTestId('field')).toHaveCount(3)
     await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
 
     // Dashboard lists it as a draft
@@ -125,7 +130,7 @@ test.describe('envelopes', () => {
   test('moving and resizing a field keeps it on the page', async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
-    await expect(page.getByTestId('document-page')).toBeVisible()
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').fill('Bob')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
@@ -246,7 +251,7 @@ test.describe('envelopes', () => {
 test('quick sign still fills and downloads a PDF without an account', async ({ page }) => {
   await page.goto('/quick-sign')
   await page.getByTestId('file-input').setInputFiles(await pdfFile('contract.pdf'))
-  await expect(page.getByTestId('document-page')).toBeVisible()
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByRole('button', { name: 'Text Field' }).click()
   await page.getByRole('button', { name: 'Add Text Field' }).click()
   await page.locator('.overlay-element input').fill('Jane Doe')
@@ -262,7 +267,7 @@ test('quick sign still fills and downloads a PDF without an account', async ({ p
 test('Word documents keep their layout: pages, page breaks and searchable text', async ({ page }) => {
   await page.goto('/quick-sign')
   await page.getByTestId('file-input').setInputFiles('tests/e2e/fixtures/consent.docx')
-  await expect(page.getByTestId('document-page')).toBeVisible()
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
   // Three pages of flowing text, then the signature page after the explicit page break
   await expect(page.getByText('1 / 4')).toBeVisible()
 

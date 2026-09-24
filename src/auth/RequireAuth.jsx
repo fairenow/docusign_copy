@@ -12,7 +12,7 @@ export default function RequireAuth({ children }) {
     return (
       <FullPageMessage title="Backend not configured">
         Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to use envelopes.
-        You can still use <Link className="text-blue-400 underline" to="/quick-sign">Quick sign</Link>.
+        You can still use <Link className="text-blue-600 underline" to="/quick-sign">Quick sign</Link>.
       </FullPageMessage>
     )
   }
