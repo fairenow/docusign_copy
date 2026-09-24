@@ -3,9 +3,9 @@ import { renderTypedSignature, trimCanvas, SIGNATURE_FONT } from '../lib/signatu
 
 const PAD_HEIGHT = 110
 
-export default function SignaturePanel({ onApply }) {
-  const [mode, setMode] = useState('draw')
-  const [typedName, setTypedName] = useState('')
+export default function SignaturePanel({ onApply, defaultTypedName = '', applyLabel = 'Add to Doc' }) {
+  const [mode, setMode] = useState(defaultTypedName ? 'type' : 'draw')
+  const [typedName, setTypedName] = useState(defaultTypedName)
   const [hasInk, setHasInk] = useState(false)
   const canvasRef = useRef(null)
   const lastPos = useRef(null)
@@ -129,7 +129,7 @@ export default function SignaturePanel({ onApply }) {
           Clear
         </button>
         <button onClick={handleApply} className="flex-1 py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all">
-          Add to Doc
+          {applyLabel}
         </button>
       </div>
     </div>

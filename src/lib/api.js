@@ -42,7 +42,7 @@ export async function fetchProfile(userId) {
 // Envelopes
 // ---------------------------------------------------------------------------
 
-const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, sent_at, completed_at, updated_at, created_at, ' +
+const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, updated_at, created_at, ' +
   'recipients (id, name, email, role, routing_order, status, signed_at)'
 
 export async function listEnvelopes() {
@@ -134,4 +134,39 @@ export function subscribeToEnvelopeChanges(onChange) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'recipients' }, onChange)
     .subscribe()
   return () => { supabase.removeChannel(channel) }
+}
+
+// ---------------------------------------------------------------------------
+// Signing workflow (Edge Function "signing-api")
+// ---------------------------------------------------------------------------
+
+/**
+ * Call a signing-api route. Works both for signed-in team members (their session is sent)
+ * and for external signers using a link (identified by the token in the body).
+ */
+async function signingApi(route, body) {
+  const { data, error } = await client().functions.invoke(`signing-api/${route}`, { body })
+  if (error) {
+    // FunctionsHttpError carries the response; surface the server's message
+    const message = await error.context?.json?.().then(b => b?.error).catch(() => null)
+    throw new Error(message || error.message)
+  }
+  return data
+}
+
+/** A signer is identified by their link token, or (team members) by envelope id + session. */
+export const getSigningSession = (identity) => signingApi('session', identity)
+export const submitSigning = (identity, values, consent) => signingApi('submit', { ...identity, values, consent })
+export const declineSigning = (identity, reason) => signingApi('decline', { ...identity, reason })
+
+export const sendEnvelope = (envelopeId) => signingApi('send', { envelopeId })
+export const resendSigningLink = (envelopeId, recipientId) => signingApi('resend', { envelopeId, recipientId })
+export const retryFinalize = (envelopeId) => signingApi('finalize', { envelopeId })
+
+export async function listAuditEvents(envelopeId) {
+  return unwrap(await client()
+    .from('audit_events')
+    .select('id, created_at, action, recipient_id, actor_user_id, ip, details')
+    .eq('envelope_id', envelopeId)
+    .order('id'))
 }

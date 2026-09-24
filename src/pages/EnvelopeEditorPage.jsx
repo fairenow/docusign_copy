@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Send } from 'lucide-react'
+import { ArrowLeft, Download, PenLine, RotateCw, Save, Send } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
-import { downloadDocument, fetchEnvelope, saveDraft } from '../lib/api'
+import {
+  downloadDocument, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveDraft, sendEnvelope,
+  subscribeToEnvelopeChanges
+} from '../lib/api'
 import {
   draftFromEnvelope, moveRecipient, newField, newRecipient, renumberRecipients,
-  validateForSave, validateForSend, canEdit, RECIPIENT_COLORS, STATUS_LABELS
+  validateForSave, validateForSend, canEdit, canVoid, currentSigners, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
+import { downloadPdf } from '../lib/exportPdf'
 import { nextFieldY } from '../lib/fields'
 import { usePdf } from '../hooks/usePdf'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
@@ -18,6 +22,8 @@ import RecipientsPanel from '../components/envelope/RecipientsPanel'
 import FieldPalette from '../components/envelope/FieldPalette'
 import FieldProperties from '../components/envelope/FieldProperties'
 import SendChecklist from '../components/envelope/SendChecklist'
+import ActivityPanel from '../components/envelope/ActivityPanel'
+import ErrorBanner from '../components/ErrorBanner'
 
 /**
  * Prepare a draft envelope: recipients, signing order, message, and fields
@@ -37,20 +43,28 @@ export default function EnvelopeEditorPage() {
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
+  const [events, setEvents] = useState([])
+  const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
 
-  // Load the envelope and its document
+  // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
+  const reload = useCallback(async () => {
+    const loaded = await fetchEnvelope(envelopeId)
+    const next = draftFromEnvelope(loaded)
+    setEnvelope(loaded)
+    setDraft(next)
+    setSavedDraft(next)
+    if (loaded.status !== 'draft') setEvents(await listAuditEvents(envelopeId))
+    return loaded
+  }, [envelopeId])
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const loaded = await fetchEnvelope(envelopeId)
+        const loaded = await reload()
         if (cancelled) return
-        const initial = draftFromEnvelope(loaded)
-        setEnvelope(loaded)
-        setDraft(initial)
-        setSavedDraft(initial)
-        setActiveRecipientId(initial.recipients.find(r => r.role === 'signer')?.id ?? null)
+        setActiveRecipientId(loaded.recipients.find(r => r.role === 'signer')?.id ?? null)
         if (!loaded.original_path) throw new Error('This envelope has no document.')
         const bytes = await downloadDocument(loaded.original_path)
         if (!cancelled) setPdfBytes(bytes)
@@ -59,7 +73,22 @@ export default function EnvelopeEditorPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [envelopeId])
+  }, [reload])
+
+  // Keep a sent envelope's progress live as signers view and sign
+  const isSent = envelope ? envelope.status !== 'draft' : false
+  useEffect(() => {
+    if (!isSent) return
+    let timer = null
+    const unsubscribe = subscribeToEnvelopeChanges(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => reload().catch(() => {}), 500)
+    })
+    return () => {
+      clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [isSent, reload])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
   const dirty = useMemo(
@@ -67,6 +96,11 @@ export default function EnvelopeEditorPage() {
     [editable, draft, savedDraft]
   )
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
+  const mySigningTurn = Boolean(envelope && user) && envelope.status === 'sent' &&
+    currentSigners(envelope).some(r => r.email.toLowerCase() === user.email?.toLowerCase() && r.status !== 'signed')
+  // Everyone signed but the final PDF was not produced (e.g. a failed background step)
+  const awaitingFinalize = Boolean(envelope) && envelope.status === 'sent' && canVoid(envelope, user) &&
+    envelope.recipients.every(r => r.role !== 'signer' || r.status === 'signed')
 
   useUnsavedChangesWarning(dirty)
 
@@ -124,22 +158,64 @@ export default function EnvelopeEditorPage() {
   }, [])
 
   // Saving -------------------------------------------------------------------
+  // Returns true once the current draft is stored
   const save = useCallback(async () => {
-    if (!editable || saveState.saving) return
+    if (!editable || saveState.saving) return false
     const problems = validateForSave(draft)
     if (problems.length) {
       setSaveState({ saving: false, problems, error: null })
-      return
+      return false
     }
     setSaveState({ saving: true, problems: [], error: null })
     try {
       await saveDraft(envelopeId, draft)
       setSavedDraft(draft)
       setSaveState({ saving: false, problems: [], error: null })
+      return true
     } catch (err) {
       setSaveState({ saving: false, problems: [], error: err.message })
+      return false
     }
   }, [editable, saveState.saving, draft, envelopeId])
+
+  // Sending ------------------------------------------------------------------
+  const runAction = async (busy, fn) => {
+    setAction({ busy, error: null })
+    try {
+      await fn()
+      setAction({ busy: null, error: null })
+    } catch (err) {
+      setAction({ busy: null, error: err.message })
+    }
+  }
+
+  const handleSend = () => {
+    if (sendProblems.length) return
+    const signers = draft.recipients.filter(r => r.role === 'signer')
+    const first = draft.signingOrder === 'sequential' ? signers.slice(0, 1) : signers
+    const who = first.map(r => r.name).join(', ')
+    if (!window.confirm(`Send "${draft.title}" for signature?\n\n${who} will be emailed a signing link${draft.signingOrder === 'sequential' && signers.length > 1 ? ' first; the others follow in order' : ''}.`)) return
+    runAction('send', async () => {
+      if (dirty && !(await save())) throw new Error('Fix the problems above, then send again.')
+      const result = await sendEnvelope(envelopeId)
+      await reload()
+      if (result.failed?.length) throw new Error(`Sent, but the email to ${result.failed.join(', ')} could not be delivered. Use the resend button next to their name.`)
+    })
+  }
+
+  const handleResend = (recipient) => runAction(recipient.id, async () => {
+    await resendSigningLink(envelopeId, recipient.id)
+    await reload()
+  })
+
+  const handleRetryFinalize = () => runAction('finalize', async () => {
+    await retryFinalize(envelopeId)
+    await reload()
+  })
+
+  const handleDownloadSigned = () => runAction('download', async () => {
+    downloadPdf(await downloadDocument(envelope.final_path), draft.title)
+  })
 
   // Ctrl/Cmd+S saves
   useEffect(() => {
@@ -204,18 +280,42 @@ export default function EnvelopeEditorPage() {
               <Save size={16} /> Save
             </button>
             <button
-              disabled
-              title="Sending by email arrives in the next update"
-              className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2 opacity-50 cursor-not-allowed"
+              onClick={handleSend}
+              disabled={sendProblems.length > 0 || action.busy === 'send'}
+              title={sendProblems.length ? 'Fix the items under "Ready to send?" first' : 'Email signing links'}
+              className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={16} /> Send
+              <Send size={16} /> {action.busy === 'send' ? 'Sending…' : 'Send'}
             </button>
           </>
         ) : (
-          <span className="text-xs text-dark-400 whitespace-nowrap">{STATUS_LABELS[envelope.status]} · read only</span>
+          <>
+            <span className="text-xs text-dark-400 whitespace-nowrap" data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>
+            {mySigningTurn && (
+              <Link to={`/envelopes/${envelopeId}/sign`} className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2">
+                <PenLine size={16} /> Sign now
+              </Link>
+            )}
+            {awaitingFinalize && (
+              <button
+                onClick={handleRetryFinalize}
+                disabled={action.busy === 'finalize'}
+                className="px-4 py-2 rounded-lg bg-dark-700 border border-dark-600 text-gray-100 text-sm flex items-center gap-2 hover:bg-dark-600 disabled:opacity-50"
+                title="Everyone has signed; build the final PDF and email copies"
+              >
+                <RotateCw size={16} className={action.busy === 'finalize' ? 'animate-spin' : ''} /> Finish document
+              </button>
+            )}
+            {envelope.status === 'completed' && envelope.final_path && (
+              <button onClick={handleDownloadSigned} className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2">
+                <Download size={16} /> Download signed PDF
+              </button>
+            )}
+          </>
         )}
       </div>
 
+      {action.error && <ErrorBanner className="mx-5 mt-3">{action.error}</ErrorBanner>}
       {(saveState.problems.length > 0 || saveState.error) && (
         <div role="alert" className="px-5 py-2 bg-red-500/10 border-b border-red-500/30 text-sm text-red-300">
           {saveState.error ? `Could not save: ${saveState.error}` : saveState.problems.join(' ')}
@@ -225,6 +325,7 @@ export default function EnvelopeEditorPage() {
       <div className="flex-1 flex min-h-0">
         {/* Left panel */}
         <aside className="w-80 flex-shrink-0 bg-dark-800 border-r border-dark-700 p-4 space-y-6 overflow-y-auto">
+          {editable ? (
           <RecipientsPanel
             recipients={draft.recipients}
             signingOrder={draft.signingOrder}
@@ -237,6 +338,15 @@ export default function EnvelopeEditorPage() {
             onMove={(id, delta) => update({ recipients: moveRecipient(draft.recipients, id, delta) })}
             onSigningOrderChange={(signingOrder) => update({ signingOrder })}
           />
+          ) : (
+            <ActivityPanel
+              recipients={draft.recipients}
+              events={events}
+              canResend={canVoid(envelope, user)}
+              onResend={handleResend}
+              resendingId={action.busy}
+            />
+          )}
 
           {editable && <FieldPalette recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
 

@@ -75,6 +75,7 @@ vercel
 - **pdf-lib** - writes fields into the original PDF (text stays searchable)
 - **Mammoth.js** + **jsPDF** - DOCX is converted to PDF on upload
 - **Supabase** - auth, Postgres, storage, Edge Functions (see below)
+- **Resend** - signing request and completion emails
 - **Lucide React** - icons
 
 ## Backend (Supabase)
@@ -103,7 +104,40 @@ Access rules (row level security):
 - Files are stored in the private `documents` bucket as `<envelope_id>/original.pdf`
   and `<envelope_id>/signed.pdf`.
 
+### Signing workflow (Edge Function `signing-api`)
+
+Sending and signing run in one Edge Function (`supabase/functions/signing-api`, shared code in
+`supabase/functions/_shared`), which calls service-role-only database functions (`svc_*`):
+
+1. **Send** — the owner sends a draft; the document's SHA-256 is recorded and the first signers
+   (or all, for parallel envelopes) are emailed a personal link `/sign/<token>`. Only the token's
+   hash is stored.
+2. **Sign** — the signer agrees to use electronic signatures, fills in their fields (guided), adopts
+   a drawn or typed signature and finishes, or declines with a reason. Team members can also sign
+   from the dashboard without the link. "Date signed" is set by the server.
+3. **Complete** — when the last signer finishes, every field is stamped into the original PDF, a
+   certificate of completion (signers, times, IP addresses, browsers, activity, fingerprints) is
+   appended, the result is stored as `signed.pdf` with its SHA-256, and everyone is emailed a copy.
+
+Email failures and a failed final step are written to the audit trail; the owner can resend a
+signer's link or retry the final step from the envelope page.
+
+Edge Function secrets (Supabase dashboard → Edge Functions → Secrets):
+
+| Secret | Example |
+|---|---|
+| `APP_URL` | `https://docsign.vercel.app` (links in emails point here) |
+| `EMAIL_FROM` | `DocSign <sign@yourdomain.com>` (a domain verified in Resend) |
+| `RESEND_API_KEY` | `re_...` |
+
 ### Configuration
 
 Copy `.env.example` to `.env.local` and fill in the publishable key from
 Project Settings → API. Never put the service-role key in a `VITE_` variable.
+
+## Tests
+
+```bash
+npm test          # unit tests (field geometry, envelope rules, PDF stamping, certificate, emails)
+npm run test:e2e  # Playwright against an in-memory Supabase + signing-api mock
+```

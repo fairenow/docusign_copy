@@ -8,6 +8,17 @@ export const MAX_IMAGE_VALUE_LENGTH = 300000
 export const MAX_TEXT_VALUE_LENGTH = 2000
 const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/
 
+/** "Date signed" as the server records it: the UTC date as MM/DD/YYYY. */
+export function signingDate(date = new Date()) {
+  const iso = date.toISOString()
+  return `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`
+}
+
+/** "Jane Q. Doe" -> "JQD" */
+export function initialsOf(name) {
+  return (name || '').split(/\s+/).filter(Boolean).map(part => part[0].toUpperCase()).join('').slice(0, 4)
+}
+
 export function fieldLabel(field) {
   return field.label?.trim() || { signature: 'Signature', initials: 'Initials', text: 'Text', date: 'Date signed', checkbox: 'Checkbox' }[field.type]
 }

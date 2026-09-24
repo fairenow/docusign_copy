@@ -213,8 +213,13 @@ test.describe('envelopes', () => {
     await page.getByRole('tab', { name: /Action required/ }).click()
     await expect(page.getByTestId('envelope-row')).toContainText('Offer letter')
 
+    // It's Alice's turn, so the row opens the signing page
     await page.getByText('Offer letter').click()
-    await expect(page.getByText('Out for signature · read only')).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/envelopes/${id}/sign$`))
+
+    await page.goto(`/envelopes/${id}`)
+    await expect(page.getByTestId('envelope-status')).toHaveText('Out for signature')
+    await expect(page.getByRole('link', { name: 'Sign now' })).toBeVisible() // Alice is the current signer
     await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0)
     await expect(page.getByLabel('Recipient name')).toHaveCount(0)
     await expect(page.getByTestId('field')).toHaveCount(1)

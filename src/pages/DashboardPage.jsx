@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, Trash2, Ban, RefreshCw } from 'lucide-react'
+import { FilePlus, Trash2, Ban, RefreshCw, Download } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
-import { createEnvelopeFromFile, deleteDraft, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
+import { createEnvelopeFromFile, deleteDraft, downloadDocument, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
+import { downloadPdf } from '../lib/exportPdf'
 import { ACCEPTED_FILE_TYPES } from '../lib/documents'
-import { ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, groupEnvelopes } from '../lib/envelopeModel'
+import { ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
 import ErrorBanner from '../components/ErrorBanner'
 
@@ -76,6 +77,14 @@ export default function DashboardPage() {
     }
   }
 
+  const handleDownload = async (envelope) => {
+    try {
+      downloadPdf(await downloadDocument(envelope.final_path), envelope.title)
+    } catch (err) {
+      alert('Could not download: ' + err.message)
+    }
+  }
+
   const handleVoid = async (envelope) => {
     const reason = window.prompt(`Void "${envelope.title}"? Signers will no longer be able to sign it.\n\nReason (optional):`)
     if (reason === null) return
@@ -138,6 +147,7 @@ export default function DashboardPage() {
               user={user}
               onDelete={() => handleDelete(envelope)}
               onVoid={() => handleVoid(envelope)}
+              onDownload={() => handleDownload(envelope)}
             />
           ))}
         </ul>
@@ -148,13 +158,16 @@ export default function DashboardPage() {
   )
 }
 
-function EnvelopeRow({ envelope, user, onDelete, onVoid }) {
+function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
   const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
   const updated = new Date(envelope.updated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 
   return (
     <li className="flex items-center gap-4 px-4 py-3 hover:bg-dark-700/50" data-testid="envelope-row">
-      <Link to={`/envelopes/${envelope.id}`} className="flex-1 min-w-0">
+      <Link
+        to={envelopeGroup(envelope, user) === 'action' ? `/envelopes/${envelope.id}/sign` : `/envelopes/${envelope.id}`}
+        className="flex-1 min-w-0"
+      >
         <p className="text-gray-100 font-medium truncate">{envelope.title}</p>
         <p className="text-xs text-dark-400 truncate">
           {recipients.length
@@ -167,6 +180,11 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid }) {
       </span>
       <span className="text-xs text-dark-500 w-40 text-right whitespace-nowrap">{updated}</span>
       <div className="w-8 flex justify-end">
+        {envelope.status === 'completed' && envelope.final_path && (
+          <button onClick={onDownload} className="p-1.5 rounded text-dark-400 hover:text-white hover:bg-dark-700" title="Download signed PDF">
+            <Download size={16} />
+          </button>
+        )}
         {canDelete(envelope, user) && (
           <button onClick={onDelete} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Delete draft">
             <Trash2 size={16} />

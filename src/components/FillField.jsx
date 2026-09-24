@@ -37,6 +37,7 @@ function FillContent({ element, scale, containerSize, onUpdate }) {
           type="text"
           value={element.text}
           onChange={(e) => onUpdate({ text: e.target.value })}
+          readOnly={element.locked}
           placeholder={element.type === 'text' ? 'Enter text…' : ''}
           className="overlay-text-input w-full h-full bg-white/80 px-0.5"
           style={{ fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px`, color: element.color || '#000' }}

@@ -28,7 +28,11 @@ export default function OverlayElement({
     if (e.button !== undefined && e.button !== 0) return
     e.stopPropagation()
     onSelect()
-    if (readOnly) return
+    if (readOnly) {
+      // Not movable, but a click still activates the field (e.g. a signer filling it in)
+      gesture.current = { kind: 'click', moved: false }
+      return
+    }
     // Let inputs receive focus/caret placement; they are moved via the grip instead
     if (kind === 'move' && e.target.tagName === 'INPUT') return
     e.preventDefault()
@@ -45,7 +49,7 @@ export default function OverlayElement({
 
   const handlePointerMove = (e) => {
     const g = gesture.current
-    if (!g) return
+    if (!g || g.kind === 'click') return
     const dxPx = e.clientX - g.startX
     const dyPx = e.clientY - g.startY
     if (!g.moved && Math.hypot(dxPx, dyPx) < CLICK_TOLERANCE) return
@@ -70,7 +74,7 @@ export default function OverlayElement({
   const handlePointerUp = () => {
     const g = gesture.current
     gesture.current = null
-    if (g && !g.moved && g.kind === 'move') onActivate?.()
+    if (g && !g.moved && g.kind !== 'resize') onActivate?.()
   }
 
   const handleVisibility = isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -79,6 +83,7 @@ export default function OverlayElement({
     <div
       className={`overlay-element group touch-none ${isSelected ? 'selected' : ''} ${readOnly ? 'cursor-default' : ''}`}
       data-testid="field"
+      data-field-id={element.id}
       data-field-type={element.type}
       style={{
         left: `${element.x * 100}%`,
