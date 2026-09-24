@@ -3,14 +3,13 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, PenLine, RotateCw, Save, Send } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
-  downloadDocument, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveDraft, sendEnvelope,
+  downloadDocument, downloadSignedPdf, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveDraft, sendEnvelope,
   subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
   draftFromEnvelope, moveRecipient, newField, newRecipient, renumberRecipients,
-  validateForSave, validateForSend, canEdit, canVoid, currentSigners, RECIPIENT_COLORS, STATUS_LABELS
+  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
-import { downloadPdf } from '../lib/exportPdf'
 import { nextFieldY } from '../lib/fields'
 import { usePdf } from '../hooks/usePdf'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
@@ -49,12 +48,13 @@ export default function EnvelopeEditorPage() {
 
   // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
   const reload = useCallback(async () => {
-    const loaded = await fetchEnvelope(envelopeId)
+    // Drafts have no activity yet; the query simply returns their "created" event
+    const [loaded, activity] = await Promise.all([fetchEnvelope(envelopeId), listAuditEvents(envelopeId)])
     const next = draftFromEnvelope(loaded)
     setEnvelope(loaded)
     setDraft(next)
     setSavedDraft(next)
-    if (loaded.status !== 'draft') setEvents(await listAuditEvents(envelopeId))
+    setEvents(activity)
     return loaded
   }, [envelopeId])
 
@@ -96,8 +96,7 @@ export default function EnvelopeEditorPage() {
     [editable, draft, savedDraft]
   )
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
-  const mySigningTurn = Boolean(envelope && user) && envelope.status === 'sent' &&
-    currentSigners(envelope).some(r => r.email.toLowerCase() === user.email?.toLowerCase() && r.status !== 'signed')
+  const mySigningTurn = Boolean(envelope && user) && envelopeGroup(envelope, user) === 'action'
   // Everyone signed but the final PDF was not produced (e.g. a failed background step)
   const awaitingFinalize = Boolean(envelope) && envelope.status === 'sent' && canVoid(envelope, user) &&
     envelope.recipients.every(r => r.role !== 'signer' || r.status === 'signed')
@@ -214,7 +213,7 @@ export default function EnvelopeEditorPage() {
   })
 
   const handleDownloadSigned = () => runAction('download', async () => {
-    downloadPdf(await downloadDocument(envelope.final_path), draft.title)
+    await downloadSignedPdf(envelope)
   })
 
   // Ctrl/Cmd+S saves

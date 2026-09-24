@@ -15,8 +15,7 @@ import {
   concatTransformationMatrix,
   EncryptedPDFError
 } from 'pdf-lib'
-
-const DEFAULT_FONT_SIZE = 12
+import { DEFAULT_FONT_SIZE } from './labels.js'
 
 export async function loadPdf(bytes) {
   try {

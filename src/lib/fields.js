@@ -17,15 +17,8 @@ export const DEFAULT_SIZES = {
 
 export const FIELD_TYPES = ['signature', 'initials', 'text', 'date', 'checkbox']
 
-export const FIELD_LABELS = {
-  signature: 'Signature',
-  initials: 'Initials',
-  text: 'Text',
-  date: 'Date signed',
-  checkbox: 'Checkbox'
-}
-
-export const DEFAULT_FONT_SIZE = 12
+export { FIELD_LABELS, DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'
+import { DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'
 export const FONT_SIZES = [8, 10, 11, 12, 14, 16, 18, 24]
 
 // Minimum size (in PDF points) when resizing

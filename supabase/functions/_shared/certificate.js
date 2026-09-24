@@ -4,6 +4,7 @@
  */
 import { StandardFonts, rgb } from 'pdf-lib'
 import { encodable } from './pdfStamp.js'
+import { ACTION_LABELS } from './labels.js'
 
 const PAGE = { width: 612, height: 792 }
 const MARGIN = 54
@@ -12,20 +13,6 @@ const INK = rgb(0.1, 0.12, 0.16)
 const MUTED = rgb(0.42, 0.45, 0.5)
 const RULE = rgb(0.85, 0.86, 0.88)
 
-const ACTION_LABELS = {
-  envelope_created: 'Envelope created',
-  envelope_sent: 'Sent for signature',
-  recipient_notified: 'Signing request emailed',
-  recipient_reminded: 'Signing link re-sent',
-  email_failed: 'Email could not be delivered',
-  finalize_failed: 'Finishing the document failed (retried)',
-  recipient_viewed: 'Viewed',
-  recipient_signed: 'Signed',
-  recipient_declined: 'Declined',
-  envelope_completed: 'Completed',
-  envelope_declined: 'Declined',
-  envelope_voided: 'Voided'
-}
 
 export function formatTimestamp(value) {
   if (!value) return '—'

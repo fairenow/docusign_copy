@@ -166,6 +166,12 @@ export const sendEnvelope = (envelopeId) => signingApi('send', { envelopeId })
 export const resendSigningLink = (envelopeId, recipientId) => signingApi('resend', { envelopeId, recipientId })
 export const retryFinalize = (envelopeId) => signingApi('finalize', { envelopeId })
 
+/** Save the completed envelope's signed PDF to the user's computer. */
+export async function downloadSignedPdf(envelope) {
+  const { downloadPdf } = await import('./exportPdf')
+  downloadPdf(await downloadDocument(envelope.final_path), envelope.title)
+}
+
 export async function listAuditEvents(envelopeId) {
   return unwrap(await client()
     .from('audit_events')

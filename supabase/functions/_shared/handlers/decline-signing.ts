@@ -1,6 +1,6 @@
 // POST { token | envelopeId, reason } — decline to sign; the sender is told why.
 import { json, readJson, clientIp, userAgent, runInBackground } from '../http.ts'
-import { admin, audit, rpc } from '../supabase.ts'
+import { admin, audit, ownerOf, rpc, OWNER_SELECT } from '../supabase.ts'
 import { signerArgs } from '../signer.ts'
 import { emailConfig } from '../config.ts'
 import { sendEmail } from '../mail.ts'
@@ -22,19 +22,18 @@ export async function declineSigning(req: Request): Promise<Response> {
 async function notifyOwner(envelopeId: string, recipientId: string, reason: string | null) {
   const { data, error } = await admin
     .from('envelopes')
-    .select('title, owner:profiles!envelopes_owner_id_fkey (full_name, email), recipients (id, name)')
+    .select(`title, ${OWNER_SELECT}, recipients (id, name)`)
     .eq('id', envelopeId)
     .single()
   if (error) throw error
-  // deno-lint-ignore no-explicit-any
-  const owner = data.owner as any
+  const owner = ownerOf(data)
   // deno-lint-ignore no-explicit-any
   const recipient = data.recipients.find((r: any) => r.id === recipientId)
   try {
     await sendEmail({
       to: owner.email,
       ...declinedEmail({
-        ownerName: owner.full_name || owner.email,
+        ownerName: owner.name,
         recipientName: recipient?.name ?? 'A recipient',
         title: data.title,
         reason,
@@ -43,6 +42,6 @@ async function notifyOwner(envelopeId: string, recipientId: string, reason: stri
     })
   } catch (err) {
     console.error(err)
-    await audit(envelopeId, 'email_failed', { email: owner.email, kind: 'declined' })
+    await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind: 'declined' } })
   }
 }

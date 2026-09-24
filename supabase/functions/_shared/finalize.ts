@@ -1,4 +1,4 @@
-import { admin, audit, rpc } from './supabase.ts'
+import { admin, audit, ownerOf, rpc, OWNER_SELECT } from './supabase.ts'
 import { emailConfig } from './config.ts'
 import { sendEmail } from './mail.ts'
 import { sha256Hex, toBase64 } from './crypto.ts'
@@ -17,7 +17,7 @@ const MAX_ATTACHMENT_BYTES = 28 * 1024 * 1024
 export async function finalizeEnvelope(envelopeId: string) {
   const { data: envelope, error } = await admin
     .from('envelopes')
-    .select('*, owner:profiles!envelopes_owner_id_fkey (full_name, email), recipients (*), fields (*)')
+    .select(`*, ${OWNER_SELECT}, recipients (*), fields (*)`)
     .eq('id', envelopeId)
     .single()
   if (error) throw error
@@ -36,9 +36,8 @@ export async function finalizeEnvelope(envelopeId: string) {
 
   // deno-lint-ignore no-explicit-any
   const recipients = [...envelope.recipients].sort((a: any, b: any) => a.routing_order - b.routing_order)
-  // deno-lint-ignore no-explicit-any
-  const owner = envelope.owner as any
-  const ownerName = owner?.full_name || owner?.email
+  const owner = ownerOf(envelope)
+  const ownerName = owner.name
   // deno-lint-ignore no-explicit-any
   const nameOf = (e: any) => recipients.find((r: any) => r.id === e.recipient_id)?.name ?? (e.actor_user_id === envelope.owner_id ? ownerName : '')
 
@@ -46,7 +45,7 @@ export async function finalizeEnvelope(envelopeId: string) {
   await stampFields(doc, elementsFromFieldRows(envelope.fields))
   await appendCertificate(doc, {
     envelope: { ...envelope, completed_at: new Date().toISOString() },
-    sender: { name: ownerName, email: owner?.email },
+    sender: { name: ownerName, email: owner.email },
     // deno-lint-ignore no-explicit-any
     recipients: recipients.map((r: any) => ({
       ...r,
@@ -97,22 +96,24 @@ export async function finalizeEnvelope(envelopeId: string) {
     : undefined
   // deno-lint-ignore no-explicit-any
   const people = new Map<string, { name: string; recipientId: string | null }>(recipients.map((r: any) => [r.email.toLowerCase(), { name: r.name, recipientId: r.id }]))
-  if (owner?.email && !people.has(owner.email.toLowerCase())) people.set(owner.email.toLowerCase(), { name: ownerName, recipientId: null })
+  if (owner.email && !people.has(owner.email.toLowerCase())) people.set(owner.email.toLowerCase(), { name: ownerName, recipientId: null })
 
-  for (const [email, person] of people) {
-    const isOwner = email === owner?.email?.toLowerCase()
-    try {
-      if (!appUrl) throw new Error('Email is not configured')
-      await sendEmail({
-        to: email,
-        ...completedEmail({ recipientName: person.name, title: envelope.title, link: isOwner ? `${appUrl}/envelopes/${envelopeId}` : null }),
-        attachments: attachment
-      })
-    } catch (err) {
-      console.error(err)
-      await audit(envelopeId, 'email_failed', { email, kind: 'completed' }, person.recipientId)
-    }
-  }
+  const entries = [...people]
+  const results = await Promise.allSettled(entries.map(([email, person]) => {
+    if (!appUrl) return Promise.reject(new Error('Email is not configured'))
+    const isOwner = email === owner.email.toLowerCase()
+    return sendEmail({
+      to: email,
+      ...completedEmail({ recipientName: person.name, title: envelope.title, link: isOwner ? `${appUrl}/envelopes/${envelopeId}` : null }),
+      attachments: attachment
+    })
+  }))
+  await audit(...entries.flatMap(([email, person], i) => {
+    const r = results[i]
+    if (r.status === 'fulfilled') return []
+    console.error(r.reason)
+    return [{ envelopeId, action: 'email_failed', recipientId: person.recipientId, details: { email, kind: 'completed' } }]
+  }))
   return { status: 'completed' }
 }
 
@@ -121,7 +122,7 @@ export async function finalizeOrRecordFailure(envelopeId: string) {
   try {
     return await finalizeEnvelope(envelopeId)
   } catch (err) {
-    await audit(envelopeId, 'finalize_failed', { reason: (err as Error).message?.slice(0, 300) })
+    await audit({ envelopeId, action: 'finalize_failed', details: { reason: (err as Error).message?.slice(0, 300) } })
     throw err
   }
 }

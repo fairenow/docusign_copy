@@ -65,8 +65,9 @@ export default function SigningPage() {
   }, [identity])
 
   const fields = useMemo(() => session?.fields ?? [], [session])
-  const required = useMemo(() => fields.filter(f => f.required && f.type !== 'date'), [fields])
-  const remaining = required.filter(f => !isFieldComplete(f, values[f.id]))
+  // Required fields still to fill in, in document order ("Date signed" fills itself)
+  const remaining = useMemo(() => fields.filter(f => !isFieldComplete(f, values[f.id])), [fields, values])
+  const incompleteIds = useMemo(() => new Set(remaining.map(f => f.id)), [remaining])
 
   // Elements for the shared field renderer, with this signer's current values
   const elements = useMemo(() => fields.map(f => ({
@@ -121,7 +122,7 @@ export default function SigningPage() {
   }
 
   const renderField = useCallback((element, ctx) => {
-    const incomplete = element.required && element.type !== 'date' && !isFieldComplete(element, values[element.id])
+    const incomplete = incompleteIds.has(element.id)
     return (
       <div
         className={`w-full h-full ${incomplete ? 'ring-2 ring-amber-400' : ''}`}
@@ -134,7 +135,7 @@ export default function SigningPage() {
         />
       </div>
     )
-  }, [values, setValue])
+  }, [incompleteIds, setValue])
 
   const handleFinish = async () => {
     const { values: clean, problems } = validateSigningValues(fields, values)

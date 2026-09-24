@@ -1,11 +1,12 @@
 /**
- * Signer input rules shared by the signing page and the Edge Functions.
- * The database re-checks everything; these give fast, friendly feedback.
+ * Signer input rules for the signing page. The database enforces the same rules
+ * (svc_complete_signing); these give fast, friendly feedback before submitting.
  */
+import { FIELD_LABELS } from './labels.js'
 
 // Matches the database limit for signature/initials values (a PNG data URL)
-export const MAX_IMAGE_VALUE_LENGTH = 300000
-export const MAX_TEXT_VALUE_LENGTH = 2000
+const MAX_IMAGE_VALUE_LENGTH = 300000
+const MAX_TEXT_VALUE_LENGTH = 2000
 const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/
 
 /** "Date signed" as the server records it: the UTC date as MM/DD/YYYY. */
@@ -20,7 +21,7 @@ export function initialsOf(name) {
 }
 
 export function fieldLabel(field) {
-  return field.label?.trim() || { signature: 'Signature', initials: 'Initials', text: 'Text', date: 'Date signed', checkbox: 'Checkbox' }[field.type]
+  return field.label?.trim() || FIELD_LABELS[field.type]
 }
 
 /** Whether a field has what it needs. "Date signed" is filled in by the server. */

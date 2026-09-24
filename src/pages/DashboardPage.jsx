@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FilePlus, Trash2, Ban, RefreshCw, Download } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
-import { createEnvelopeFromFile, deleteDraft, downloadDocument, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
-import { downloadPdf } from '../lib/exportPdf'
+import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
+import { formatDateTime } from '../lib/format'
 import { ACCEPTED_FILE_TYPES } from '../lib/documents'
 import { ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
@@ -79,7 +79,7 @@ export default function DashboardPage() {
 
   const handleDownload = async (envelope) => {
     try {
-      downloadPdf(await downloadDocument(envelope.final_path), envelope.title)
+      await downloadSignedPdf(envelope)
     } catch (err) {
       alert('Could not download: ' + err.message)
     }
@@ -160,7 +160,7 @@ export default function DashboardPage() {
 
 function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
   const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
-  const updated = new Date(envelope.updated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  const updated = formatDateTime(envelope.updated_at)
 
   return (
     <li className="flex items-center gap-4 px-4 py-3 hover:bg-dark-700/50" data-testid="envelope-row">

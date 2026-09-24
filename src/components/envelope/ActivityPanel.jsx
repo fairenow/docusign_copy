@@ -1,20 +1,8 @@
 import { RefreshCw } from 'lucide-react'
 import { RECIPIENT_STATUS } from '../../lib/envelopeModel'
+import { ACTION_LABELS } from '../../../supabase/functions/_shared/labels.js'
+import { formatDateTime } from '../../lib/format'
 
-const ACTION_LABELS = {
-  envelope_created: 'Created',
-  envelope_sent: 'Sent for signature',
-  recipient_notified: 'Signing request emailed',
-  recipient_reminded: 'Signing link re-sent',
-  recipient_viewed: 'Viewed',
-  recipient_signed: 'Signed',
-  recipient_declined: 'Declined',
-  email_failed: 'Email could not be delivered',
-  finalize_failed: 'Finishing the document failed',
-  envelope_completed: 'Completed',
-  envelope_declined: 'Declined',
-  envelope_voided: 'Voided'
-}
 
 const WARNING_ACTIONS = new Set(['email_failed', 'finalize_failed', 'recipient_declined', 'envelope_voided', 'envelope_declined'])
 
@@ -58,7 +46,7 @@ export default function ActivityPanel({ recipients, events, canResend, onResend,
                 {nameOf(e.recipient_id) ? ` · ${nameOf(e.recipient_id)}` : ''}
               </p>
               <p className="text-dark-500">
-                {new Date(e.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                {formatDateTime(e.created_at)}
                 {e.ip ? ` · ${e.ip}` : ''}
               </p>
             </li>

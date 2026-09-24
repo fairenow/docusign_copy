@@ -9,7 +9,10 @@ import DashboardPage from './pages/DashboardPage'
 import './index.css'
 
 // PDF-heavy pages are loaded on demand so /login and the dashboard stay small
-const lazyPage = (load) => async () => ({ Component: (await load()).default })
+const lazyPage = (load, wrap = (Page) => <Page />) => async () => {
+  const { default: Page } = await load()
+  return { element: wrap(Page) }
+}
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -19,10 +22,7 @@ const router = createBrowserRouter([
   // Team members signing from the dashboard
   {
     path: '/envelopes/:envelopeId/sign',
-    lazy: async () => {
-      const { default: SigningPage } = await import('./pages/SigningPage')
-      return { element: <RequireAuth><SigningPage /></RequireAuth> }
-    }
+    lazy: lazyPage(() => import('./pages/SigningPage'), (Page) => <RequireAuth><Page /></RequireAuth>)
   },
   {
     element: <RequireAuth><AppLayout /></RequireAuth>,
