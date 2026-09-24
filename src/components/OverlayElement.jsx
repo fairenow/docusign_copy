@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { X, GripVertical } from 'lucide-react'
-import { clamp, MIN_SIZE } from '../lib/fields'
+import { clamp, MIN_SIZE, FIELD_LABELS } from '../lib/fields'
 
 // Movement (in px) below which a pointer press counts as a click, not a drag
 const CLICK_TOLERANCE = 3
@@ -15,6 +15,9 @@ const BORDER_COLORS = {
 
 export default function OverlayElement({
   element,
+  mode = 'fill',
+  readOnly = false,
+  appearance,
   scale,
   containerSize,
   pageSize,
@@ -31,6 +34,7 @@ export default function OverlayElement({
     if (e.button !== undefined && e.button !== 0) return
     e.stopPropagation()
     onSelect()
+    if (readOnly) return
     // Let inputs receive focus/caret placement; they are moved via the grip instead
     if (mode === 'move' && e.target.tagName === 'INPUT') return
     e.preventDefault()
@@ -74,7 +78,7 @@ export default function OverlayElement({
   const handlePointerUp = () => {
     const g = gesture.current
     gesture.current = null
-    if (!g || g.moved || g.mode !== 'move') return
+    if (!g || g.moved || g.mode !== 'move' || mode !== 'fill') return
     // A click without movement
     if (element.type === 'checkbox') onUpdate({ checked: !element.checked })
     if ((element.type === 'signature' || element.type === 'initials') && !element.data) onSign()
@@ -88,7 +92,24 @@ export default function OverlayElement({
 
   const fontPx = (element.fontSize || 12) * scale
 
+  // Placeholder shown while preparing an envelope: field type, assignee and required marker
+  const renderPlaceholder = () => (
+    <div
+      className="w-full h-full flex items-center px-1 overflow-hidden whitespace-nowrap text-[11px] font-medium leading-none"
+      style={{ backgroundColor: `${appearance?.color ?? '#2563eb'}26`, color: appearance?.color ?? '#2563eb' }}
+      title={appearance?.label}
+    >
+      {element.type === 'checkbox' ? '' : (
+        <span className="truncate">
+          {FIELD_LABELS[element.type]}{element.required ? ' *' : ''}
+          {appearance?.label ? <span className="opacity-70"> · {appearance.label}</span> : null}
+        </span>
+      )}
+    </div>
+  )
+
   const renderContent = () => {
+    if (mode === 'prepare') return renderPlaceholder()
     switch (element.type) {
       case 'signature':
       case 'initials':
@@ -127,10 +148,14 @@ export default function OverlayElement({
     }
   }
 
-  const showBorder = element.type !== 'checkbox' || isSelected
+  const showBorder = mode === 'prepare' || element.type !== 'checkbox' || isSelected
+  const borderStyle = mode === 'prepare' ? { borderColor: appearance?.color ?? '#2563eb' } : undefined
+  const handleVisibility = isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
   return (
     <div
-      className={`overlay-element group touch-none ${isSelected ? 'selected' : ''}`}
+      className={`overlay-element group touch-none ${isSelected ? 'selected' : ''} ${readOnly ? 'cursor-default' : ''}`}
+      data-testid="field"
+      data-field-type={element.type}
       style={{
         left: `${element.x * 100}%`,
         top: `${element.y * 100}%`,
@@ -140,15 +165,19 @@ export default function OverlayElement({
       onPointerDown={(e) => beginGesture(e, 'move')}
       {...gestureHandlers}
     >
-      <div className={`w-full h-full ${showBorder ? `border border-dashed ${BORDER_COLORS[element.type]}` : 'border-2 border-gray-800'}`}>
+      <div
+        className={`w-full h-full ${showBorder ? `border border-dashed ${mode === 'prepare' ? '' : BORDER_COLORS[element.type]}` : 'border-2 border-gray-800'}`}
+        style={borderStyle}
+      >
         {renderContent()}
       </div>
 
+      {!readOnly && (
+        <>
+
       {/* Move grip (needed for text inputs, handy for everything) */}
       <div
-        className={`absolute -top-2.5 -left-5 w-4 h-5 bg-blue-600 rounded flex items-center justify-center text-white cursor-move touch-none ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}
+        className={`absolute -top-2.5 -left-5 w-4 h-5 bg-blue-600 rounded flex items-center justify-center text-white cursor-move touch-none ${handleVisibility}`}
         onPointerDown={(e) => beginGesture(e, 'move')}
         title="Drag to move"
       >
@@ -159,9 +188,7 @@ export default function OverlayElement({
       <button
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className={`absolute -top-2.5 -right-2.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white transition-opacity ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}
+        className={`absolute -top-2.5 -right-2.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white transition-opacity ${handleVisibility}`}
         title="Remove field"
       >
         <X size={12} />
@@ -169,12 +196,12 @@ export default function OverlayElement({
 
       {/* Resize */}
       <div
-        className={`absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-sm cursor-nwse-resize touch-none ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}
+        className={`absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-sm cursor-nwse-resize touch-none ${handleVisibility}`}
         onPointerDown={(e) => beginGesture(e, 'resize')}
         title="Drag to resize"
       />
+        </>
+      )}
     </div>
   )
 }

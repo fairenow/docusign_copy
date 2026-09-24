@@ -1,26 +1,37 @@
 import { useRef, useState, useEffect } from 'react'
-import { Upload } from 'lucide-react'
 import OverlayElement from './OverlayElement'
 
 // CSS pixels per PDF point at 100% zoom
 const BASE_SCALE = 1.5
 
+/**
+ * Renders one PDF page with its fields on top.
+ *
+ * mode 'fill'    - fields are filled in place (Quick sign)
+ * mode 'prepare' - fields are placeholders assigned to recipients (envelope editor)
+ * readOnly       - fields can be viewed but not moved, edited or deleted
+ *
+ * Selection can be controlled with selectedId/onSelectedIdChange; otherwise it is internal.
+ */
 export default function DocumentViewer({
-  file,
   pdfDoc,
   pageSizes,
   elements,
   currentPage,
   zoom,
+  mode = 'fill',
+  readOnly = false,
+  getAppearance,
+  selectedId: controlledSelectedId,
+  onSelectedIdChange,
   onUpdateElement,
   onDeleteElement,
-  onSignElement,
-  onFileUpload
+  onSignElement
 }) {
-  const fileInputRef = useRef(null)
   const canvasRef = useRef(null)
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [selectedId, setSelectedId] = useState(null)
+  const [internalSelectedId, setInternalSelectedId] = useState(null)
+  const selectedId = controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId
+  const setSelectedId = onSelectedIdChange ?? setInternalSelectedId
 
   const pageSize = pageSizes[currentPage - 1]
   const scale = BASE_SCALE * zoom
@@ -57,11 +68,13 @@ export default function DocumentViewer({
     }
   }, [pdfDoc, currentPage, scale])
 
-  // Delete / Backspace removes the selected field (unless typing in it)
+  // Delete / Backspace removes the selected field (unless typing somewhere)
   useEffect(() => {
+    if (readOnly) return
     const onKeyDown = (e) => {
       if (!selectedId) return
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return
+      const tag = document.activeElement?.tagName
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.activeElement?.isContentEditable) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
         onDeleteElement(selectedId)
@@ -72,42 +85,7 @@ export default function DocumentViewer({
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedId, onDeleteElement])
-
-  const handleDrop = (e) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    if (e.dataTransfer.files.length) onFileUpload(e.dataTransfer.files[0])
-  }
-
-  const handleFileSelect = (e) => {
-    if (e.target.files.length) onFileUpload(e.target.files[0])
-    e.target.value = ''
-  }
-
-  if (!file) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-dark-700 p-8">
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all max-w-md w-full ${
-            isDragOver ? 'border-blue-500 bg-blue-500/10' : 'border-dark-600 hover:border-blue-500 hover:bg-blue-500/5'
-          }`}
-        >
-          <div className="w-16 h-16 mx-auto mb-4 bg-dark-600 rounded-full flex items-center justify-center">
-            <Upload size={32} className="text-dark-400" />
-          </div>
-          <h3 className="text-xl text-gray-200 mb-2">Upload Document</h3>
-          <p className="text-dark-400 mb-4">Drop your file here or click to browse</p>
-          <p className="text-sm text-dark-500">PDF or DOCX, up to 50 MB</p>
-        </div>
-        <input ref={fileInputRef} type="file" accept=".pdf,.docx" onChange={handleFileSelect} className="hidden" />
-      </div>
-    )
-  }
+  }, [readOnly, selectedId, setSelectedId, onDeleteElement])
 
   const pageElements = elements.filter(el => el.page === currentPage)
 
@@ -117,6 +95,7 @@ export default function DocumentViewer({
         <div
           className="relative document-container mx-auto"
           style={{ width: displaySize.width, height: displaySize.height }}
+          data-testid="document-page"
         >
           <canvas
             ref={canvasRef}
@@ -129,14 +108,17 @@ export default function DocumentViewer({
               <OverlayElement
                 key={element.id}
                 element={element}
+                mode={mode}
+                readOnly={readOnly}
+                appearance={getAppearance?.(element)}
                 scale={scale}
                 containerSize={displaySize}
                 pageSize={pageSize}
                 isSelected={selectedId === element.id}
                 onSelect={() => setSelectedId(element.id)}
-                onUpdate={(updates) => onUpdateElement(element.id, updates)}
-                onDelete={() => onDeleteElement(element.id)}
-                onSign={() => onSignElement(element)}
+                onUpdate={(updates) => onUpdateElement?.(element.id, updates)}
+                onDelete={() => onDeleteElement?.(element.id)}
+                onSign={() => onSignElement?.(element)}
               />
             ))}
           </div>

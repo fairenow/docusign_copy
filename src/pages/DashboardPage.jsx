@@ -1,0 +1,210 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { FilePlus, Trash2, Ban, RefreshCw } from 'lucide-react'
+import { useAuth } from '../auth/useAuth'
+import { createEnvelopeFromFile, deleteDraft, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
+import { ACCEPTED_FILE_TYPES } from '../lib/documents'
+import { ENVELOPE_GROUPS, STATUS_LABELS, envelopeGroup, filterEnvelopes } from '../lib/envelopeModel'
+import LoadingOverlay from '../components/LoadingOverlay'
+
+const STATUS_STYLES = {
+  draft: 'bg-dark-600 text-gray-200',
+  sent: 'bg-blue-500/15 text-blue-300',
+  completed: 'bg-green-500/15 text-green-300',
+  declined: 'bg-red-500/15 text-red-300',
+  voided: 'bg-dark-600 text-dark-400 line-through'
+}
+
+const RECIPIENT_STATUS_ICON = { signed: '✓', declined: '✕', viewed: '👁', sent: '✉', pending: '·' }
+
+export default function DashboardPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const fileInputRef = useRef(null)
+  const [envelopes, setEnvelopes] = useState(null)
+  const [error, setError] = useState(null)
+  const [group, setGroup] = useState('all')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    try {
+      setEnvelopes(await listEnvelopes())
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    }
+  }, [])
+
+  // Initial load, then refetch (debounced) whenever Realtime reports a change
+  useEffect(() => {
+    refresh()
+    let timer = null
+    const unsubscribe = subscribeToEnvelopeChanges(() => {
+      clearTimeout(timer)
+      timer = setTimeout(refresh, 300)
+    })
+    return () => {
+      clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [refresh])
+
+  const counts = useMemo(() => {
+    const result = { all: envelopes?.length ?? 0 }
+    for (const e of envelopes ?? []) {
+      const g = envelopeGroup(e, user)
+      result[g] = (result[g] ?? 0) + 1
+    }
+    return result
+  }, [envelopes, user])
+
+  const visible = useMemo(() => filterEnvelopes(envelopes ?? [], group, user), [envelopes, group, user])
+
+  const handleNewEnvelope = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const id = await createEnvelopeFromFile(file)
+      navigate(`/envelopes/${id}`)
+    } catch (err) {
+      alert('Could not create the envelope: ' + err.message)
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async (envelope) => {
+    if (!window.confirm(`Delete the draft "${envelope.title}"? This cannot be undone.`)) return
+    try {
+      await deleteDraft(envelope)
+      await refresh()
+    } catch (err) {
+      alert('Could not delete the draft: ' + err.message)
+    }
+  }
+
+  const handleVoid = async (envelope) => {
+    const reason = window.prompt(`Void "${envelope.title}"? Signers will no longer be able to sign it.\n\nReason (optional):`)
+    if (reason === null) return
+    try {
+      await voidEnvelope(envelope.id, reason)
+      await refresh()
+    } catch (err) {
+      alert('Could not void the envelope: ' + err.message)
+    }
+  }
+
+  return (
+    <div className="flex-1 p-6 max-w-6xl w-full mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl text-gray-100 font-semibold">Envelopes</h1>
+        <div className="flex gap-2">
+          <button onClick={refresh} className="p-2 rounded-lg text-dark-400 hover:text-white hover:bg-dark-700" title="Refresh">
+            <RefreshCw size={18} />
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2 btn-gradient rounded-lg text-white text-sm flex items-center gap-2"
+          >
+            <FilePlus size={16} />
+            New envelope
+          </button>
+          <input ref={fileInputRef} type="file" accept={ACCEPTED_FILE_TYPES} onChange={handleNewEnvelope} className="hidden" data-testid="new-envelope-input" />
+        </div>
+      </div>
+
+      <div className="flex gap-1 mb-4 border-b border-dark-700" role="tablist">
+        {ENVELOPE_GROUPS.map(g => (
+          <button
+            key={g.id}
+            role="tab"
+            aria-selected={group === g.id}
+            onClick={() => setGroup(g.id)}
+            className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+              group === g.id ? 'border-blue-500 text-white' : 'border-transparent text-dark-400 hover:text-gray-200'
+            }`}
+          >
+            {g.label}
+            {counts[g.id] ? <span className="ml-2 text-xs text-dark-500">{counts[g.id]}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      {error && <p role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</p>}
+
+      {envelopes === null && !error ? (
+        <p className="text-dark-400 text-sm py-12 text-center">Loading…</p>
+      ) : visible.length === 0 ? (
+        <EmptyState group={group} onNew={() => fileInputRef.current?.click()} />
+      ) : (
+        <ul className="divide-y divide-dark-700 bg-dark-800 border border-dark-700 rounded-xl overflow-hidden">
+          {visible.map(envelope => (
+            <EnvelopeRow
+              key={envelope.id}
+              envelope={envelope}
+              isOwner={envelope.owner_id === user.id}
+              onDelete={() => handleDelete(envelope)}
+              onVoid={() => handleVoid(envelope)}
+            />
+          ))}
+        </ul>
+      )}
+
+      <LoadingOverlay visible={busy} />
+    </div>
+  )
+}
+
+function EnvelopeRow({ envelope, isOwner, onDelete, onVoid }) {
+  const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
+  const updated = new Date(envelope.updated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+  return (
+    <li className="flex items-center gap-4 px-4 py-3 hover:bg-dark-700/50" data-testid="envelope-row">
+      <Link to={`/envelopes/${envelope.id}`} className="flex-1 min-w-0">
+        <p className="text-gray-100 font-medium truncate">{envelope.title}</p>
+        <p className="text-xs text-dark-400 truncate">
+          {recipients.length
+            ? recipients.map(r => `${RECIPIENT_STATUS_ICON[r.status] ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
+            : 'No recipients yet'}
+        </p>
+      </Link>
+      <span className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${STATUS_STYLES[envelope.status]}`}>
+        {STATUS_LABELS[envelope.status]}
+      </span>
+      <span className="text-xs text-dark-500 w-40 text-right whitespace-nowrap">{updated}</span>
+      <div className="w-8 flex justify-end">
+        {isOwner && envelope.status === 'draft' && (
+          <button onClick={onDelete} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Delete draft">
+            <Trash2 size={16} />
+          </button>
+        )}
+        {isOwner && envelope.status === 'sent' && (
+          <button onClick={onVoid} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Void envelope">
+            <Ban size={16} />
+          </button>
+        )}
+      </div>
+    </li>
+  )
+}
+
+const EMPTY_MESSAGES = {
+  action: 'Nothing needs your signature right now.',
+  waiting: 'No envelopes are waiting on other people.',
+  draft: 'No drafts.',
+  completed: 'No completed envelopes yet.',
+  all: 'No envelopes yet.'
+}
+
+function EmptyState({ group, onNew }) {
+  return (
+    <div className="py-16 text-center">
+      <p className="text-dark-400 mb-4">{EMPTY_MESSAGES[group]}</p>
+      {group === 'all' || group === 'draft' ? (
+        <button onClick={onNew} className="text-blue-400 hover:underline text-sm">Upload a document to start an envelope</button>
+      ) : null}
+    </div>
+  )
+}

@@ -1,13 +1,19 @@
 import { useState, useCallback, useEffect } from 'react'
-import Sidebar from './components/Sidebar'
-import DocumentViewer from './components/DocumentViewer'
-import Toolbar from './components/Toolbar'
-import LoadingOverlay from './components/LoadingOverlay'
-import { useDocument } from './hooks/useDocument'
-import { createElement, elementFromDetected } from './lib/fields'
-import { renderTypedSignature } from './lib/signatureImage'
+import Sidebar from '../components/Sidebar'
+import DocumentViewer from '../components/DocumentViewer'
+import FileDropzone from '../components/FileDropzone'
+import Toolbar from '../components/Toolbar'
+import LoadingOverlay from '../components/LoadingOverlay'
+import { useDocument } from '../hooks/useDocument'
+import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
+import { createElement, elementFromDetected } from '../lib/fields'
+import { renderTypedSignature } from '../lib/signatureImage'
 
-function App() {
+/**
+ * Single-user signing: open a document, fill and sign it, download the result.
+ * Everything stays in the browser.
+ */
+export default function QuickSignPage() {
   const [elements, setElements] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
@@ -26,6 +32,7 @@ function App() {
     pageSizes,
     totalPages,
     sourceType,
+    error: documentError,
     loadFile,
     detectedFields,
     isDetecting,
@@ -33,16 +40,11 @@ function App() {
     redetectFields
   } = useDocument()
 
-  // Warn before leaving with unsaved work
+  useUnsavedChangesWarning(elements.length > 0)
+
   useEffect(() => {
-    if (!elements.length) return
-    const onBeforeUnload = (e) => {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [elements.length])
+    if (documentError) alert('Error opening document: ' + documentError.message)
+  }, [documentError])
 
   const addElement = useCallback((type, props = {}) => {
     const pageSize = pageSizes[currentPage - 1]
@@ -133,16 +135,8 @@ function App() {
     setLoading(false)
   }
 
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) setCurrentPage(newPage)
-  }
-
-  const handleZoomChange = (newZoom) => {
-    setZoom(Math.max(0.5, Math.min(3, newZoom)))
-  }
-
   const handleDownload = async () => {
-    const { findIncompleteElements, buildSignedPdf, downloadPdf } = await import('./lib/exportPdf')
+    const { findIncompleteElements, buildSignedPdf, downloadPdf } = await import('../lib/exportPdf')
     const incomplete = findIncompleteElements(elements)
     if (incomplete.length) {
       setCurrentPage(incomplete[0].page)
@@ -191,15 +185,19 @@ function App() {
             currentPage={currentPage}
             totalPages={totalPages}
             zoom={zoom}
-            onPageChange={handlePageChange}
-            onZoomChange={handleZoomChange}
+            onPageChange={setCurrentPage}
+            onZoomChange={setZoom}
             onClearAll={clearAllElements}
             onDownload={handleDownload}
           />
         )}
 
+        {!file ? (
+          <div className="flex-1 flex items-center justify-center bg-dark-700 p-8">
+            <FileDropzone onFile={handleFileLoad} />
+          </div>
+        ) : (
         <DocumentViewer
-          file={file}
           pdfDoc={pdfDoc}
           pageSizes={pageSizes}
           elements={elements}
@@ -208,8 +206,8 @@ function App() {
           onUpdateElement={updateElement}
           onDeleteElement={deleteElement}
           onSignElement={handleSignElement}
-          onFileUpload={handleFileLoad}
         />
+        )}
       </main>
 
       <LoadingOverlay visible={loading} />
@@ -217,4 +215,3 @@ function App() {
   )
 }
 
-export default App

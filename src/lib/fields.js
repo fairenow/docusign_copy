@@ -15,6 +15,16 @@ export const DEFAULT_SIZES = {
   checkbox: { width: 14, height: 14 }
 }
 
+export const FIELD_TYPES = ['signature', 'initials', 'text', 'date', 'checkbox']
+
+export const FIELD_LABELS = {
+  signature: 'Signature',
+  initials: 'Initials',
+  text: 'Text',
+  date: 'Date signed',
+  checkbox: 'Checkbox'
+}
+
 export const DEFAULT_FONT_SIZE = 12
 
 // Minimum size (in PDF points) when resizing
@@ -77,7 +87,7 @@ export function createElement(type, { page, pageSize }, props = {}) {
  */
 export function elementFromDetected(field, pageSize, { initials } = {}) {
   const type = { radio: 'checkbox', dropdown: 'text' }[field.type] ?? field.type
-  const known = ['signature', 'initials', 'text', 'date', 'checkbox'].includes(type) ? type : 'text'
+  const known = FIELD_TYPES.includes(type) ? type : 'text'
 
   const props = {
     x: field.x / field.pageWidth,

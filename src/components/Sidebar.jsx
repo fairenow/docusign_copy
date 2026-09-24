@@ -48,6 +48,7 @@ export default function Sidebar({
         <h1 className="text-2xl font-bold gradient-text flex items-center gap-2">
           📝 DocSign
         </h1>
+        <a href="/" className="text-xs text-dark-400 hover:text-gray-200">← Envelopes</a>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
