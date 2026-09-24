@@ -25,12 +25,17 @@ export function emailConfig() {
  *   CONVERTER_PASSWORD  basic-auth password set on the converter
  */
 export function converterConfig() {
-  const url = Deno.env.get('CONVERTER_URL')?.replace(/\/+$/, '')
-  const username = Deno.env.get('CONVERTER_USERNAME')
-  const password = Deno.env.get('CONVERTER_PASSWORD')
+  // Trimmed: stray spaces are easy to paste into the dashboard
+  const url = Deno.env.get('CONVERTER_URL')?.trim().replace(/\/+$/, '')
+  const username = Deno.env.get('CONVERTER_USERNAME')?.trim()
+  const password = Deno.env.get('CONVERTER_PASSWORD')?.trim()
   if (!url || !username || !password) {
-    throw new HttpError(503, 'Word conversion is not set up yet. Upload a PDF instead, or ask an admin to connect the converter.')
+    // Name what is missing (never values) so an admin can fix it from the message alone
+    const missing = Object.entries({ CONVERTER_URL: url, CONVERTER_USERNAME: username, CONVERTER_PASSWORD: password })
+      .filter(([, value]) => !value).map(([name]) => name)
+    throw new HttpError(503, `Word conversion is not set up yet (missing Edge Function secret${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}). Upload a PDF instead, or ask an admin to connect the converter.`)
   }
   if (!/^https:\/\//.test(url)) throw new HttpError(503, 'CONVERTER_URL must start with https://')
   return { url, username, password }
 }
+
