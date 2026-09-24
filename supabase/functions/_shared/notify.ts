@@ -22,9 +22,9 @@ export async function emailSigningLinks(envelopeId: string, links: SigningLink[]
     details: { email: link.email, kind, reason: reason.slice(0, 300) }
   }))
 
-  let appUrl: string
+  let appUrl: string, logoUrl: string
   try {
-    appUrl = emailConfig().appUrl
+    ({ appUrl, logoUrl } = emailConfig())
   } catch (err) {
     // Not configured: record every undelivered link so the sender can see and resend
     await audit(...failedEvents((err as Error).message, links))
@@ -36,7 +36,7 @@ export async function emailSigningLinks(envelopeId: string, links: SigningLink[]
   const sender = ownerOf(envelope)
 
   const content = (link: SigningLink) => {
-    const details = { recipientName: link.name, senderName: sender.name, title: envelope.title, link: `${appUrl}/sign/${link.token}` }
+    const details = { recipientName: link.name, senderName: sender.name, title: envelope.title, link: `${appUrl}/sign/${link.token}`, logoUrl }
     return reminder
       ? reminderEmail({ ...details, expiresAt: envelope.expires_at })
       : signingRequestEmail({ ...details, message: envelope.message })

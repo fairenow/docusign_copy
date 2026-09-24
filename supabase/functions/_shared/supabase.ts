@@ -41,7 +41,7 @@ export const OWNER_SELECT = 'owner:profiles!envelopes_owner_id_fkey (full_name, 
 /** The owner embedded by OWNER_SELECT, with a display name. */
 export function ownerOf(envelope: { owner?: unknown }) {
   const owner = (envelope.owner ?? {}) as { full_name?: string | null; email?: string }
-  return { email: owner.email ?? '', name: owner.full_name || owner.email || 'A DocSign user' }
+  return { email: owner.email ?? '', name: owner.full_name || owner.email || 'A FLMLNK team member' }
 }
 
 interface AuditEvent {

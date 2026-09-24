@@ -13,21 +13,28 @@ export function escapeHtml(value) {
     .replace(/'/g, '&#39;')
 }
 
-function layout({ heading, paragraphs, button, footer }) {
+// The logo is served by the app (public/flmlnk-logo.png); 480x144, shown at 120px wide
+function logo(logoUrl) {
+  return logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="FLMLNK" width="120" height="36" style="display:block;margin:0 0 24px;border:0;height:auto">`
+    : ''
+}
+
+function layout({ heading, paragraphs, button, footer, logoUrl }) {
   const body = paragraphs.map(p => `<p style="margin:0 0 16px;line-height:1.5">${p}</p>`).join('')
   const cta = button
     ? `<p style="margin:24px 0"><a href="${escapeHtml(button.href)}" style="background:#2563eb;color:#ffffff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${escapeHtml(button.label)}</a></p>`
     : ''
   return `<!doctype html><html><body style="margin:0;padding:24px;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#111827">
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px">
-<h1 style="font-size:20px;margin:0 0 16px">${heading}</h1>${body}${cta}
+${logo(logoUrl)}<h1 style="font-size:20px;margin:0 0 16px">${heading}</h1>${body}${cta}
 <p style="margin:24px 0 0;font-size:12px;color:#6b7280;line-height:1.5">${footer}</p>
 </div></body></html>`
 }
 
 const quote = (message) => `<span style="display:block;border-left:3px solid #d1d5db;padding-left:12px;color:#374151;white-space:pre-wrap">${escapeHtml(message)}</span>`
 
-export function signingRequestEmail({ recipientName, senderName, title, message, link }) {
+export function signingRequestEmail({ recipientName, senderName, title, message, link, logoUrl }) {
   const paragraphs = [
     `Hi ${escapeHtml(recipientName)},`,
     `${escapeHtml(senderName)} sent you <strong>${escapeHtml(title)}</strong> to review and sign.`
@@ -38,6 +45,7 @@ export function signingRequestEmail({ recipientName, senderName, title, message,
     html: layout({
       heading: 'You have a document to sign',
       paragraphs,
+      logoUrl,
       button: { href: link, label: 'Review and sign' },
       footer: 'This link is personal to you. Do not forward this email. If you were not expecting it, you can ignore it.'
     }),
@@ -50,7 +58,7 @@ export function formatDeadline(value) {
   return new Date(value).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
 }
 
-export function reminderEmail({ recipientName, senderName, title, link, expiresAt }) {
+export function reminderEmail({ recipientName, senderName, title, link, expiresAt, logoUrl }) {
   const deadline = expiresAt ? formatDeadline(expiresAt) : null
   const paragraphs = [
     `Hi ${escapeHtml(recipientName)},`,
@@ -62,6 +70,7 @@ export function reminderEmail({ recipientName, senderName, title, link, expiresA
     html: layout({
       heading: 'A document is waiting for your signature',
       paragraphs,
+      logoUrl,
       button: { href: link, label: 'Review and sign' },
       footer: 'This link is personal to you. Do not forward this email. Links in earlier emails still work.'
     }),
@@ -69,7 +78,7 @@ export function reminderEmail({ recipientName, senderName, title, link, expiresA
   }
 }
 
-export function expiredEmail({ ownerName, title, link }) {
+export function expiredEmail({ ownerName, title, link, logoUrl }) {
   const paragraphs = [
     `Hi ${escapeHtml(ownerName)},`,
     `<strong>${escapeHtml(title)}</strong> expired before everyone signed. Its signing links no longer work.`,
@@ -80,6 +89,7 @@ export function expiredEmail({ ownerName, title, link }) {
     html: layout({
       heading: 'An envelope expired',
       paragraphs,
+      logoUrl,
       button: { href: link, label: 'View envelope' },
       footer: 'You set how long envelopes stay open when you prepare them.'
     }),
@@ -87,7 +97,7 @@ export function expiredEmail({ ownerName, title, link }) {
   }
 }
 
-export function completedEmail({ recipientName, title, link }) {
+export function completedEmail({ recipientName, title, link, logoUrl }) {
   const paragraphs = [
     `Hi ${escapeHtml(recipientName)},`,
     `Everyone has signed <strong>${escapeHtml(title)}</strong>. The completed document, including its certificate of completion, is attached.`
@@ -97,14 +107,15 @@ export function completedEmail({ recipientName, title, link }) {
     html: layout({
       heading: 'Document completed',
       paragraphs,
-      button: link ? { href: link, label: 'Open in DocSign' } : null,
+      logoUrl,
+      button: link ? { href: link, label: 'Open in FLMLNK Sign' } : null,
       footer: 'Keep this email for your records.'
     }),
-    text: `Hi ${recipientName},\n\nEveryone has signed "${title}". The completed document is attached.${link ? `\n\nOpen in DocSign: ${link}` : ''}`
+    text: `Hi ${recipientName},\n\nEveryone has signed "${title}". The completed document is attached.${link ? `\n\nOpen in FLMLNK Sign: ${link}` : ''}`
   }
 }
 
-export function declinedEmail({ ownerName, recipientName, title, reason, link }) {
+export function declinedEmail({ ownerName, recipientName, title, reason, link, logoUrl }) {
   const paragraphs = [
     `Hi ${escapeHtml(ownerName)},`,
     `${escapeHtml(recipientName)} declined to sign <strong>${escapeHtml(title)}</strong>. The envelope is closed and the remaining signing links no longer work.`
@@ -115,6 +126,7 @@ export function declinedEmail({ ownerName, recipientName, title, reason, link })
     html: layout({
       heading: 'A recipient declined to sign',
       paragraphs,
+      logoUrl,
       button: { href: link, label: 'View envelope' },
       footer: 'You can correct the document and send a new envelope.'
     }),

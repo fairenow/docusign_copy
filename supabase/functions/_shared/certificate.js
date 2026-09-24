@@ -25,14 +25,16 @@ export function formatTimestamp(value) {
  *   envelope: { id, title, original_sha256, sent_at, completed_at, page_count },
  *   sender: { name, email },
  *   recipients: Array<{ name, email, role, status, viewed_at, signed_at, consented_at, signer_ip, signer_user_agent, signature?: string }>,
- *   events: Array<{ created_at, action, who, ip }>
- * }} data
+ *   events: Array<{ created_at, action, who, ip }>,
+ *   logo?: Uint8Array
+ * }} data  logo: PNG shown above the title (the FLMLNK logo)
  */
-export async function appendCertificate(doc, { envelope, sender, recipients, events }) {
+export async function appendCertificate(doc, { envelope, sender, recipients, events, logo }) {
   const regular = await doc.embedFont(StandardFonts.Helvetica)
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
   const writer = new PageWriter(doc, regular, bold)
 
+  if (logo) writer.image(await doc.embedPng(logo), 110)
   writer.heading('Certificate of Completion')
   writer.keyValues([
     ['Envelope', envelope.title],
@@ -89,6 +91,14 @@ class PageWriter {
       this.page.drawText(line, { x, y: this.y - size, size, font, color })
       this.y -= size + 4
     }
+  }
+
+  /** An image `width` points wide at the left margin, e.g. the logo. */
+  image(embedded, width) {
+    const height = embedded.height * (width / embedded.width)
+    this.ensure(height)
+    this.page.drawImage(embedded, { x: MARGIN, y: this.y - height, width, height })
+    this.y -= height + 18
   }
 
   heading(value) {

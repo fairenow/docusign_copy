@@ -292,3 +292,28 @@ test('Quick sign asks you to sign in before converting a Word document', async (
   await expect.poll(() => db.calls.some(c => c.action === 'convert')).toBe(false)
   await expect(page.getByTestId('document-page')).toHaveCount(0)
 })
+
+test('Quick sign opens the signature pad over the page, where you are', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 })
+  await page.goto('/quick-sign')
+  await page.getByTestId('file-input').setInputFiles(await pdfFile('contract.pdf'))
+  // The detector finds "Signature: ____" near the bottom of page 1
+  await page.getByTitle('Place this field').first().click()
+  const placeholder = page.locator('[data-field-type="signature"]').first()
+  await placeholder.scrollIntoViewIfNeeded()
+  await placeholder.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Adopt your signature' })
+  await expect(dialog).toBeInViewport()
+  await dialog.getByRole('button', { name: 'Draw' }).click()
+  const pad = dialog.locator('canvas')
+  const box = await pad.boundingBox()
+  await page.mouse.move(box.x + 20, box.y + 40)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 160, box.y + 60, { steps: 5 })
+  await page.mouse.up()
+  await dialog.getByRole('button', { name: 'Adopt and sign' }).click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(placeholder.locator('img')).toBeInViewport()
+})

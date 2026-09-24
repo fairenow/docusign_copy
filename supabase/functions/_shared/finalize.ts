@@ -41,7 +41,7 @@ export async function finalizeEnvelope(envelopeId: string) {
   // deno-lint-ignore no-explicit-any
   const nameOf = (e: any) => recipients.find((r: any) => r.id === e.recipient_id)?.name ?? (e.actor_user_id === envelope.owner_id ? ownerName : '')
 
-  const doc = await loadPdf(new Uint8Array(await file.arrayBuffer()))
+  const [doc, logo] = await Promise.all([loadPdf(new Uint8Array(await file.arrayBuffer())), fetchLogo()])
   await stampFields(doc, elementsFromFieldRows(envelope.fields))
   await appendCertificate(doc, {
     envelope: { ...envelope, completed_at: new Date().toISOString() },
@@ -53,7 +53,8 @@ export async function finalizeEnvelope(envelopeId: string) {
       signature: envelope.fields.find((f: any) => f.recipient_id === r.id && f.type === 'signature' && f.value)?.value
     })),
     // deno-lint-ignore no-explicit-any
-    events: events.map((e: any) => ({ ...e, who: nameOf(e) }))
+    events: events.map((e: any) => ({ ...e, who: nameOf(e) })),
+    logo
   })
   doc.setTitle(envelope.title)
   doc.setModificationDate(new Date())
@@ -86,8 +87,9 @@ export async function finalizeEnvelope(envelopeId: string) {
 
   // Everyone gets a copy: signers, CC recipients and the sender
   let appUrl: string | null = null
+  let logoUrl: string | undefined
   try {
-    appUrl = emailConfig().appUrl
+    ({ appUrl, logoUrl } = emailConfig())
   } catch (err) {
     console.error(err)
   }
@@ -104,7 +106,7 @@ export async function finalizeEnvelope(envelopeId: string) {
     const isOwner = email === owner.email.toLowerCase()
     return sendEmail({
       to: email,
-      ...completedEmail({ recipientName: person.name, title: envelope.title, link: isOwner ? `${appUrl}/envelopes/${envelopeId}` : null }),
+      ...completedEmail({ recipientName: person.name, title: envelope.title, link: isOwner ? `${appUrl}/envelopes/${envelopeId}` : null, logoUrl }),
       attachments: attachment
     })
   }))
@@ -115,6 +117,18 @@ export async function finalizeEnvelope(envelopeId: string) {
     return [{ envelopeId, action: 'email_failed', recipientId: person.recipientId, details: { email, kind: 'completed' } }]
   }))
   return { status: 'completed' }
+}
+
+/** The logo the app serves, for the certificate. Best effort: without it the certificate has no logo. */
+async function fetchLogo(): Promise<Uint8Array | undefined> {
+  try {
+    const res = await fetch(emailConfig().logoUrl)
+    if (!res.ok || !res.headers.get('content-type')?.includes('image/png')) throw new Error(`HTTP ${res.status}`)
+    return new Uint8Array(await res.arrayBuffer())
+  } catch (err) {
+    console.error('Could not load the logo for the certificate:', err)
+    return undefined
+  }
 }
 
 /** Finalize, recording a failure in the audit trail so the sender can retry from the app. */

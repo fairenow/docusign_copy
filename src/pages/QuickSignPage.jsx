@@ -5,6 +5,8 @@ import FillField from '../components/FillField'
 import FileDropzone from '../components/FileDropzone'
 import Toolbar from '../components/Toolbar'
 import LoadingOverlay from '../components/LoadingOverlay'
+import Modal from '../components/Modal'
+import SignaturePanel from '../components/SignaturePanel'
 import { useDocument } from '../hooks/useDocument'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import { createElement, elementFromDetected, nextFieldY } from '../lib/fields'
@@ -25,8 +27,8 @@ export default function QuickSignPage() {
   // Signature/initials created in this session, reused for "Click to sign" placeholders
   const [savedSignature, setSavedSignature] = useState(null)
   const [savedInitials, setSavedInitials] = useState(null)
-  // Placeholder waiting for the user to create a signature in the sidebar
-  const [pendingSignId, setPendingSignId] = useState(null)
+  // Signature placeholder being signed in the pop-up (opens over the page, where you are)
+  const [signingFieldId, setSigningFieldId] = useState(null)
 
   // Signed-in team members start with their newest saved signature and initials
   const { user } = useAuth()
@@ -93,16 +95,19 @@ export default function QuickSignPage() {
     return initials
   }, [savedInitials])
 
+  // From the sidebar: a new signature field on the current page
   const handleSignatureCreated = useCallback((signature) => {
     setSavedSignature(signature)
-    if (pendingSignId) {
-      updateElement(pendingSignId, { data: signature.data })
-      setPendingSignId(null)
-    } else {
-      addElement('signature', { data: signature.data, aspect: signature.aspect })
-    }
+    addElement('signature', { data: signature.data, aspect: signature.aspect })
     setActivePanel(null)
-  }, [pendingSignId, addElement, updateElement])
+  }, [addElement])
+
+  // From the pop-up: fill the placeholder that was clicked
+  const handlePlaceholderSigned = (signature) => {
+    setSavedSignature(signature)
+    updateElement(signingFieldId, { data: signature.data })
+    setSigningFieldId(null)
+  }
 
   // A click on a field: toggle checkboxes, sign empty signature/initials placeholders
   const handleActivateElement = useCallback(async (element) => {
@@ -116,12 +121,8 @@ export default function QuickSignPage() {
       if (initials) updateElement(element.id, { data: initials.data, text: initials.text })
       return
     }
-    if (savedSignature) {
-      updateElement(element.id, { data: savedSignature.data })
-    } else {
-      setPendingSignId(element.id)
-      setActivePanel('signature')
-    }
+    if (savedSignature) updateElement(element.id, { data: savedSignature.data })
+    else setSigningFieldId(element.id)
   }, [getInitials, savedSignature, updateElement])
 
   const renderField = useCallback((element, ctx) => <FillField element={element} {...ctx} />, [])
@@ -148,7 +149,6 @@ export default function QuickSignPage() {
       setElements([])
       setCurrentPage(1)
       setZoom(1)
-      setPendingSignId(null)
     } catch (err) {
       console.error(err)
       alert('Error loading file: ' + err.message)
@@ -181,10 +181,7 @@ export default function QuickSignPage() {
       <Sidebar
         hasDocument={!!file}
         activePanel={activePanel}
-        onActivePanelChange={(panel) => {
-          setActivePanel(panel)
-          if (panel !== 'signature') setPendingSignId(null)
-        }}
+        onActivePanelChange={setActivePanel}
         onAddSignature={handleSignatureCreated}
         onAddText={(options) => addElement('text', options)}
         onAddDate={() => addElement('date')}
@@ -231,6 +228,13 @@ export default function QuickSignPage() {
         />
         )}
       </main>
+
+      {signingFieldId && (
+        <Modal title="Adopt your signature" onClose={() => setSigningFieldId(null)}>
+          <p className="text-sm text-gray-500 mb-3">Draw or type your signature. It is used for every signature field you click.</p>
+          <SignaturePanel onApply={handlePlaceholderSigned} applyLabel="Adopt and sign" />
+        </Modal>
+      )}
 
       <LoadingOverlay visible={loading} />
     </div>

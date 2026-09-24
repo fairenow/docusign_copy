@@ -32,9 +32,10 @@ async function notifyOwnerOfExpiry(envelopeId: string) {
   if (error) throw error
   const owner = ownerOf(data)
   try {
+    const { appUrl, logoUrl } = emailConfig()
     await sendEmail({
       to: owner.email,
-      ...expiredEmail({ ownerName: owner.name, title: data.title, link: `${emailConfig().appUrl}/envelopes/${envelopeId}` })
+      ...expiredEmail({ ownerName: owner.name, title: data.title, link: `${appUrl}/envelopes/${envelopeId}`, logoUrl })
     })
   } catch (err) {
     await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind: 'expired' } })

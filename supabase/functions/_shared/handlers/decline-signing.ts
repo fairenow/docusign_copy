@@ -30,6 +30,7 @@ async function notifyOwner(envelopeId: string, recipientId: string, reason: stri
   // deno-lint-ignore no-explicit-any
   const recipient = data.recipients.find((r: any) => r.id === recipientId)
   try {
+    const { appUrl, logoUrl } = emailConfig()
     await sendEmail({
       to: owner.email,
       ...declinedEmail({
@@ -37,7 +38,8 @@ async function notifyOwner(envelopeId: string, recipientId: string, reason: stri
         recipientName: recipient?.name ?? 'A recipient',
         title: data.title,
         reason,
-        link: `${emailConfig().appUrl}/envelopes/${envelopeId}`
+        link: `${appUrl}/envelopes/${envelopeId}`,
+        logoUrl
       })
     })
   } catch (err) {

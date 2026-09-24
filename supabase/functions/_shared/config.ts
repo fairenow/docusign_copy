@@ -3,7 +3,7 @@ import { HttpError } from './http.ts'
 /**
  * Required secrets (Supabase dashboard → Edge Functions → Secrets):
  *   APP_URL         e.g. https://docsign.example.com — base URL for links in emails
- *   EMAIL_FROM      e.g. "DocSign <sign@yourdomain.com>" (a Resend-verified domain)
+ *   EMAIL_FROM      e.g. "FLMLNK Sign <sign@yourdomain.com>" (a Resend-verified domain)
  *   RESEND_API_KEY  Resend API key
  * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by the platform.
  */
@@ -15,7 +15,8 @@ export function emailConfig() {
     throw new HttpError(503, 'Sending is not configured yet: set APP_URL, EMAIL_FROM and RESEND_API_KEY for the Edge Functions.')
   }
   if (!/^https?:\/\//.test(appUrl)) throw new HttpError(503, 'APP_URL must start with https://')
-  return { appUrl, from, apiKey }
+  // Emails show the logo the app serves, so it always matches the app
+  return { appUrl, from, apiKey, logoUrl: `${appUrl}/flmlnk-logo.png` }
 }
 
 /**

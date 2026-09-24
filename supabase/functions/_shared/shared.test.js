@@ -4,6 +4,7 @@ import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminde
 import { validateSigningValues, isFieldComplete } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
+import { readFileSync } from 'node:fs'
 
 // 1x1 transparent PNG
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
@@ -45,9 +46,15 @@ describe('emails', () => {
     expect(expired.html).toContain('&lt;NDA&gt;')
   })
 
+  it('shows the logo when given its address', () => {
+    const email = signingRequestEmail({ recipientName: 'A', senderName: 'B', title: 'T', link: 'https://x', logoUrl: 'https://app.example/flmlnk-logo.png' })
+    expect(email.html).toContain('<img src="https://app.example/flmlnk-logo.png" alt="FLMLNK"')
+    expect(completedEmail({ recipientName: 'A', title: 'T' }).html).not.toContain('<img')
+  })
+
   it('omits optional parts', () => {
     expect(signingRequestEmail({ recipientName: 'A', senderName: 'B', title: 'T', link: 'https://x' }).html).not.toContain('border-left')
-    expect(completedEmail({ recipientName: 'A', title: 'T' }).html).not.toContain('Open in DocSign')
+    expect(completedEmail({ recipientName: 'A', title: 'T' }).html).not.toContain('Open in FLMLNK Sign')
     expect(declinedEmail({ ownerName: 'O', recipientName: 'R', title: 'T', reason: 'Too <b>low</b>', link: 'https://x' }).html).toContain('Too &lt;b&gt;low')
   })
 })
@@ -102,6 +109,17 @@ describe('pdf stamping and certificate', () => {
     await stampFields(doc, elements) // unencodable characters are dropped, not fatal
     const reloaded = await PDFDocument.load(await doc.save())
     expect(reloaded.getPageCount()).toBe(2)
+  })
+
+  it('puts the logo above the certificate title', async () => {
+    const logo = new Uint8Array(readFileSync(new URL('../../../public/flmlnk-logo.png', import.meta.url)))
+    const doc = await PDFDocument.create()
+    const data = { envelope: { id: 'e', title: 'T' }, sender: { name: 'S', email: 's@x.com' }, recipients: [], events: [] }
+    await appendCertificate(doc, { ...data, logo })
+    const withLogo = await doc.save()
+    const plain = await PDFDocument.create()
+    await appendCertificate(plain, data)
+    expect(withLogo.length - (await plain.save()).length).toBeGreaterThan(5000)
   })
 
   it('appends a certificate that paginates long activity logs', async () => {
