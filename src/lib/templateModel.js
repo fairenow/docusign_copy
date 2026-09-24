@@ -14,13 +14,16 @@ export function defaultTemplateRoles(recipients, myEmail) {
   return recipients.map(r => {
     counts[r.role] += 1
     const isMe = r === me
+    // Only someone already filled in can stay the fixed person on the template
+    const canKeep = Boolean(r.name.trim() && r.email.trim())
     return {
       recipientId: r.id,
       person: r.name,
+      canKeep,
       role: r.role,
       color: r.color,
       name: isMe ? 'Sender' : `${r.role === 'cc' ? 'Copy' : 'Signer'} ${counts[r.role]}`,
-      keepRecipient: isMe
+      keepRecipient: isMe && canKeep
     }
   })
 }

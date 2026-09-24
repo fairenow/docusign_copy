@@ -79,6 +79,23 @@ test('save a prepared envelope as a template, then start a new envelope from it'
   expect(db.files.has(`templates/${template.id}/original.pdf`)).toBe(false)
 })
 
+test('a template can be saved before the people are known', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Add recipient' }).click()
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Save as template' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Save as template' })
+  await dialog.getByLabel('Role 1 name').fill('Client')
+  await expect(dialog.getByText(/Always send to/)).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Save template' }).click()
+  await expect(page.getByRole('status')).toContainText('Saved as a template')
+  expect(db.templateRoles).toEqual([expect.objectContaining({ name: 'Client', default_name: null, default_email: null })])
+  expect(db.templateFields.map(f => f.type)).toEqual(['signature'])
+})
+
 test('the sender can stay a fixed person on the template', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())

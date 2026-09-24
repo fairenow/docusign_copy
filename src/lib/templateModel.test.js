@@ -13,6 +13,7 @@ describe('saving a template', () => {
   it('names roles by kind and keeps the sender as a fixed person', () => {
     const roles = defaultTemplateRoles(recipients, 'me@flmlnk.com')
     expect(roles.map(r => [r.name, r.keepRecipient])).toEqual([['Sender', true], ['Signer 2', false], ['Copy 1', false]])
+    expect(defaultTemplateRoles([{ ...recipients[1], name: '', email: '' }], 'me@flmlnk.com')[0]).toMatchObject({ canKeep: false, keepRecipient: false })
     expect(templateRolesToRows(roles.map(r => ({ ...r, name: ` ${r.name} ` })))).toEqual([
       { recipient_id: 'r1', name: 'Sender', keep_recipient: true },
       { recipient_id: 'r2', name: 'Signer 2', keep_recipient: false },

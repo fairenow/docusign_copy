@@ -71,9 +71,9 @@ export default function RecipientsPanel({
                     value={r.name}
                     onChange={(e) => onChange(r.id, { name: e.target.value })}
                     onFocus={() => r.role === 'signer' && onActivate(r.id)}
-                    placeholder="Name"
+                    placeholder="Full name"
                     maxLength={200}
-                    className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
+                    className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 placeholder-gray-400"
                     aria-label="Recipient name"
                   />
                 )}
@@ -101,7 +101,7 @@ export default function RecipientsPanel({
                     value={r.email}
                     onChange={(e) => onChange(r.id, { email: e.target.value })}
                     onFocus={() => r.role === 'signer' && onActivate(r.id)}
-                    placeholder="Email"
+                    placeholder="Email address"
                     maxLength={320}
                     className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 placeholder-gray-400"
                     aria-label="Recipient email"

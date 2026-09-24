@@ -68,15 +68,24 @@ describe('validation', () => {
   it('reports save problems the database would reject', () => {
     const problems = validateForSave(draft({
       title: ' ',
-      recipients: [signer({ name: '' , email: 'nope' }), signer({ id: 'r2', email: 'BOB@flmlnk.com' }), signer({ id: 'r3', email: 'bob@flmlnk.com ' })],
+      recipients: [signer({ name: '' , email: 'Bob Signer' }), signer({ id: 'r2', email: 'BOB@flmlnk.com' }), signer({ id: 'r3', email: 'bob@flmlnk.com ' })],
       fields: [field({ recipientId: 'gone' })]
     }))
     expect(problems).toEqual([
       'Give the envelope a title.',
-      'Recipient 1 needs a name.',
-      'Recipient 1 needs a valid email address.',
+      'Recipient 1: "Bob Signer" is not an email address.',
       'Bob has the same email as Bob.',
       '1 field is not assigned to a recipient.'
+    ])
+  })
+
+  it('saves blank recipients while drafting but needs a name and email to send', () => {
+    const blank = draft({ recipients: [signer({ name: ' ', email: '' }), signer({ id: 'r2', name: 'Cat', email: '' })] })
+    expect(validateForSave(blank)).toEqual([])
+    expect(validateForSend(blank).slice(0, 3)).toEqual([
+      'Recipient 1 needs a name.',
+      'Recipient 1 needs an email address.',
+      'Cat needs an email address.'
     ])
   })
 

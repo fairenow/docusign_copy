@@ -16,8 +16,8 @@ export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 export function recipientFromRow(row) {
   return {
     id: row.id,
-    name: row.name,
-    email: row.email,
+    name: row.name ?? '',
+    email: row.email ?? '',
     role: row.role,
     routingOrder: row.routing_order,
     color: row.color || RECIPIENT_COLORS[0],
@@ -172,7 +172,8 @@ export function moveRecipient(recipients, id, delta) {
 
 /**
  * Problems that prevent the draft from being saved (the database would reject it).
- * Returns an array of human-readable messages; empty means savable.
+ * A recipient may be left blank while drafting (for example when preparing a template);
+ * an email that is filled in must be valid. Returns human-readable messages; empty means savable.
  */
 export function validateForSave({ title, recipients, fields }) {
   const problems = []
@@ -182,9 +183,11 @@ export function validateForSave({ title, recipients, fields }) {
   const emails = new Map()
   recipients.forEach((r, i) => {
     const who = r.name.trim() || `Recipient ${i + 1}`
-    if (!r.name.trim()) problems.push(`Recipient ${i + 1} needs a name.`)
-    if (!EMAIL_PATTERN.test(r.email.trim())) problems.push(`${who} needs a valid email address.`)
-    const key = r.email.trim().toLowerCase()
+    const email = r.email.trim()
+    if (email && !EMAIL_PATTERN.test(email)) {
+      problems.push(`${who}: "${email}" is not an email address.`)
+    }
+    const key = email.toLowerCase()
     if (key) {
       if (emails.has(key)) problems.push(`${who} has the same email as ${emails.get(key)}.`)
       else emails.set(key, who)
@@ -202,6 +205,11 @@ export function validateForSave({ title, recipients, fields }) {
  */
 export function validateForSend(draft) {
   const problems = validateForSave(draft)
+  draft.recipients.forEach((r, i) => {
+    const who = r.name.trim() || `Recipient ${i + 1}`
+    if (!r.name.trim()) problems.push(`Recipient ${i + 1} needs a name.`)
+    if (!r.email.trim()) problems.push(`${who} needs an email address.`)
+  })
   const signers = draft.recipients.filter(r => r.role === 'signer')
   if (!signers.length) problems.push('Add at least one signer.')
 
@@ -248,7 +256,7 @@ export function envelopeGroup(envelope, user) {
       return 'completed'
     case 'sent': {
       const email = user.email?.toLowerCase()
-      const myTurn = currentSigners(envelope).some(r => r.email.toLowerCase() === email && r.status !== 'declined')
+      const myTurn = currentSigners(envelope).some(r => r.email?.toLowerCase() === email && r.status !== 'declined')
       return myTurn ? 'action' : 'waiting'
     }
     default:

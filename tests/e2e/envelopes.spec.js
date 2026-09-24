@@ -154,9 +154,18 @@ test.describe('envelopes', () => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
     await page.getByRole('button', { name: 'Add recipient' }).click()
+
+    // A blank recipient can be saved while drafting, but not sent
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByRole('alert')).toContainText('Recipient 1 needs a name.')
-    expect(db.calls.some(c => c.table === 'rpc/save_envelope_draft')).toBe(false)
+    await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
+    expect(db.recipients[0]).toMatchObject({ name: '', email: null })
+    await expect(page.getByText('Recipient 1 needs a name.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled()
+
+    // A name typed into the email box is caught on save
+    await page.getByLabel('Recipient email').fill('Bob Signer')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText('Recipient 1: "Bob Signer" is not an email address.')
 
     await page.getByLabel('Recipient name').fill('Bob')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')

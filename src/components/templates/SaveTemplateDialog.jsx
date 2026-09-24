@@ -57,14 +57,16 @@ export default function SaveTemplateDialog({ title, recipients, myEmail, onSave,
                   />
                   <span className="text-xs text-gray-500 whitespace-nowrap">{role.role === 'cc' ? 'Gets a copy' : 'Signs'}</span>
                 </div>
-                <label className="mt-2 flex items-center gap-2 text-xs text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={role.keepRecipient}
-                    onChange={(e) => changeRole(role.recipientId, { keepRecipient: e.target.checked })}
-                  />
-                  Always send to {role.person}
-                </label>
+                {role.canKeep && (
+                  <label className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={role.keepRecipient}
+                      onChange={(e) => changeRole(role.recipientId, { keepRecipient: e.target.checked })}
+                    />
+                    Always send to {role.person}
+                  </label>
+                )}
               </li>
             ))}
           </ul>

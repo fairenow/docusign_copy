@@ -129,7 +129,7 @@ export async function installMockSupabase(page, db) {
     if (table === 'rpc/save_envelope_draft') {
       const env = db.envelopes.find(e => e.id === body.p_envelope_id && e.status === 'draft' && e.owner_id === ALICE.id)
       if (!env) return json(route, 400, { code: 'P0002', message: 'Envelope not found or no longer a draft' })
-      const emails = body.p_recipients.map(r => r.email.toLowerCase())
+      const emails = body.p_recipients.map(r => r.email?.trim().toLowerCase()).filter(Boolean)
       if (new Set(emails).size !== emails.length) {
         return json(route, 409, { code: '23505', message: 'duplicate key value violates unique constraint "recipients_envelope_email_key"' })
       }
@@ -138,7 +138,9 @@ export async function installMockSupabase(page, db) {
         remind_every_days: body.p_remind_every_days, expire_after_days: body.p_expire_after_days, updated_at: now()
       })
       db.recipients = db.recipients.filter(r => r.envelope_id !== env.id)
-        .concat(body.p_recipients.map(r => ({ status: 'pending', signed_at: null, ...r, envelope_id: env.id })))
+        .concat(body.p_recipients.map(r => ({
+          status: 'pending', signed_at: null, ...r, name: r.name?.trim() ?? '', email: r.email?.trim() || null, envelope_id: env.id
+        })))
       db.fields = db.fields.filter(f => f.envelope_id !== env.id)
         .concat(body.p_fields.map(f => ({ ...f, envelope_id: env.id })))
       return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
@@ -160,9 +162,10 @@ export async function installMockSupabase(page, db) {
       for (const spec of body.p_roles) {
         const r = db.recipients.find(x => x.id === spec.recipient_id)
         const roleId = randomUUID()
+        const keep = spec.keep_recipient && r.name !== '' && r.email !== null
         db.templateRoles.push({
           id: roleId, template_id: id, name: spec.name, role: r.role, routing_order: r.routing_order, color: r.color,
-          default_name: spec.keep_recipient ? r.name : null, default_email: spec.keep_recipient ? r.email : null
+          default_name: keep ? r.name : null, default_email: keep ? r.email : null
         })
         for (const f of db.fields.filter(x => x.recipient_id === r.id)) {
           db.templateFields.push({ ...pickFieldLayout(f), template_id: id, role_id: roleId })
