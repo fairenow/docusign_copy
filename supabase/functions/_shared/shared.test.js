@@ -5,6 +5,7 @@ import { validateSigningValues, isFieldComplete } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
 import { readFileSync } from 'node:fs'
+import { retryWhenTokenIsTooNew } from './retry.js'
 
 // 1x1 transparent PNG
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
@@ -143,5 +144,25 @@ describe('pdf stamping and certificate', () => {
     for (const line of lines) expect(font.widthOfTextAtSize(line, 9)).toBeLessThanOrEqual(100)
     expect(formatTimestamp('2026-09-24T01:02:03.456Z')).toBe('2026-09-24 01:02:03 UTC')
     expect(formatTimestamp(null)).toBe('—')
+  })
+})
+
+describe('retryWhenTokenIsTooNew', () => {
+  const reply = (status, body) => new Response(body, { status })
+
+  it('retries once when a new token is rejected as issued in the future', async () => {
+    const calls = []
+    const responses = [reply(401, '{"code":"PGRST303","message":"JWT issued at future"}'), reply(200, '[]')]
+    const fetchOnce = retryWhenTokenIsTooNew(async (url) => { calls.push(url); return responses.shift() }, { delayMs: 1 })
+    const res = await fetchOnce('https://x/rest/v1/envelopes')
+    expect(res.status).toBe(200)
+    expect(calls).toEqual(['https://x/rest/v1/envelopes', 'https://x/rest/v1/envelopes'])
+  })
+
+  it('passes other responses, including other 401s, straight through', async () => {
+    let calls = 0
+    const fetchOnce = retryWhenTokenIsTooNew(async () => { calls++; return reply(401, '{"message":"JWT expired"}') }, { delayMs: 1 })
+    expect((await fetchOnce('u')).status).toBe(401)
+    expect(calls).toBe(1)
   })
 })

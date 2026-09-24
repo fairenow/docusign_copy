@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { retryWhenTokenIsTooNew } from '../../supabase/functions/_shared/retry.js'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
@@ -15,6 +16,7 @@ export const supabase = isSupabaseConfigured
         detectSessionInUrl: true,
         persistSession: true,
         autoRefreshToken: true
-      }
+      },
+      global: { fetch: retryWhenTokenIsTooNew((...args) => fetch(...args)) }
     })
   : null

@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { HttpError } from './http.ts'
+import { retryWhenTokenIsTooNew } from './retry.js'
 
 /** Service-role client: bypasses RLS, so every use must enforce its own checks. */
 export const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
-  auth: { persistSession: false, autoRefreshToken: false }
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: { fetch: retryWhenTokenIsTooNew((...args: Parameters<typeof fetch>) => fetch(...args)) }
 })
 
 export interface AuthUser {
