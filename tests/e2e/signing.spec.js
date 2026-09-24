@@ -196,7 +196,7 @@ test('"I need to sign this document" adds you as the first signer', async ({ pag
   await expect(page.getByText('Adding to the current page for')).toContainText(ALICE.name)
   await page.getByRole('button', { name: 'Signature', exact: true }).click()
 
-  await page.getByRole('button', { name: 'Save' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
   const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
   expect(save.p_recipients.map(r => [r.email, r.role, r.routing_order])).toEqual([[ALICE.email, 'signer', 1], ['carol@client.com', 'signer', 2]])
@@ -309,4 +309,34 @@ test('signers can move and resize their own fields, and the new positions are sa
   expect(sig.y).toBeGreaterThan(0.7)
   expect(sig.x + sig.w).toBeLessThanOrEqual(1)
   expect(db.audit.some(a => a.action === 'fields_adjusted')).toBe(true)
+})
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test('pages fit the screen and the bottom bar guides the signer to finish', async ({ page }) => {
+    const { token } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
+    await page.goto(`/sign/${token}`)
+    await page.getByLabel('I agree to use electronic records and signatures.').check()
+    await page.getByRole('button', { name: 'Continue' }).tap()
+
+    // Whole pages, no sideways scrolling; zoom buttons give way to the bottom bar
+    const pageBox = await page.getByTestId('document-page').first().boundingBox()
+    expect(pageBox.width).toBeLessThanOrEqual(390)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    await expect(page.getByTitle('Zoom in')).toBeHidden()
+    const bar = await page.getByTestId('remaining').boundingBox()
+    expect(bar.y).toBeGreaterThan(700)
+
+    // The first field is selected; a big button signs it
+    await page.getByRole('button', { name: 'Sign here' }).tap()
+    await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).tap()
+    await expect(page.locator('[data-field-type="signature"] img')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign here' })).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Next', exact: true }).tap()
+    await page.locator('[data-field-type="text"] input').fill('Head of Sales')
+    await page.getByRole('button', { name: 'Finish' }).tap()
+    await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  })
 })

@@ -2,8 +2,8 @@ import { useRef } from 'react'
 import { X, GripVertical } from 'lucide-react'
 import { clamp, MIN_SIZE } from '../lib/fields'
 
-// Movement (in px) below which a pointer press counts as a click, not a drag
-const CLICK_TOLERANCE = 3
+// Movement (in px) below which a press counts as a click, not a drag. Fingers wobble more.
+const CLICK_TOLERANCE = { mouse: 3, pen: 5, touch: 10 }
 
 /**
  * Frame around one field on the page: selection, move, resize and (when onDelete is given) delete.
@@ -42,6 +42,7 @@ export default function OverlayElement({
       startX: e.clientX,
       startY: e.clientY,
       orig: { x: element.x, y: element.y, w: element.w, h: element.h },
+      tolerance: CLICK_TOLERANCE[e.pointerType] ?? CLICK_TOLERANCE.mouse,
       moved: false
     }
     e.currentTarget.setPointerCapture?.(e.pointerId)
@@ -52,7 +53,7 @@ export default function OverlayElement({
     if (!g || g.kind === 'click') return
     const dxPx = e.clientX - g.startX
     const dyPx = e.clientY - g.startY
-    if (!g.moved && Math.hypot(dxPx, dyPx) < CLICK_TOLERANCE) return
+    if (!g.moved && Math.hypot(dxPx, dyPx) < g.tolerance) return
     g.moved = true
 
     const dx = dxPx / containerSize.width
@@ -102,7 +103,7 @@ export default function OverlayElement({
         <>
           {/* Move grip (needed for text inputs, handy for everything) */}
           <div
-            className={`absolute -top-2.5 -left-5 w-4 h-5 bg-blue-600 rounded flex items-center justify-center text-white cursor-move touch-none ${handleVisibility}`}
+            className={`absolute -top-2.5 -left-5 w-4 h-5 pointer-coarse:-left-7 pointer-coarse:w-6 pointer-coarse:h-7 bg-blue-600 rounded flex items-center justify-center text-white cursor-move touch-none ${handleVisibility}`}
             onPointerDown={(e) => beginGesture(e, 'move')}
             title="Drag to move"
           >
@@ -119,7 +120,7 @@ export default function OverlayElement({
           </button>}
 
           <div
-            className={`absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-sm cursor-nwse-resize touch-none ${handleVisibility}`}
+            className={`absolute -bottom-1.5 -right-1.5 w-3 h-3 pointer-coarse:-bottom-5 pointer-coarse:-right-5 pointer-coarse:w-5 pointer-coarse:h-5 pointer-coarse:rounded-full bg-white border-2 border-blue-600 rounded-sm cursor-nwse-resize touch-none ${handleVisibility}`}
             onPointerDown={(e) => beginGesture(e, 'resize')}
             title="Drag to resize"
           />

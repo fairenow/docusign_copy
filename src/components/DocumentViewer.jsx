@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import OverlayElement from './OverlayElement'
-
-// CSS pixels per PDF point at 100% zoom
-const BASE_SCALE = 1.5
+import { BASE_SCALE } from '../lib/viewer'
 // Pages are drawn when they come within this distance of the visible area
 const RENDER_MARGIN = '1200px 0px'
 
@@ -89,7 +87,7 @@ export default function DocumentViewer({
       ref={scrollRef}
       onScroll={handleScroll}
       onPointerDown={() => setSelectedId(null)}
-      className="flex-1 overflow-auto bg-gray-100 px-8 pb-8"
+      className="flex-1 overflow-auto bg-gray-100 px-2 sm:px-8 pb-4 sm:pb-8"
     >
       {pageSizes.length > 1 && (
         <div className="sticky top-3 z-20 h-0 flex justify-end pointer-events-none">
@@ -105,7 +103,7 @@ export default function DocumentViewer({
           <div
             key={pageNumber}
             ref={el => { pageRefs.current[i] = el }}
-            className="relative document-container mx-auto mt-8 bg-white"
+            className="relative document-container mx-auto mt-3 sm:mt-8 bg-white"
             style={displaySize}
             data-testid="document-page"
             data-page={pageNumber}

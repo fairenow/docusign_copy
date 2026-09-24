@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, Trash2, Ban, RefreshCw, Download } from 'lucide-react'
+import { FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -14,7 +14,8 @@ const STATUS_STYLES = {
   sent: 'bg-blue-500/15 text-blue-700',
   completed: 'bg-green-500/15 text-green-700',
   declined: 'bg-red-500/15 text-red-700',
-  voided: 'bg-gray-200 text-gray-500 line-through'
+  voided: 'bg-gray-200 text-gray-500 line-through',
+  expired: 'bg-amber-500/15 text-amber-800'
 }
 
 export default function DashboardPage() {
@@ -104,6 +105,10 @@ export default function DashboardPage() {
           <button onClick={refresh} className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Refresh">
             <RefreshCw size={18} />
           </button>
+          <Link to="/templates" className="btn-secondary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+            <LayoutTemplate size={16} />
+            Use a template
+          </Link>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="px-4 py-2 btn-primary rounded-lg text-white text-sm flex items-center gap-2"

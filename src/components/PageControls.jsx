@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
 
-const MIN_ZOOM = 0.5
+// Low enough for a whole page on a phone
+const MIN_ZOOM = 0.25
 const MAX_ZOOM = 3
 const clampZoom = (zoom) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom))
 

@@ -7,6 +7,9 @@ A free, privacy-focused document signing application built with React. Upload PD
 ## Features
 
 - 📄 **PDF & DOCX Support** - Upload and view both file types
+- 🧩 **Templates** - Reuse a prepared document with roles instead of people
+- ⏰ **Reminders & expiration** - Automatic reminder emails; envelopes close at their deadline
+- 📱 **Phone-friendly signing** - Pages fit the screen, big buttons within thumb reach
 - ✍️ **Signature Drawing** - Draw signatures with mouse or touch
 - ⌨️ **Typed Signatures** - Type your name in a cursive style
 - 📝 **Text Fields** - Add custom text with configurable size and color
@@ -91,7 +94,7 @@ The database schema lives in `supabase/migrations/` and is applied to the projec
 | `recipient_tokens` | SHA-256 hashes of signing-link tokens (service role only) |
 | `fields` | Fields assigned to recipients; positions are page fractions (0–1) |
 | `audit_events` | Append-only audit trail for the certificate of completion |
-| `templates`, `template_roles`, `template_fields` | Reusable documents |
+| `templates`, `template_roles`, `template_fields` | Reusable documents whose fields belong to roles ("Client") instead of people; shared with the team unless made private |
 | `saved_signatures` | A team member's saved signatures and initials (only they can see them; up to 5 of each) |
 
 Access rules (row level security):
@@ -122,6 +125,30 @@ Sending and signing run in one Edge Function (`supabase/functions/signing-api`, 
 
 Email failures and a failed final step are written to the audit trail; the owner can resend a
 signer's link or retry the final step from the envelope page.
+
+### Reminders and expiration
+
+Each envelope has a reminder interval (default every 3 days, or off) and a lifetime (default 30
+days), chosen while preparing it. An hourly `pg_cron` job (`signing-reminders`) calls
+`signing-api/reminders` with a random secret that lives only in Vault
+(`signing_reminders_secret`); `svc_run_reminders` checks it, then:
+
+- marks envelopes whose deadline passed before everyone signed as **expired**, removes their
+  links and emails the sender;
+- emails signers whose turn it is and who have not heard from us within the interval. Each
+  reminder carries a new link; links in earlier emails keep working until the signer finishes
+  or the envelope closes.
+
+The job reads its target URL from the Vault secret `signing_reminders_url`; point it at another
+project's `signing-api/reminders` when setting up a new environment.
+
+### Templates
+
+**Save as template** in the editor copies the document, fields, signing order, message and
+reminder settings. Each recipient becomes a role; a role can keep its person (e.g. the sender who
+always countersigns). **Templates → Use** asks for each role's name and email and opens a new
+draft to review and send. `create_template_from_envelope` and `create_envelope_from_template`
+run as the caller, so row level security decides what can be saved and used.
 
 Edge Function secrets (Supabase dashboard → Edge Functions → Secrets):
 

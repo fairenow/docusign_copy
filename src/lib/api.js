@@ -5,8 +5,10 @@
 import { supabase } from './supabase'
 import { fileToPdfBytes, stripExtension } from './documents'
 import { fieldToRow, recipientToRow } from './envelopeModel'
+import { peopleToRows, templateRolesToRows } from './templateModel'
 
 const BUCKET = 'documents'
+const TEMPLATE_BUCKET = 'templates'
 
 function client() {
   if (!supabase) throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.')
@@ -24,11 +26,18 @@ function toError(error) {
   if (error.code === '23505' && /recipients_envelope_email_key/.test(message)) {
     return new Error('Each recipient needs a different email address.')
   }
+  if (error.code === '23505' && /template_roles_template_name_key/.test(message)) {
+    return new Error('Each role needs a different name.')
+  }
+  if (error.code === 'P0002' && /template/i.test(message)) return new Error('This template no longer exists or is not shared with you.')
   if (error.code === 'P0002') return new Error('This envelope no longer exists or can no longer be edited.')
   return new Error(message)
 }
 
-const originalPath = (envelopeId) => `${envelopeId}/original.pdf`
+// Envelopes and templates store their document as <id>/original.pdf in their bucket
+const originalPath = (id) => `${id}/original.pdf`
+const pdfBlob = (bytes) => new Blob([bytes], { type: 'application/pdf' })
+const PDF_UPLOAD = { contentType: 'application/pdf', upsert: false }
 
 // ---------------------------------------------------------------------------
 // Profiles
@@ -42,7 +51,7 @@ export async function fetchProfile(userId) {
 // Envelopes
 // ---------------------------------------------------------------------------
 
-const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, updated_at, created_at, ' +
+const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, expires_at, updated_at, created_at, ' +
   'recipients (id, name, email, role, routing_order, status, signed_at)'
 
 export async function listEnvelopes() {
@@ -72,26 +81,30 @@ export async function createEnvelopeFromFile(file) {
   const pageCount = doc.numPages
   doc.destroy()
 
-  const db = client()
-  const { id } = unwrap(await db
+  const { id } = unwrap(await client()
     .from('envelopes')
     .insert({ title: stripExtension(file.name).slice(0, 200) || 'Untitled', original_filename: file.name.slice(0, 255), page_count: pageCount })
     .select('id')
     .single())
-
-  try {
-    unwrap(await db.storage.from(BUCKET).upload(originalPath(id), new Blob([bytes], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: false }))
-    unwrap(await db.from('envelopes').update({ original_path: originalPath(id) }).eq('id', id))
-  } catch (err) {
-    await db.storage.from(BUCKET).remove([originalPath(id)])
-    await db.from('envelopes').delete().eq('id', id)
-    throw err
-  }
+  await attachDocument(id, bytes)
   return id
 }
 
-export async function downloadDocument(path) {
-  const blob = unwrap(await client().storage.from(BUCKET).download(path))
+/** Store a new draft's PDF and record its path. The draft is removed if that fails. */
+async function attachDocument(envelopeId, bytes) {
+  const db = client()
+  try {
+    unwrap(await db.storage.from(BUCKET).upload(originalPath(envelopeId), pdfBlob(bytes), PDF_UPLOAD))
+    unwrap(await db.from('envelopes').update({ original_path: originalPath(envelopeId) }).eq('id', envelopeId))
+  } catch (err) {
+    await db.storage.from(BUCKET).remove([originalPath(envelopeId)])
+    await db.from('envelopes').delete().eq('id', envelopeId)
+    throw err
+  }
+}
+
+export async function downloadDocument(path, bucket = BUCKET) {
+  const blob = unwrap(await client().storage.from(bucket).download(path))
   return new Uint8Array(await blob.arrayBuffer())
 }
 
@@ -102,6 +115,8 @@ export async function saveDraft(envelopeId, draft) {
     p_title: draft.title.trim(),
     p_message: draft.message.trim() || null,
     p_signing_order: draft.signingOrder,
+    p_remind_every_days: draft.remindEveryDays,
+    p_expire_after_days: draft.expireAfterDays,
     p_recipients: draft.recipients.map(recipientToRow),
     p_fields: draft.fields.map(fieldToRow)
   }))
@@ -137,6 +152,65 @@ export function subscribeToEnvelopeChanges(onChange, envelopeId = null) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'recipients', ...recipientFilter }, onChange)
     .subscribe()
   return () => { supabase.removeChannel(channel) }
+}
+
+// ---------------------------------------------------------------------------
+// Templates (shared with the team unless made private)
+// ---------------------------------------------------------------------------
+
+const TEMPLATE_COLUMNS = 'id, owner_id, name, original_filename, page_count, signing_order, shared, created_at, ' +
+  'owner:profiles!templates_owner_id_fkey (full_name, email), ' +
+  'template_roles (id, name, role, routing_order, color, default_name, default_email)'
+
+export async function listTemplates() {
+  return unwrap(await client().from('templates').select(TEMPLATE_COLUMNS).order('created_at', { ascending: false }))
+}
+
+/**
+ * Save an envelope's document, settings and fields as a template.
+ * roles: one per recipient ({ recipientId, name, keepRecipient }); returns the template id.
+ */
+export async function saveAsTemplate(envelope, name, roles) {
+  const db = client()
+  const id = unwrap(await db.rpc('create_template_from_envelope', {
+    p_envelope_id: envelope.id,
+    p_name: name.trim(),
+    p_roles: templateRolesToRows(roles)
+  }))
+  try {
+    const bytes = await downloadDocument(envelope.original_path)
+    unwrap(await db.storage.from(TEMPLATE_BUCKET).upload(originalPath(id), pdfBlob(bytes), PDF_UPLOAD))
+  } catch (err) {
+    await db.from('templates').delete().eq('id', id)
+    throw err
+  }
+  return id
+}
+
+/** Create a draft envelope from a template. people: { [roleId]: { name, email } }; returns the envelope id. */
+export async function createEnvelopeFromTemplate(template, title, people) {
+  const db = client()
+  const id = unwrap(await db.rpc('create_envelope_from_template', {
+    p_template_id: template.id,
+    p_title: title.trim(),
+    p_people: peopleToRows(people)
+  }))
+  let bytes
+  try {
+    bytes = await downloadDocument(originalPath(template.id), TEMPLATE_BUCKET)
+  } catch (err) {
+    await db.from('envelopes').delete().eq('id', id)
+    throw err
+  }
+  await attachDocument(id, bytes)
+  return id
+}
+
+/** Delete a template and its document. Storage goes first: its policy needs the template row. */
+export async function deleteTemplate(template) {
+  const db = client()
+  unwrap(await db.storage.from(TEMPLATE_BUCKET).remove([originalPath(template.id)]))
+  unwrap(await db.from('templates').delete().eq('id', template.id))
 }
 
 // ---------------------------------------------------------------------------

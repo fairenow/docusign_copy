@@ -22,7 +22,7 @@ export function json(body: unknown, status = 200): Response {
 }
 
 // Postgres error codes raised by the svc_* functions, mapped to HTTP statuses
-const PG_STATUS: Record<string, number> = { P0002: 404, '22023': 400, '55000': 409, '23505': 409 }
+const PG_STATUS: Record<string, number> = { P0002: 404, '22023': 400, '42501': 403, '55000': 409, '23505': 409 }
 
 /** Wrap a POST handler with CORS, JSON errors and logging of unexpected failures. */
 export function serve(handler: (req: Request) => Promise<Response>) {

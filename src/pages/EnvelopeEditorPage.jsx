@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, PenLine, RotateCw, Save, Send } from 'lucide-react'
+import { ArrowLeft, Download, LayoutTemplate, PenLine, RotateCw, Save, Send } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
-  downloadDocument, downloadSignedPdf, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveDraft, sendEnvelope,
-  subscribeToEnvelopeChanges
+  downloadDocument, downloadSignedPdf, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveAsTemplate, saveDraft,
+  sendEnvelope, subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
@@ -22,6 +22,8 @@ import FieldRail from '../components/envelope/FieldRail'
 import FieldProperties from '../components/envelope/FieldProperties'
 import SendChecklist from '../components/envelope/SendChecklist'
 import ActivityPanel from '../components/envelope/ActivityPanel'
+import ReminderSettings from '../components/envelope/ReminderSettings'
+import SaveTemplateDialog from '../components/templates/SaveTemplateDialog'
 import ErrorBanner from '../components/ErrorBanner'
 
 /**
@@ -45,6 +47,8 @@ export default function EnvelopeEditorPage() {
   const [zoom, setZoom] = useState(1)
   const [events, setEvents] = useState([])
   const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateSaved, setTemplateSaved] = useState(false)
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
 
   // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
@@ -92,6 +96,7 @@ export default function EnvelopeEditorPage() {
   }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
+  const isOwner = Boolean(envelope && user) && envelope.owner_id === user.id
   const dirty = useMemo(
     () => editable && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
     [editable, draft, savedDraft]
@@ -239,6 +244,14 @@ export default function EnvelopeEditorPage() {
     await downloadSignedPdf(envelope)
   })
 
+  // Templates are made from what is stored, so unsaved edits are saved first
+  const handleSaveTemplate = async (name, roles) => {
+    if (dirty && !(await save())) throw new Error('Fix the problems shown above the document first.')
+    await saveAsTemplate(envelope, name, roles)
+    setSavingTemplate(false)
+    setTemplateSaved(true)
+  }
+
   // Ctrl/Cmd+S saves
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -300,6 +313,16 @@ export default function EnvelopeEditorPage() {
             {envelope.original_filename && <> · {envelope.original_filename}</>}
           </p>
         </div>
+        {isOwner && (
+          <button
+            onClick={() => { setTemplateSaved(false); setSavingTemplate(true) }}
+            disabled={!draft.recipients.length}
+            title={draft.recipients.length ? 'Reuse this document and its fields' : 'Add recipients and fields first'}
+            className="btn-secondary px-3 py-2 rounded-md text-sm flex items-center gap-2"
+          >
+            <LayoutTemplate size={16} /> <span className="hidden lg:inline">Save as template</span>
+          </button>
+        )}
         {editable ? (
           <>
             <button
@@ -356,6 +379,11 @@ export default function EnvelopeEditorPage() {
       </div>
 
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
+      {templateSaved && (
+        <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
+          Saved as a template. Use it from <Link to="/templates" className="underline">Templates</Link>.
+        </p>
+      )}
       {(saveState.problems.length > 0 || saveState.error) && (
         <div role="alert" className="px-4 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700">
           {saveState.error ? `Could not save: ${saveState.error}` : saveState.problems.join(' ')}
@@ -439,6 +467,11 @@ export default function EnvelopeEditorPage() {
                         : 'Add a signer, then pick fields on the left to place them.'}
                     </p>
                     <MessageField value={draft.message} onChange={(message) => update({ message })} />
+                    <ReminderSettings
+                      remindEveryDays={draft.remindEveryDays}
+                      expireAfterDays={draft.expireAfterDays}
+                      onChange={update}
+                    />
                   </>
                 )}
               </div>
@@ -459,10 +492,21 @@ export default function EnvelopeEditorPage() {
                 <h2 className="section-heading mb-2">Message to recipients</h2>
                 <p className="text-sm text-gray-600 whitespace-pre-wrap">{draft.message || 'No message.'}</p>
               </section>
+              <ReminderSettings readOnly remindEveryDays={draft.remindEveryDays} expiresAt={envelope.expires_at} />
             </div>
           )}
         </aside>
       </div>
+
+      {savingTemplate && (
+        <SaveTemplateDialog
+          title={draft.title}
+          recipients={draft.recipients}
+          myEmail={user?.email}
+          onSave={handleSaveTemplate}
+          onClose={() => setSavingTemplate(false)}
+        />
+      )}
     </div>
   )
 }

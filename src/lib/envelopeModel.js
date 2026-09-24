@@ -7,7 +7,7 @@ import { DEFAULT_FONT_SIZE, newId, placeField } from './fields'
 
 export const RECIPIENT_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
 
-const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 // ---------------------------------------------------------------------------
 // Mapping between database rows and editor state
@@ -78,6 +78,8 @@ export function draftFromEnvelope(envelope) {
     title: envelope.title,
     message: envelope.message ?? '',
     signingOrder: envelope.signing_order,
+    remindEveryDays: envelope.remind_every_days ?? null,
+    expireAfterDays: envelope.expire_after_days ?? DEFAULT_EXPIRE_DAYS,
     recipients,
     fields: (envelope.fields ?? []).map(fieldFromRow)
   }
@@ -96,6 +98,30 @@ export function newField(type, placement, recipientId, props = {}) {
     label: '',
     fontSize: DEFAULT_FONT_SIZE
   }
+}
+
+// ---------------------------------------------------------------------------
+// Reminders and expiration
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_EXPIRE_DAYS = 30
+
+/** Reminder choices in days; null turns reminders off. */
+export const REMINDER_OPTIONS = [
+  { value: null, label: 'Off' },
+  { value: 1, label: 'Every day' },
+  { value: 2, label: 'Every 2 days' },
+  { value: 3, label: 'Every 3 days' },
+  { value: 5, label: 'Every 5 days' },
+  { value: 7, label: 'Every week' }
+]
+
+export const EXPIRY_OPTIONS = [7, 14, 30, 60, 90, 120].map(days => ({ value: days, label: `${days} days` }))
+
+/** Plain-language summary, e.g. "Reminders every 3 days" or "No reminders". */
+export function reminderSummary(days) {
+  if (!days) return 'No automatic reminders'
+  return days === 1 ? 'Reminders every day' : days === 7 ? 'Reminders every week' : `Reminders every ${days} days`
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +252,7 @@ export function envelopeGroup(envelope, user) {
       return myTurn ? 'action' : 'waiting'
     }
     default:
-      return 'closed' // declined / voided: only under "All"
+      return 'closed' // declined / voided / expired: only under "All"
   }
 }
 
@@ -254,7 +280,8 @@ export const STATUS_LABELS = {
   sent: 'Out for signature',
   completed: 'Completed',
   declined: 'Declined',
-  voided: 'Voided'
+  voided: 'Voided',
+  expired: 'Expired'
 }
 
 export const RECIPIENT_STATUS = {

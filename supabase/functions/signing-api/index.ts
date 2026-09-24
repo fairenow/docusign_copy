@@ -6,6 +6,7 @@
 //   POST /signing-api/session   { token } | { envelopeId }              signer (link or team member)
 //   POST /signing-api/submit    { token | envelopeId, values, consent } signer
 //   POST /signing-api/decline   { token | envelopeId, reason }          signer
+//   POST /signing-api/reminders (x-reminders-secret header)             hourly pg_cron job
 //
 // JWT verification is done in code (getUser), because signers with a link have no session.
 import { serve, HttpError } from '../_shared/http.ts'
@@ -15,6 +16,7 @@ import { finalizeEnvelopeHandler } from '../_shared/handlers/finalize-envelope.t
 import { signingSession } from '../_shared/handlers/signing-session.ts'
 import { submitSigning } from '../_shared/handlers/submit-signing.ts'
 import { declineSigning } from '../_shared/handlers/decline-signing.ts'
+import { runReminders } from '../_shared/handlers/run-reminders.ts'
 
 const routes: Record<string, (req: Request) => Promise<Response>> = {
   send: sendEnvelope,
@@ -22,7 +24,8 @@ const routes: Record<string, (req: Request) => Promise<Response>> = {
   finalize: finalizeEnvelopeHandler,
   session: signingSession,
   submit: submitSigning,
-  decline: declineSigning
+  decline: declineSigning,
+  reminders: runReminders
 }
 
 serve((req) => {

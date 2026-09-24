@@ -18,6 +18,7 @@ export const ACTION_LABELS = {
   envelope_sent: 'Sent for signature',
   recipient_notified: 'Signing request emailed',
   recipient_reminded: 'Signing link re-sent',
+  recipient_auto_reminded: 'Reminder emailed',
   recipient_viewed: 'Viewed',
   fields_adjusted: 'Adjusted field positions',
   recipient_signed: 'Signed',
@@ -26,5 +27,6 @@ export const ACTION_LABELS = {
   finalize_failed: 'Finishing the document failed',
   envelope_completed: 'Completed',
   envelope_declined: 'Declined',
-  envelope_voided: 'Voided'
+  envelope_voided: 'Voided',
+  envelope_expired: 'Expired'
 }

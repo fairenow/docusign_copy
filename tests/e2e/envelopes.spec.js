@@ -102,7 +102,7 @@ test.describe('envelopes', () => {
 
     await expect(page.getByText('Everything is in place.')).toBeVisible()
     await expect(page.getByTestId('save-status')).toHaveText('Unsaved changes')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
 
     const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
@@ -142,7 +142,7 @@ test.describe('envelopes', () => {
     await page.mouse.down()
     await page.mouse.move(box.x + 5000, box.y + 5000, { steps: 5 }) // far off the page
     await page.mouse.up()
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
 
     const [f] = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body.p_fields
@@ -154,7 +154,7 @@ test.describe('envelopes', () => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
     await page.getByRole('button', { name: 'Add recipient' }).click()
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByRole('alert')).toContainText('Recipient 1 needs a name.')
     expect(db.calls.some(c => c.table === 'rpc/save_envelope_draft')).toBe(false)
 
@@ -163,7 +163,7 @@ test.describe('envelopes', () => {
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').nth(1).fill('Robert')
     await page.getByLabel('Recipient email').nth(1).fill('BOB@flmlnk.com')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByRole('alert')).toContainText('Robert has the same email as Bob.')
   })
 
@@ -235,7 +235,7 @@ test.describe('envelopes', () => {
     await page.goto(`/envelopes/${id}`)
     await expect(page.getByTestId('envelope-status')).toHaveText('Out for signature')
     await expect(page.getByRole('link', { name: 'Sign now' })).toBeVisible() // Alice is the current signer
-    await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
     await expect(page.getByLabel('Recipient name')).toHaveCount(0)
     await expect(page.getByTestId('field')).toHaveCount(1)
 

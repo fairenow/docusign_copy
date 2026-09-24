@@ -45,6 +45,48 @@ export function signingRequestEmail({ recipientName, senderName, title, message,
   }
 }
 
+/** Deadline for the email text, e.g. "October 24, 2026" (UTC, so every recipient sees the same date). */
+export function formatDeadline(value) {
+  return new Date(value).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+}
+
+export function reminderEmail({ recipientName, senderName, title, link, expiresAt }) {
+  const deadline = expiresAt ? formatDeadline(expiresAt) : null
+  const paragraphs = [
+    `Hi ${escapeHtml(recipientName)},`,
+    `This is a reminder that ${escapeHtml(senderName)} is waiting for you to sign <strong>${escapeHtml(title)}</strong>.`
+  ]
+  if (deadline) paragraphs.push(`Please sign by <strong>${escapeHtml(deadline)}</strong>, when the request expires.`)
+  return {
+    subject: `Reminder: please sign ${title}`,
+    html: layout({
+      heading: 'A document is waiting for your signature',
+      paragraphs,
+      button: { href: link, label: 'Review and sign' },
+      footer: 'This link is personal to you. Do not forward this email. Links in earlier emails still work.'
+    }),
+    text: `Hi ${recipientName},\n\nThis is a reminder that ${senderName} is waiting for you to sign "${title}".${deadline ? ` Please sign by ${deadline}, when the request expires.` : ''}\n\nReview and sign: ${link}\n\nThis link is personal to you. Do not forward this email.`
+  }
+}
+
+export function expiredEmail({ ownerName, title, link }) {
+  const paragraphs = [
+    `Hi ${escapeHtml(ownerName)},`,
+    `<strong>${escapeHtml(title)}</strong> expired before everyone signed. Its signing links no longer work.`,
+    'To try again, use the document as a template or upload it in a new envelope.'
+  ]
+  return {
+    subject: `Expired: ${title}`,
+    html: layout({
+      heading: 'An envelope expired',
+      paragraphs,
+      button: { href: link, label: 'View envelope' },
+      footer: 'You set how long envelopes stay open when you prepare them.'
+    }),
+    text: `Hi ${ownerName},\n\n"${title}" expired before everyone signed. Its signing links no longer work.\n\nView envelope: ${link}`
+  }
+}
+
 export function completedEmail({ recipientName, title, link }) {
   const paragraphs = [
     `Hi ${escapeHtml(recipientName)},`,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument, StandardFonts, degrees } from 'pdf-lib'
-import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail } from './emails.js'
+import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminderEmail, expiredEmail } from './emails.js'
 import { validateSigningValues, isFieldComplete } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
@@ -31,6 +31,18 @@ describe('emails', () => {
     expect(email.html).toContain('href="https://app.example.com/sign/abc&quot;onmouseover=&quot;x"')
     expect(email.subject).toBe('Please sign: <script>alert(1)</script>') // subjects are plain text
     expect(email.text).toContain('https://app.example.com/sign/abc')
+  })
+
+  it('reminds signers of the deadline and tells owners about expiry', () => {
+    const reminder = reminderEmail({ recipientName: 'Ann', senderName: '<b>Bo</b>', title: 'NDA', link: 'https://x/sign/t', expiresAt: '2026-10-24T06:00:00Z' })
+    expect(reminder.subject).toBe('Reminder: please sign NDA')
+    expect(reminder.html).toContain('October 24, 2026')
+    expect(reminder.html).toContain('&lt;b&gt;Bo&lt;/b&gt;')
+    expect(reminder.text).toContain('https://x/sign/t')
+    expect(reminderEmail({ recipientName: 'A', senderName: 'B', title: 'T', link: 'https://x' }).text).not.toContain('expires')
+    const expired = expiredEmail({ ownerName: 'Bo', title: '<NDA>', link: 'https://x/envelopes/1' })
+    expect(expired.subject).toBe('Expired: <NDA>')
+    expect(expired.html).toContain('&lt;NDA&gt;')
   })
 
   it('omits optional parts', () => {

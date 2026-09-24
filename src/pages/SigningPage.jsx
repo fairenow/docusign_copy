@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronRight, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { ChevronRight, CheckCircle2, XCircle, Clock, PenLine } from 'lucide-react'
 import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
+import { fitWidthZoom } from '../lib/viewer'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
 import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel } from '../../supabase/functions/_shared/signing.js'
@@ -98,6 +99,14 @@ export default function SigningPage() {
     // Wait for the page to render, then bring the field into view
     setTimeout(() => document.querySelector(`[data-field-id="${field.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
   }, [])
+
+  // Phones and narrow windows: show whole pages instead of scrolling sideways
+  const fittedRef = useRef(false)
+  useEffect(() => {
+    if (fittedRef.current || !pageSizes.length) return
+    fittedRef.current = true
+    setZoom(fitWidthZoom(pageSizes, window.innerWidth))
+  }, [pageSizes])
 
   // Start at the first field to fill in, like pressing "Start" in other e-sign tools
   const startedRef = useRef(false)
@@ -247,48 +256,70 @@ export default function SigningPage() {
     )
   }
 
+  // A selected, still-empty signature or initials field gets a big button (easier than a
+  // small field on a phone)
+  const selected = elements.find(e => e.id === selectedId)
+  const signAction = selected && !selected.data && (selected.type === 'signature' || selected.type === 'initials')
+    ? (selected.type === 'signature' ? 'Sign here' : 'Add initials')
+    : null
+  const finishButton = (className) => (
+    <button
+      onClick={handleFinish}
+      disabled={busy || remaining.length > 0}
+      className={`px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50 ${className}`}
+    >
+      {busy ? 'Finishing…' : 'Finish'}
+    </button>
+  )
+
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      <header className="px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-4">
-        <Brand />
+    <div className="h-[100dvh] flex flex-col bg-gray-100">
+      <header className="px-3 sm:px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-3 sm:gap-4">
+        <Brand className="hidden sm:inline-flex text-lg" />
         <div className="flex-1 min-w-0">
           <p className="text-gray-900 font-medium truncate">{session.envelope.title}</p>
           <p className="text-xs text-gray-500 truncate">From {session.envelope.sender} · signing as {session.recipient.name}</p>
         </div>
-        <button onClick={handleDecline} disabled={busy} className="px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-700 disabled:opacity-50">
+        <button onClick={handleDecline} disabled={busy} className="px-2 sm:px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-700 disabled:opacity-50">
           Decline
         </button>
-        <button
-          onClick={handleFinish}
-          disabled={busy || remaining.length > 0}
-          className="px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50"
-        >
-          {busy ? 'Finishing…' : 'Finish'}
-        </button>
+        {finishButton('hidden sm:block')}
       </header>
 
-      <div className="px-5 py-2 bg-white border-b border-gray-200 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      {/* Progress: under the header on larger screens, a bottom bar within thumb reach on phones */}
+      <div className="order-last sm:order-none px-3 sm:px-5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-2 bg-white border-t sm:border-t-0 sm:border-b border-gray-200 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {remaining.length > 0 ? (
             <>
               <span className="text-sm text-amber-700" data-testid="remaining">
                 {remaining.length} required field{remaining.length > 1 ? 's' : ''} left
               </span>
-              <button onClick={goToNext} className="px-3 py-1.5 rounded-lg bg-amber-400 text-gray-900 text-sm font-medium flex items-center gap-1">
+              <button onClick={goToNext} className="px-3 py-2 sm:py-1.5 rounded-lg bg-amber-400 text-gray-900 text-sm font-medium flex items-center gap-1">
                 Next <ChevronRight size={14} />
               </button>
             </>
           ) : (
-            <span className="text-sm text-green-700 flex items-center gap-2"><CheckCircle2 size={14} /> All required fields are complete. Click Finish.</span>
+            <span className="text-sm text-green-700 flex items-center gap-2">
+              <CheckCircle2 size={14} className="flex-shrink-0" />
+              <span>All required fields are complete<span className="hidden sm:inline">. Click Finish</span>.</span>
+            </span>
           )}
         </div>
         <div className="flex items-center gap-4">
+          {signAction && (
+            <button onClick={() => handleActivate(selected)} className="sm:hidden px-4 py-2 rounded-lg btn-primary text-white text-sm font-medium flex items-center gap-1.5">
+              <PenLine size={14} /> {signAction}
+            </button>
+          )}
+          {remaining.length === 0 && finishButton('sm:hidden')}
           <span className="hidden md:inline text-xs text-gray-500">Drag a field to move it, or its corner to resize.</span>
-          <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
+          <div className="hidden sm:block">
+            <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
+          </div>
         </div>
       </div>
 
-      {error && <ErrorBanner className="mx-5 mt-3">{error}</ErrorBanner>}
+      {error && <ErrorBanner className="mx-3 sm:mx-5 mt-3">{error}</ErrorBanner>}
 
       {pdfError ? (
         <FullPageMessage title="Could not open the document">{pdfError.message}</FullPageMessage>
@@ -342,8 +373,8 @@ export default function SigningPage() {
 function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
   const [agreed, setAgreed] = useState(false)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-      <div className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl p-8">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-gray-100 p-3 sm:p-6">
+      <div className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl p-5 sm:p-8">
         <Brand className="text-xl" />
         <h1 className="text-xl text-gray-900 font-semibold mt-6 mb-1">{session.envelope.title}</h1>
         <p className="text-sm text-gray-500 mb-4">{session.envelope.sender} has asked you, {session.recipient.name}, to review and sign this document.</p>
@@ -366,9 +397,9 @@ function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
 
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <button onClick={onDecline} disabled={busy} className="px-3 py-2 text-sm text-gray-500 hover:text-red-700">Decline to sign</button>
-          <button onClick={onContinue} disabled={!agreed} className="px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50">
+          <button onClick={onContinue} disabled={!agreed} className="px-6 py-2.5 sm:py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50">
             Continue
           </button>
         </div>

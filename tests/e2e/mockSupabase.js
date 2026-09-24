@@ -41,6 +41,9 @@ export function createMockDb() {
     tokens: new Map(), // raw token -> recipient id
     emails: [],
     savedSignatures: [],
+    templates: [],
+    templateRoles: [],
+    templateFields: [],
     files: new Map(),
     calls: []
   }
@@ -58,6 +61,9 @@ function requestUser(request) {
 }
 
 const now = () => new Date().toISOString()
+
+// What a template keeps of a field (and gives back to a new envelope's field)
+const pickFieldLayout = ({ page, type, x, y, w, h, required, label, font_size }) => ({ page, type, x, y, w, h, required, label, font_size })
 
 function withChildren(db, envelope) {
   return {
@@ -126,12 +132,65 @@ export async function installMockSupabase(page, db) {
       if (new Set(emails).size !== emails.length) {
         return json(route, 409, { code: '23505', message: 'duplicate key value violates unique constraint "recipients_envelope_email_key"' })
       }
-      Object.assign(env, { title: body.p_title, message: body.p_message, signing_order: body.p_signing_order, updated_at: now() })
+      Object.assign(env, {
+        title: body.p_title, message: body.p_message, signing_order: body.p_signing_order,
+        remind_every_days: body.p_remind_every_days, expire_after_days: body.p_expire_after_days, updated_at: now()
+      })
       db.recipients = db.recipients.filter(r => r.envelope_id !== env.id)
         .concat(body.p_recipients.map(r => ({ status: 'pending', signed_at: null, ...r, envelope_id: env.id })))
       db.fields = db.fields.filter(f => f.envelope_id !== env.id)
         .concat(body.p_fields.map(f => ({ ...f, envelope_id: env.id })))
       return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+    }
+
+    if (table === 'rpc/create_template_from_envelope') {
+      const env = db.envelopes.find(e => e.id === body.p_envelope_id && e.owner_id === ALICE.id)
+      if (!env) return json(route, 400, { code: 'P0002', message: 'Envelope not found' })
+      const names = body.p_roles.map(r => r.name)
+      if (new Set(names).size !== names.length) {
+        return json(route, 409, { code: '23505', message: 'duplicate key value violates unique constraint "template_roles_template_name_key"' })
+      }
+      const id = randomUUID()
+      db.templates.push({
+        id, owner_id: ALICE.id, name: body.p_name, original_filename: env.original_filename, page_count: env.page_count,
+        signing_order: env.signing_order, message: env.message, remind_every_days: env.remind_every_days,
+        expire_after_days: env.expire_after_days, shared: true, created_at: now()
+      })
+      for (const spec of body.p_roles) {
+        const r = db.recipients.find(x => x.id === spec.recipient_id)
+        const roleId = randomUUID()
+        db.templateRoles.push({
+          id: roleId, template_id: id, name: spec.name, role: r.role, routing_order: r.routing_order, color: r.color,
+          default_name: spec.keep_recipient ? r.name : null, default_email: spec.keep_recipient ? r.email : null
+        })
+        for (const f of db.fields.filter(x => x.recipient_id === r.id)) {
+          db.templateFields.push({ ...pickFieldLayout(f), template_id: id, role_id: roleId })
+        }
+      }
+      return json(route, 200, id)
+    }
+
+    if (table === 'rpc/create_envelope_from_template') {
+      const t = db.templates.find(x => x.id === body.p_template_id)
+      if (!t) return json(route, 400, { code: 'P0002', message: 'Template not found' })
+      const id = randomUUID()
+      db.envelopes.push({
+        id, owner_id: ALICE.id, title: body.p_title || t.name, message: t.message, status: 'draft', signing_order: t.signing_order,
+        original_filename: t.original_filename, original_path: null, page_count: t.page_count,
+        remind_every_days: t.remind_every_days, expire_after_days: t.expire_after_days, created_at: now(), updated_at: now()
+      })
+      for (const role of db.templateRoles.filter(r => r.template_id === t.id)) {
+        const person = body.p_people[role.id] ?? {}
+        const recipientId = randomUUID()
+        db.recipients.push({
+          id: recipientId, envelope_id: id, name: person.name || role.default_name, email: person.email || role.default_email,
+          role: role.role, routing_order: role.routing_order, color: role.color, status: 'pending', signed_at: null
+        })
+        for (const f of db.templateFields.filter(x => x.role_id === role.id)) {
+          db.fields.push({ ...pickFieldLayout(f), id: randomUUID(), envelope_id: id, recipient_id: recipientId })
+        }
+      }
+      return json(route, 200, id)
     }
 
     if (table === 'rpc/void_envelope') {
@@ -158,6 +217,24 @@ export async function installMockSupabase(page, db) {
     }
     if (table === 'audit_events' && method === 'GET') return respond(applyFilters(db.audit, params))
 
+    if (table === 'templates') {
+      if (method === 'GET') {
+        const owner = (t) => db.profiles.find(p => p.id === t.owner_id)
+        return respond(applyFilters(db.templates, params).map(t => ({
+          ...t,
+          owner: { full_name: owner(t)?.full_name, email: owner(t)?.email },
+          template_roles: db.templateRoles.filter(r => r.template_id === t.id)
+        })))
+      }
+      if (method === 'DELETE') {
+        const doomed = new Set(applyFilters(db.templates, params).map(t => t.id))
+        db.templates = db.templates.filter(t => !doomed.has(t.id))
+        db.templateRoles = db.templateRoles.filter(r => !doomed.has(r.template_id))
+        db.templateFields = db.templateFields.filter(f => !doomed.has(f.template_id))
+        return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+      }
+    }
+
     if (table === 'envelopes') {
       if (method === 'GET') {
         const rows = applyFilters(db.envelopes, params)
@@ -168,7 +245,7 @@ export async function installMockSupabase(page, db) {
       if (method === 'POST') {
         const created = (Array.isArray(body) ? body : [body]).map(row => ({
           id: randomUUID(), owner_id: ALICE.id, status: 'draft', signing_order: 'sequential', message: null,
-          original_path: null, created_at: now(), updated_at: now(), ...row
+          original_path: null, remind_every_days: 3, expire_after_days: 30, created_at: now(), updated_at: now(), ...row
         }))
         db.envelopes.push(...created)
         return respond(created)

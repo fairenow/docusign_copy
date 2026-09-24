@@ -33,6 +33,7 @@ const router = createBrowserRouter([
     element: <RequireAuth><AppLayout /></RequireAuth>,
     children: [
       { path: '/', element: <DashboardPage /> },
+      { path: '/templates', lazy: lazyPage(() => import('./pages/TemplatesPage')) },
       { path: '/signatures', lazy: lazyPage(() => import('./pages/SignaturesPage')) }
     ]
   },
