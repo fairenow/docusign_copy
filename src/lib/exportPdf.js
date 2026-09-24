@@ -7,6 +7,7 @@ import {
   concatTransformationMatrix,
   EncryptedPDFError
 } from 'pdf-lib'
+import { stripExtension } from './documents'
 
 /**
  * Return the fields that still need input before the document can be exported.
@@ -111,7 +112,7 @@ export function downloadPdf(bytes, fileName) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = (fileName || 'document').replace(/\.[^/.]+$/, '') + '_signed.pdf'
+  link.download = stripExtension(fileName || 'document') + '_signed.pdf'
   document.body.appendChild(link)
   link.click()
   link.remove()

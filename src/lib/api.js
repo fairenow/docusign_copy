@@ -3,7 +3,8 @@
  * readable message on failure; callers decide how to show it.
  */
 import { supabase } from './supabase'
-import { fileToPdfBytes, openPdf, stripExtension } from './documents'
+import { fileToPdfBytes, stripExtension } from './documents'
+import { loadPdfDocument } from './pdfjs'
 import { fieldToRow, recipientToRow } from './envelopeModel'
 
 const BUCKET = 'documents'
@@ -66,13 +67,15 @@ export async function fetchEnvelope(id) {
  */
 export async function createEnvelopeFromFile(file) {
   const { bytes } = await fileToPdfBytes(file)
-  const { doc, pageSizes } = await openPdf(bytes)
+  // Only the page count is needed here; opening validates the PDF
+  const doc = await loadPdfDocument(bytes)
+  const pageCount = doc.numPages
   doc.destroy()
 
   const db = client()
   const { id } = unwrap(await db
     .from('envelopes')
-    .insert({ title: stripExtension(file.name).slice(0, 200) || 'Untitled', original_filename: file.name.slice(0, 255), page_count: pageSizes.length })
+    .insert({ title: stripExtension(file.name).slice(0, 200) || 'Untitled', original_filename: file.name.slice(0, 255), page_count: pageCount })
     .select('id')
     .single())
 
@@ -124,7 +127,9 @@ export async function voidEnvelope(envelopeId, reason) {
 export function subscribeToEnvelopeChanges(onChange) {
   if (!supabase) return () => {}
   const channel = supabase
-    .channel('envelope-changes')
+    // Unique per subscription: channel() returns an existing channel with the same topic, and a
+    // remount (StrictMode, quick navigation) would otherwise reuse one that is still leaving
+    .channel(`envelope-changes-${crypto.randomUUID()}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'envelopes' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'recipients' }, onChange)
     .subscribe()

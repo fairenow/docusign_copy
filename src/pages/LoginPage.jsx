@@ -3,9 +3,10 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ALLOWED_EMAIL_DOMAIN, isSupabaseConfigured } from '../lib/supabase'
 
-// Only allow same-site relative paths as the post-login destination
+// Only allow same-site relative paths as the post-login destination.
+// Browsers treat "\" like "/", so "/\evil.com" would be protocol-relative too.
 function safeNext(value) {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/'
+  return value && value.startsWith('/') && !/^\/[/\\]/.test(value) ? value : '/'
 }
 
 // Supabase reports OAuth failures in the query string or hash of the redirect

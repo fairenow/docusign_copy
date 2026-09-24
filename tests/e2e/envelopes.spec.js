@@ -39,12 +39,14 @@ test.describe('sign-in', () => {
     await expect(page.getByRole('alert')).toHaveText('Only @flmlnk.com Google accounts can sign in.')
   })
 
-  test('ignores off-site next parameters', async ({ page }) => {
-    await signIn(page)
-    await page.goto('/login?next=//evil.example.com')
-    await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { name: 'Envelopes' })).toBeVisible()
-  })
+  for (const next of ['//evil.example.com', '/%5Cevil.example.com', 'https://evil.example.com']) {
+    test(`ignores off-site next parameter ${next}`, async ({ page }) => {
+      await signIn(page)
+      await page.goto(`/login?next=${next}`)
+      await expect(page).toHaveURL('http://localhost:4173/')
+      await expect(page.getByRole('heading', { name: 'Envelopes' })).toBeVisible()
+    })
+  }
 })
 
 test.describe('envelopes', () => {

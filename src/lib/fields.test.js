@@ -23,6 +23,13 @@ describe('createElement', () => {
     expect(el.w * 612 / (el.h * 792)).toBeCloseTo(3)
   })
 
+  it('never makes a field larger than the page', () => {
+    const el = createElement('signature', { page: 1, pageSize: { width: 100, height: 20 } })
+    expect(el.w).toBe(1)
+    expect(el.h).toBe(1)
+    expect([el.x, el.y]).toEqual([0, 0])
+  })
+
   it('rejects unknown types', () => {
     expect(() => createElement('stamp', { page: 1, pageSize: letter })).toThrow('Unknown field type')
   })

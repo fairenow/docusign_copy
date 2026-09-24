@@ -53,8 +53,9 @@ export function createElement(type, { page, pageSize }, props = {}) {
     size.width = Math.min(size.height * props.aspect, type === 'signature' ? 220 : 90)
   }
 
-  const w = props.w ?? size.width / pageSize.width
-  const h = props.h ?? size.height / pageSize.height
+  // Never wider or taller than the page (small pages, oversized form widgets)
+  const w = Math.min(props.w ?? size.width / pageSize.width, 1)
+  const h = Math.min(props.h ?? size.height / pageSize.height, 1)
 
   const base = {
     id: newId(),
