@@ -196,6 +196,10 @@ Project Settings → API. Never put the service-role key in a `VITE_` variable.
 
 ## Tests
 
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, the unit tests and the Playwright suite on
+every push to `main` and on pull requests. The Playwright suite runs under the production security
+headers from `vercel.json` (served by `vite preview`), so a policy that would break the app fails CI.
+
 ```bash
 npm test          # unit tests (field geometry, envelope rules, PDF stamping, certificate, emails)
 npm run test:e2e  # Playwright against an in-memory Supabase + signing-api mock
