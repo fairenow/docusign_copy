@@ -70,51 +70,40 @@ vercel
 
 ## Tech Stack
 
-- **React 18** - UI framework
-- **Vite** - Build tool
-- **Tailwind CSS** - Styling
-- **PDF.js** - PDF rendering
-- **Mammoth.js** - DOCX to HTML conversion
-- **jsPDF** - PDF generation
-- **Lucide React** - Icons
+- **React 18** + **Vite** + **Tailwind CSS**
+- **PDF.js 4** - rendering (worker is self-hosted, no CDN)
+- **pdf-lib** - writes fields into the original PDF (text stays searchable)
+- **Mammoth.js** + **jsPDF** - DOCX is converted to PDF on upload
+- **Supabase** - auth, Postgres, storage, Edge Functions (see below)
+- **Lucide React** - icons
 
-## Project Structure
+## Backend (Supabase)
 
-```
-docsign-react/
-├── public/
-│   └── favicon.svg
-├── src/
-│   ├── components/
-│   │   ├── DocumentViewer.jsx
-│   │   ├── LoadingOverlay.jsx
-│   │   ├── OverlayElement.jsx
-│   │   ├── Sidebar.jsx
-│   │   ├── SignaturePanel.jsx
-│   │   ├── TextOptions.jsx
-│   │   └── Toolbar.jsx
-│   ├── hooks/
-│   │   └── useDocument.js
-│   ├── utils/
-│   │   └── pdfGenerator.js
-│   ├── App.jsx
-│   ├── index.css
-│   └── main.jsx
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── vite.config.js
-└── vercel.json
-```
+The database schema lives in `supabase/migrations/` and is applied to the project
+`tdgwdniwwkqqyfuoxnwx`.
 
-## Privacy
+| Table | Purpose |
+|---|---|
+| `profiles` | Team members, one per auth user (`admin` / `member`) |
+| `envelopes` | A document out for signature (`draft → sent → completed / declined / voided`) |
+| `recipients` | Signers and CCs, with routing order and signing status |
+| `recipient_tokens` | SHA-256 hashes of signing-link tokens (service role only) |
+| `fields` | Fields assigned to recipients; positions are page fractions (0–1) |
+| `audit_events` | Append-only audit trail for the certificate of completion |
+| `templates`, `template_roles`, `template_fields` | Reusable documents |
 
-All document processing happens locally in your browser. No files are uploaded to any server.
+Access rules (row level security):
 
-## License
+- Sign-ups are limited to the domains in `private.allowed_email_domains` (seeded with
+  `flmlnk.com`). The first user to sign up becomes an admin.
+- Owners edit envelopes only while they are drafts. Sending, signing and completing
+  happen in Edge Functions with the service role; voiding uses the `void_envelope` RPC.
+- Team members listed as recipients can see an envelope once it has been sent.
+- External signers never get a database session; they use a tokenized signing link.
+- Files are stored in the private `documents` bucket as `<envelope_id>/original.pdf`
+  and `<envelope_id>/signed.pdf`.
 
-MIT License - feel free to use this for personal or commercial projects.
+### Configuration
 
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
+Copy `.env.example` to `.env.local` and fill in the publishable key from
+Project Settings → API. Never put the service-role key in a `VITE_` variable.
