@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Download, LayoutTemplate, PenLine, RotateCw, Save, Send, Sparkles } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
@@ -13,6 +13,7 @@ import {
 import { nextFieldY } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
+import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
@@ -51,6 +52,8 @@ export default function EnvelopeEditorPage() {
   const [tab, setTab] = useState('recipients') // right panel: 'recipients' | 'field'
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
+  // Phones show the document or the side panel, one at a time
+  const [mobileView, setMobileView] = useState('document') // 'document' | 'panel'
   const [events, setEvents] = useState([])
   const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
   const [savingTemplate, setSavingTemplate] = useState(false)
@@ -107,6 +110,14 @@ export default function EnvelopeEditorPage() {
   }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
+
+  // Phones and narrow windows: fit the page to the screen (beside the field toolbar)
+  const fittedRef = useRef(false)
+  useEffect(() => {
+    if (fittedRef.current || !pageSizes.length || window.innerWidth >= 768) return
+    fittedRef.current = true
+    setZoom(fitWidthZoom(pageSizes, window.innerWidth - (editable ? 76 : 0)))
+  }, [pageSizes, editable])
   const isOwner = Boolean(envelope && user) && envelope.owner_id === user.id
   const dirty = useMemo(
     () => editable && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
@@ -215,6 +226,7 @@ export default function EnvelopeEditorPage() {
       setSuggestions(found.length ? assignSuggestions(found, draft.recipients, me) : null)
       if (!found.length) setSuggestNotice('No blank lines or placeholders found. Place fields from the left.')
       setTab('recipients')
+      setMobileView('panel')
     } finally {
       setSuggesting(false)
     }
@@ -391,6 +403,7 @@ export default function EnvelopeEditorPage() {
             onClick={() => { setTemplateSaved(false); setSavingTemplate(true) }}
             disabled={!draft.recipients.length}
             title={draft.recipients.length ? 'Reuse this document and its fields' : 'Add recipients and fields first'}
+            aria-label="Save as template"
             className="btn-secondary px-3 py-2 rounded-md text-sm flex items-center gap-2"
           >
             <LayoutTemplate size={16} /> <span className="hidden lg:inline">Save as template</span>
@@ -400,10 +413,11 @@ export default function EnvelopeEditorPage() {
           <>
             <button
               onClick={save}
+              aria-label="Save"
               disabled={!dirty || saveState.saving}
               className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"
             >
-              <Save size={16} /> Save
+              <Save size={16} /> <span className="hidden sm:inline">Save</span>
             </button>
             <button
               onClick={handleSend}
@@ -441,7 +455,7 @@ export default function EnvelopeEditorPage() {
       </header>
 
       {/* Toolbar */}
-      <div className="h-11 px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
+      <div className="h-11 px-2 sm:px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0 overflow-x-auto">
         <PageControls
           currentPage={currentPage}
           totalPages={pageSizes.length}
@@ -454,9 +468,11 @@ export default function EnvelopeEditorPage() {
             onClick={suggest}
             disabled={!pdfDoc || suggesting}
             title="Find the blank lines and placeholders and suggest fields for them"
-            className="ml-auto btn-secondary px-3 py-1.5 rounded-md text-sm flex items-center gap-2"
+            className="ml-auto btn-secondary px-3 py-1.5 rounded-md text-sm flex items-center gap-2 whitespace-nowrap flex-shrink-0"
           >
-            <Sparkles size={15} className="text-violet-600" /> {suggesting ? 'Reading the document…' : 'Suggest fields'}
+            <Sparkles size={15} className="text-violet-600" />
+            <span className="hidden sm:inline">{suggesting ? 'Reading the document…' : 'Suggest fields'}</span>
+            <span className="sm:hidden">{suggesting ? 'Reading…' : 'Suggest'}</span>
           </button>
         )}
       </div>
@@ -474,6 +490,7 @@ export default function EnvelopeEditorPage() {
       )}
 
       <div className="flex-1 flex min-h-0">
+        <div className={`flex-1 min-w-0 min-h-0 ${mobileView === 'panel' ? 'hidden md:flex' : 'flex'}`}>
         {editable && <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
 
         {/* Document */}
@@ -502,8 +519,10 @@ export default function EnvelopeEditorPage() {
           />
         )}
 
-        {/* Right panel */}
-        <aside className="w-80 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col min-h-0">
+        </div>
+
+        {/* Right panel (on phones: its own view) */}
+        <aside className={`${mobileView === 'document' ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-shrink-0 bg-white border-l border-gray-200 flex-col min-h-0`}>
           {editable ? (
             <>
               <div role="tablist" className="flex gap-6 px-4 border-b border-gray-200 flex-shrink-0">
@@ -598,6 +617,26 @@ export default function EnvelopeEditorPage() {
           )}
         </aside>
       </div>
+
+      {/* Phones: switch between the document and the panel */}
+      <nav className="md:hidden flex border-t border-gray-200 bg-white flex-shrink-0 pb-[env(safe-area-inset-bottom)]" aria-label="View">
+        {[
+          ['document', 'Document'],
+          ['panel', editable ? (selectedField ? 'Field settings' : 'Recipients & settings') : 'Status & activity']
+        ].map(([view, label]) => (
+          <button
+            key={view}
+            onClick={() => setMobileView(view)}
+            aria-pressed={mobileView === view}
+            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${mobileView === view ? 'text-blue-600 border-t-2 border-blue-600 -mt-px' : 'text-gray-500'}`}
+          >
+            {label}
+            {view === 'panel' && editable && sendProblems.length > 0 && (
+              <span className="min-w-[1.25rem] px-1 rounded-full bg-amber-100 text-amber-800 text-xs">{sendProblems.length}</span>
+            )}
+          </button>
+        ))}
+      </nav>
 
       {savingTemplate && (
         <SaveTemplateDialog

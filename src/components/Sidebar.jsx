@@ -20,7 +20,8 @@ export default function Sidebar({
   onPlaceField,
   onPlaceAllFields,
   onDismissDetected,
-  onRedetect
+  onRedetect,
+  className = ''
 }) {
   const [showDetectedFields, setShowDetectedFields] = useState(true)
 
@@ -44,7 +45,7 @@ export default function Sidebar({
   const handleAddCheckbox = requireDocument(onAddCheckbox)
 
   return (
-    <aside className="w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+    <aside className={`w-full md:w-72 flex-1 md:flex-none bg-white border-r border-gray-200 flex-col flex-shrink-0 min-h-0 ${className || 'flex'}`}>
       <div className="p-5 border-b border-gray-200">
         <h1><Brand className="text-2xl" /></h1>
         <Link to="/" className="text-xs text-gray-500 hover:text-gray-900">← Envelopes</Link>

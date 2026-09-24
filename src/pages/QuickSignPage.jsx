@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
+import Brand from '../components/Brand'
 import DocumentViewer from '../components/DocumentViewer'
 import FillField from '../components/FillField'
 import FileDropzone from '../components/FileDropzone'
@@ -13,6 +15,7 @@ import { createElement, elementFromDetected, nextFieldY } from '../lib/fields'
 import { renderTypedSignature, signatureFromImage } from '../lib/signatureImage'
 import { useAuth } from '../auth/useAuth'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
+import { fitWidthZoom } from '../lib/viewer'
 
 /**
  * Single-user signing: open a document, fill and sign it, download the result.
@@ -22,6 +25,8 @@ export default function QuickSignPage() {
   const [elements, setElements] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
+  // Phones show the document or the field tools, one at a time
+  const [mobileView, setMobileView] = useState('document') // 'document' | 'tools'
   const [loading, setLoading] = useState(false)
   const [activePanel, setActivePanel] = useState(null)
   // Signature/initials created in this session, reused for "Click to sign" placeholders
@@ -57,6 +62,11 @@ export default function QuickSignPage() {
     clearDetectedFields,
     redetectFields
   } = useDocument()
+
+  // Phones and narrow windows: fit each newly opened document to the screen
+  useEffect(() => {
+    if (pageSizes.length && window.innerWidth < 768) setZoom(fitWidthZoom(pageSizes, window.innerWidth))
+  }, [pageSizes])
 
   useUnsavedChangesWarning(elements.length > 0)
 
@@ -176,26 +186,33 @@ export default function QuickSignPage() {
     setLoading(false)
   }
 
+  // Adding a field on a phone goes back to the document, where the field is
+  const thenShowDocument = (action) => (...args) => {
+    action(...args)
+    setMobileView('document')
+  }
+
   return (
-    <div className="flex h-screen">
+    <div className="flex flex-col md:flex-row h-screen">
       <Sidebar
+        className={mobileView === 'tools' ? 'flex' : 'hidden md:flex'}
         hasDocument={!!file}
         activePanel={activePanel}
         onActivePanelChange={setActivePanel}
-        onAddSignature={handleSignatureCreated}
-        onAddText={(options) => addElement('text', options)}
-        onAddDate={() => addElement('date')}
-        onAddInitials={handleAddInitials}
-        onAddCheckbox={() => addElement('checkbox')}
+        onAddSignature={thenShowDocument(handleSignatureCreated)}
+        onAddText={thenShowDocument((options) => addElement('text', options))}
+        onAddDate={thenShowDocument(() => addElement('date'))}
+        onAddInitials={thenShowDocument(handleAddInitials)}
+        onAddCheckbox={thenShowDocument(() => addElement('checkbox'))}
         detectedFields={detectedFields}
         isDetecting={isDetecting}
-        onPlaceField={(field) => placeDetectedFields([field])}
-        onPlaceAllFields={placeDetectedFields}
+        onPlaceField={thenShowDocument((field) => placeDetectedFields([field]))}
+        onPlaceAllFields={thenShowDocument(placeDetectedFields)}
         onDismissDetected={clearDetectedFields}
         onRedetect={redetectFields}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className={`flex-1 flex-col overflow-hidden min-h-0 ${mobileView === 'document' ? 'flex' : 'hidden md:flex'}`}>
         {file && (
           <Toolbar
             fileName={file.name}
@@ -209,8 +226,14 @@ export default function QuickSignPage() {
           />
         )}
 
+        {!file && (
+          <div className="md:hidden px-4 h-14 flex items-center justify-between bg-white border-b border-gray-200 flex-shrink-0">
+            <Brand />
+            <Link to="/" className="text-sm text-gray-600">← Envelopes</Link>
+          </div>
+        )}
         {!file ? (
-          <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
+          <div className="flex-1 flex items-center justify-center bg-gray-50 p-4 sm:p-8">
             <FileDropzone onFile={handleFileLoad} />
           </div>
         ) : (
@@ -228,6 +251,22 @@ export default function QuickSignPage() {
         />
         )}
       </main>
+
+      {/* Phones: switch between the document and the field tools */}
+      {file && (
+        <nav className="md:hidden flex border-t border-gray-200 bg-white flex-shrink-0 pb-[env(safe-area-inset-bottom)]" aria-label="View">
+          {[['document', 'Document'], ['tools', 'Add fields']].map(([view, label]) => (
+            <button
+              key={view}
+              onClick={() => setMobileView(view)}
+              aria-pressed={mobileView === view}
+              className={`flex-1 py-3 text-sm font-medium ${mobileView === view ? 'text-blue-600 border-t-2 border-blue-600 -mt-px' : 'text-gray-500'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {signingFieldId && (
         <Modal title="Adopt your signature" onClose={() => setSigningFieldId(null)}>

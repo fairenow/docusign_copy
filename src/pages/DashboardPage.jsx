@@ -98,20 +98,22 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex-1 p-6 max-w-6xl w-full mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl text-gray-900 font-semibold">Envelopes</h1>
-        <div className="flex gap-2">
+    <div className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl text-gray-900 font-semibold">Envelopes</h1>
           <button onClick={refresh} className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Refresh">
             <RefreshCw size={18} />
           </button>
-          <Link to="/templates" className="btn-secondary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+        </div>
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+          <Link to="/templates" className="btn-secondary px-4 py-2.5 sm:py-2 rounded-lg text-sm flex items-center justify-center gap-2 whitespace-nowrap">
             <LayoutTemplate size={16} />
             Use a template
           </Link>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 btn-primary rounded-lg text-white text-sm flex items-center gap-2"
+            className="px-4 py-2.5 sm:py-2 btn-primary rounded-lg text-white text-sm flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <FilePlus size={16} />
             New envelope
@@ -120,14 +122,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 border-b border-gray-200" role="tablist">
+      <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0" role="tablist">
         {ENVELOPE_GROUPS.map(g => (
           <button
             key={g.id}
             role="tab"
             aria-selected={group === g.id}
             onClick={() => setGroup(g.id)}
-            className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+            className={`px-3 sm:px-4 py-2 text-sm -mb-px border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
               group === g.id ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
@@ -168,10 +170,10 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
   const updated = formatDateTime(envelope.updated_at)
 
   return (
-    <li className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50" data-testid="envelope-row">
+    <li className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1.5 px-4 py-3 hover:bg-gray-50" data-testid="envelope-row">
       <Link
         to={envelopeGroup(envelope, user) === 'action' ? `/envelopes/${envelope.id}/sign` : `/envelopes/${envelope.id}`}
-        className="flex-1 min-w-0"
+        className="basis-full sm:basis-auto sm:flex-1 min-w-0"
       >
         <p className="text-gray-900 font-medium truncate">{envelope.title}</p>
         <p className="text-xs text-gray-500 truncate">
@@ -183,7 +185,7 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
       <span className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${STATUS_STYLES[envelope.status]}`}>
         {STATUS_LABELS[envelope.status]}
       </span>
-      <span className="text-xs text-gray-500 w-40 text-right whitespace-nowrap">{updated}</span>
+      <span className="flex-1 sm:flex-none text-xs text-gray-500 sm:w-40 sm:text-right whitespace-nowrap">{updated}</span>
       <div className="w-8 flex justify-end">
         {envelope.status === 'completed' && envelope.final_path && (
           <button onClick={onDownload} className="p-1.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Download signed PDF">
