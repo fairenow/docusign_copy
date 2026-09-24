@@ -130,6 +130,16 @@ Edge Function secrets (Supabase dashboard → Edge Functions → Secrets):
 | `EMAIL_FROM` | `DocSign <sign@yourdomain.com>` (a domain verified in Resend) |
 | `RESEND_API_KEY` | `re_...` |
 
+### Sign-in
+
+Team members sign in with an emailed one-time link (Supabase Auth, PKCE, so the link must be
+opened in the same browser). Supabase Auth settings:
+
+- **URL Configuration:** Site URL = the app URL; add `<app URL>/**` to Redirect URLs.
+- **SMTP Settings:** use Resend (host `smtp.resend.com`, port `465`, user `resend`, password = a
+  Resend API key, sender on a verified domain). The built-in mailer only sends a few emails an hour.
+- **Rate Limits:** raise "emails sent per hour" once custom SMTP is on.
+
 ### Configuration
 
 Copy `.env.example` to `.env.local` and fill in the publishable key from

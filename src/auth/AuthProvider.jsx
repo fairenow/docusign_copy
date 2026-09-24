@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { supabase, ALLOWED_EMAIL_DOMAIN } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { fetchProfile } from '../lib/api'
 import { AuthContext } from './useAuth'
 
@@ -32,17 +32,14 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true }
   }, [userId])
 
-  const signInWithGoogle = useCallback(async (returnTo = '/') => {
-    // Come back to /login: it forwards to `returnTo` on success and shows OAuth errors otherwise
-    const redirectTo = new URL('/login', window.location.origin)
-    redirectTo.searchParams.set('next', returnTo)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectTo.href,
-        // hd limits Google's account picker to the Workspace domain; the database enforces it
-        queryParams: { hd: ALLOWED_EMAIL_DOMAIN, prompt: 'select_account' }
-      }
+  // Email a one-time sign-in link. It returns to /login, which forwards to `returnTo` on
+  // success and shows link errors otherwise. With PKCE the link must be opened in this browser.
+  const sendSignInLink = useCallback(async (email, returnTo = '/') => {
+    const emailRedirectTo = new URL('/login', window.location.origin)
+    emailRedirectTo.searchParams.set('next', returnTo)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: emailRedirectTo.href, shouldCreateUser: true }
     })
     if (error) throw error
   }, [])
@@ -55,9 +52,9 @@ export function AuthProvider({ children }) {
     user: session?.user ?? null,
     profile,
     isLoading: session === undefined,
-    signInWithGoogle,
+    sendSignInLink,
     signOut
-  }), [session, profile, signInWithGoogle, signOut])
+  }), [session, profile, sendSignInLink, signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

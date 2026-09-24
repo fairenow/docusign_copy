@@ -21,7 +21,7 @@ export function fakeSession(user = ALICE) {
     expires_in: 3600,
     expires_at: exp,
     refresh_token: 'refresh-token',
-    user: { id: user.id, email: user.email, aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'google' }, user_metadata: { full_name: user.name } }
+    user: { id: user.id, email: user.email, aud: 'authenticated', role: 'authenticated', app_metadata: { provider: 'email' }, user_metadata: { full_name: user.name } }
   }
 }
 
@@ -90,12 +90,17 @@ export async function installMockSupabase(page, db) {
     return route.fallback()
   })
 
-  // Auth: the OAuth redirect is captured, logout accepted
+  // Auth: sign-in link requests are captured, logout accepted
   await page.route(`${SUPABASE_URL}/auth/v1/**`, async (route, request) => {
     const url = new URL(request.url())
     db.calls.push({ type: 'auth', method: request.method(), path: url.pathname, url: request.url() })
-    if (url.pathname.endsWith('/authorize')) {
-      return route.fulfill({ status: 200, contentType: 'text/html', body: '<h1>Google sign-in (mock)</h1>' })
+    if (url.pathname.endsWith('/otp')) {
+      const body = JSON.parse(request.postData() || '{}')
+      db.calls.at(-1).body = body
+      // Like the database trigger: other domains cannot sign up
+      if (!body.email?.endsWith('@flmlnk.com')) return json(route, 500, { code: 500, error_code: 'unexpected_failure', msg: 'Database error saving new user' })
+      db.emails.push({ to: body.email, kind: 'sign_in' })
+      return json(route, 200, {})
     }
     if (url.pathname.endsWith('/logout')) return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
     return json(route, 404, { message: 'not mocked' })

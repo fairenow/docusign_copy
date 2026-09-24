@@ -18,25 +18,35 @@ test.beforeEach(async ({ page }) => {
 })
 
 test.describe('sign-in', () => {
-  test('redirects to login and starts Google sign-in restricted to the domain', async ({ page }) => {
+  test('redirects to login and emails a sign-in link that returns to the requested page', async ({ page }) => {
     await page.goto('/envelopes/abc')
     await expect(page).toHaveURL(/\/login\?next=%2Fenvelopes%2Fabc$/)
 
-    await page.getByRole('button', { name: 'Sign in with Google' }).click()
-    await expect(page.getByRole('heading', { name: 'Google sign-in (mock)' })).toBeVisible()
+    await page.getByLabel('Work email').fill('Alice@flmlnk.com ')
+    await page.getByRole('button', { name: 'Email me a sign-in link' }).click()
+    await expect(page.getByRole('status')).toContainText('We sent a sign-in link to alice@flmlnk.com')
 
-    const authorize = new URL(db.calls.find(c => c.type === 'auth' && c.path.endsWith('/authorize')).url)
-    expect(authorize.searchParams.get('provider')).toBe('google')
-    expect(authorize.searchParams.get('hd')).toBe('flmlnk.com')
-    expect(authorize.searchParams.get('code_challenge')).toBeTruthy() // PKCE
-    const redirect = new URL(authorize.searchParams.get('redirect_to'))
+    const otp = db.calls.find(c => c.type === 'auth' && c.path.endsWith('/otp'))
+    expect(otp.body.email).toBe('alice@flmlnk.com')
+    expect(otp.body.code_challenge).toBeTruthy() // PKCE
+    const redirect = new URL(new URL(otp.url).searchParams.get('redirect_to'))
     expect(redirect.pathname).toBe('/login')
     expect(redirect.searchParams.get('next')).toBe('/envelopes/abc')
   })
 
-  test('explains a rejected sign-up from another domain', async ({ page }) => {
+  test('only accepts addresses on the allowed domain', async ({ page }) => {
+    await page.goto('/login')
+    await page.getByLabel('Work email').fill('someone@gmail.com')
+    await page.getByRole('button', { name: 'Email me a sign-in link' }).click()
+    await expect(page.getByRole('alert')).toHaveText('Only @flmlnk.com email addresses can sign in.')
+    expect(db.calls.some(c => c.type === 'auth' && c.path.endsWith('/otp'))).toBe(false)
+  })
+
+  test('explains a rejected sign-up and an expired link', async ({ page }) => {
     await page.goto('/login?error=server_error&error_description=Database+error+saving+new+user')
-    await expect(page.getByRole('alert')).toHaveText('Only @flmlnk.com Google accounts can sign in.')
+    await expect(page.getByRole('alert')).toHaveText('Only @flmlnk.com email addresses can sign in.')
+    await page.goto('/login#error=access_denied&error_description=Email+link+is+invalid+or+has+expired')
+    await expect(page.getByRole('alert')).toHaveText('Email link is invalid or has expired')
   })
 
   for (const next of ['//evil.example.com', '/%5Cevil.example.com', 'https://evil.example.com']) {
