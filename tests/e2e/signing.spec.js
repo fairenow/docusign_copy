@@ -250,3 +250,29 @@ test('signers with only a link are not offered saving', async ({ page }) => {
   await expect(page.getByRole('dialog').getByLabel('Save to my signatures for next time')).toHaveCount(0)
   expect(db.calls.some(c => c.table === 'saved_signatures')).toBe(false)
 })
+
+test('signers can change or remove a signature they already placed', async ({ page }) => {
+  const { token } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
+  await page.goto(`/sign/${token}`)
+  await page.getByLabel('I agree to use electronic records and signatures.').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  const field = page.locator('[data-field-type="signature"]')
+  await field.click()
+  await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
+  const first = await field.locator('img').getAttribute('src')
+  await expect(page.getByTestId('remaining')).toHaveText('1 required field left')
+
+  // Clicking the signed field offers to change it; a new one replaces the old
+  await field.click()
+  const change = page.getByRole('dialog', { name: 'Change your signature' })
+  await change.getByRole('button', { name: 'Type' }).click()
+  await change.getByRole('textbox').fill('C. Client')
+  await change.getByRole('button', { name: 'Adopt and sign' }).click()
+  await expect(field.locator('img')).not.toHaveAttribute('src', first)
+
+  // ...or removes it from the field
+  await field.click()
+  await page.getByRole('dialog', { name: 'Change your signature' }).getByRole('button', { name: 'Remove from this field' }).click()
+  await expect(field.locator('img')).toHaveCount(0)
+  await expect(page.getByTestId('remaining')).toHaveText('2 required fields left')
+})

@@ -117,15 +117,29 @@ export default function SigningPage() {
     if (element.type === 'checkbox') {
       setValue(element.id, element.checked ? 'false' : 'true')
     } else if (element.type === 'signature' || element.type === 'initials') {
-      if (adopted[element.type]) setValue(element.id, adopted[element.type])
+      // A signed field opens "change": adopt a new one or remove it from this field
+      if (element.data) setAdopting({ type: element.type, fieldId: element.id, changing: true })
+      else if (adopted[element.type]) setValue(element.id, adopted[element.type])
       else setAdopting({ type: element.type, fieldId: element.id })
     }
   }, [adopted, setValue])
 
+  const clearValue = useCallback((id) => setValues(v => {
+    const next = { ...v }
+    delete next[id]
+    return next
+  }), [])
+
   const handleAdopt = (image, remember) => {
     const { type, fieldId } = adopting
+    const previous = adopted[type]
     setAdopted(a => ({ ...a, [type]: image }))
-    setValue(fieldId, image)
+    // A new signature replaces the old one everywhere it was used, so they all match
+    setValues(v => {
+      const next = { ...v, [fieldId]: image }
+      if (previous) for (const f of fields) if (f.type === type && v[f.id] === previous) next[f.id] = image
+      return next
+    })
     setAdopting(null)
     if (remember) {
       saveSignature(type, image).catch(err => setError(`Your ${type} was added, but could not be saved for next time: ${err.message}`))
@@ -137,7 +151,7 @@ export default function SigningPage() {
     return (
       <div
         className={`w-full h-full ${incomplete ? 'ring-2 ring-amber-400' : ''}`}
-        title={`${fieldLabel(element)}${element.required ? ' (required)' : ''}`}
+        title={`${fieldLabel(element)}${element.required ? ' (required)' : ''}${element.data ? ' · click to change' : ''}`}
       >
         <FillField
           {...ctx}
@@ -277,7 +291,10 @@ export default function SigningPage() {
       )}
 
       {adopting && (
-        <Modal title={adopting.type === 'signature' ? 'Adopt your signature' : 'Adopt your initials'} onClose={() => setAdopting(null)}>
+        <Modal
+          title={`${adopting.changing ? 'Change' : 'Adopt'} your ${adopting.type === 'signature' ? 'signature' : 'initials'}`}
+          onClose={() => setAdopting(null)}
+        >
           <p className="text-sm text-gray-500 mb-3">
             {adopting.type === 'signature'
               ? 'Draw or type your signature. It will be placed wherever you click a signature field.'
@@ -290,6 +307,14 @@ export default function SigningPage() {
             canSave={canSaveSignatures}
             onAdopt={handleAdopt}
           />
+          {adopting.changing && (
+            <button
+              onClick={() => { clearValue(adopting.fieldId); setAdopting(null) }}
+              className="mt-4 w-full py-2 rounded-md border border-gray-300 text-sm text-red-700 hover:bg-red-50"
+            >
+              Remove from this field
+            </button>
+          )}
         </Modal>
       )}
     </div>
