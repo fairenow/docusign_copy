@@ -3,9 +3,12 @@
  * field placement and signing pipeline as a PDF.
  *
  * docx-preview lays the document out with Word's own formatting (fonts, alignment,
- * indents, tabs, numbering, tables, page size, margins, headers and footers). Each page
- * is captured as an image, with the words on top as invisible text so the PDF stays
- * searchable and field detection still finds "Signature" lines.
+ * indents, tabs, numbering, tables, page size, margins, headers and footers) inside an
+ * isolated frame, so the app's styles cannot change it. Each page is then painted by the
+ * browser itself (SVG foreignObject), which reproduces that layout exactly, and the words
+ * are added on top as invisible text so the PDF stays searchable and field detection still
+ * finds "Signature" lines. html2canvas is only a fallback for browsers that refuse to
+ * export such a painting (older Safari); it redraws text itself and is less exact.
  */
 import { encodable } from '../../supabase/functions/_shared/pdfStamp.js'
 
@@ -14,22 +17,12 @@ const RENDER_SCALE = 2 // capture at 192 dpi so text stays crisp when zoomed or 
 const LETTER_HEIGHT_PX = 1056
 
 export async function docxToPdf(file) {
-  const [{ renderAsync }, { default: html2canvas }, { PDFDocument, StandardFonts }] = await Promise.all([
-    import('docx-preview'),
-    import('html2canvas'),
-    import('pdf-lib')
-  ])
-
-  // html2canvas captures what is laid out, so render in place behind the app
-  const host = document.createElement('div')
-  host.style.cssText = 'position:absolute;left:0;top:0;z-index:-1;pointer-events:none;'
-  const styles = document.createElement('div')
-  const body = document.createElement('div')
-  host.append(styles, body)
-  document.body.appendChild(host)
+  const [{ renderAsync }, { PDFDocument, StandardFonts }] = await Promise.all([import('docx-preview'), import('pdf-lib')])
+  const frame = await createLayoutFrame()
+  const doc = frame.contentDocument
 
   try {
-    await renderAsync(await file.arrayBuffer(), body, styles, {
+    await renderAsync(await file.arrayBuffer(), doc.body, doc.head, {
       className: 'docx',
       inWrapper: false,
       breakPages: true,
@@ -41,24 +34,19 @@ export async function docxToPdf(file) {
       renderChanges: false
     })
     // The converted document is only rendered, never interacted with
-    body.querySelectorAll('a[href]').forEach(a => a.removeAttribute('href'))
-    await document.fonts?.ready
+    doc.querySelectorAll('a[href]').forEach(a => a.removeAttribute('href'))
+    await doc.fonts?.ready
 
-    const sections = paginate([...body.querySelectorAll('section.docx')])
+    const sections = paginate([...doc.querySelectorAll('section.docx')])
     if (!sections.length) throw new Error('This Word document has no pages to show.')
+    const styles = [...doc.head.querySelectorAll('style')]
 
     const pdf = await PDFDocument.create()
     const font = await pdf.embedFont(StandardFonts.Helvetica)
     for (const section of sections) {
       const box = section.getBoundingClientRect()
       const pageHeight = pageHeightOf(section) || LETTER_HEIGHT_PX
-      const canvas = await html2canvas(section, {
-        scale: RENDER_SCALE,
-        backgroundColor: '#ffffff',
-        logging: false,
-        scrollX: 0,
-        scrollY: -window.scrollY
-      })
+      const canvas = await paint(section, styles, box)
       const words = wordBoxes(section, box)
 
       // A block taller than a page (e.g. a long table) cannot be moved; slice it instead
@@ -75,13 +63,62 @@ export async function docxToPdf(file) {
     pdf.setTitle(file.name.replace(/\.docx$/i, ''))
     return await pdf.save()
   } finally {
-    host.remove()
+    frame.remove()
+  }
+}
+
+/** An off-screen, style-free standards-mode document for laying out the Word file. */
+async function createLayoutFrame() {
+  const frame = document.createElement('iframe')
+  frame.setAttribute('aria-hidden', 'true')
+  frame.tabIndex = -1
+  // Off screen but laid out (display:none would skip layout); wide enough for any page
+  frame.style.cssText = 'position:fixed;left:-20000px;top:0;width:1800px;height:1200px;border:0;visibility:hidden;'
+  const loaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }))
+  frame.srcdoc = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0"></body></html>'
+  document.body.appendChild(frame)
+  await loaded
+  return frame
+}
+
+/** Paint one page at RENDER_SCALE exactly as the browser laid it out. */
+async function paint(section, styles, box) {
+  const width = Math.ceil(box.width)
+  const height = Math.ceil(box.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(width * RENDER_SCALE)
+  canvas.height = Math.ceil(height * RENDER_SCALE)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  try {
+    const serializer = new XMLSerializer()
+    // The page is drawn at the image's top-left corner, as measured, without its on-screen margin or shadow
+    const markup = styles.map(s => serializer.serializeToString(s)).join('') +
+      '<style>section.docx{margin:0 !important;box-shadow:none !important}</style>' +
+      serializer.serializeToString(section)
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+      `<foreignObject x="0" y="0" width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="margin:0">${markup}</div></foreignObject></svg>`
+    // A data: URL (not blob:) keeps the canvas exportable in Chrome
+    const image = new Image()
+    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+    await image.decode()
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+    ctx.getImageData(0, 0, 1, 1) // throws if the browser marked the painting as not exportable
+    return canvas
+  } catch (err) {
+    console.warn('Falling back to html2canvas for this page:', err)
+    const { default: html2canvas } = await import('html2canvas')
+    return html2canvas(section, { scale: RENDER_SCALE, backgroundColor: '#ffffff', logging: false, windowWidth: 1800 })
   }
 }
 
 // docx-preview sizes pages in pt; the computed style gives px
+const styleOf = (el) => el.ownerDocument.defaultView.getComputedStyle(el)
+
 function pageHeightOf(section) {
-  const style = getComputedStyle(section)
+  const style = styleOf(section)
   return parseFloat(style.minHeight) || parseFloat(style.height) || 0
 }
 
@@ -107,7 +144,7 @@ function splitOverflow(section) {
   const article = section.querySelector(':scope > article')
   if (!article) return null
 
-  const bottom = section.getBoundingClientRect().top + pageHeight - parseFloat(getComputedStyle(section).paddingBottom || '0')
+  const bottom = section.getBoundingClientRect().top + pageHeight - parseFloat(styleOf(section).paddingBottom || '0')
   const blocks = [...article.children]
   const first = blocks.findIndex(block => block.getBoundingClientRect().bottom > bottom + 0.5)
   // Nothing to move, or the first block alone is taller than the page (sliced later)
@@ -127,7 +164,7 @@ function splitOverflow(section) {
 
 /** Keep automatic numbering (CSS counters) running across a moved page break. */
 function carryCounters(lastKept, nextArticle) {
-  const counters = getComputedStyle(lastKept).counterIncrement
+  const counters = styleOf(lastKept).counterIncrement
   if (!counters || counters === 'none') return
   const names = counters.split(/\s+/).filter(token => /^[A-Za-z_-][\w-]*$/.test(token))
   if (!names.length) return
@@ -135,7 +172,7 @@ function carryCounters(lastKept, nextArticle) {
   const values = Object.fromEntries(names.map(n => [n, 0]))
   let node = lastKept
   while (node) {
-    const inc = getComputedStyle(node).counterIncrement
+    const inc = styleOf(node).counterIncrement
     for (const name of names) if (inc.split(/\s+/).includes(name)) values[name]++
     node = node.previousElementSibling
   }
@@ -145,8 +182,9 @@ function carryCounters(lastKept, nextArticle) {
 /** Every word's box relative to the page, for the invisible text layer. */
 function wordBoxes(section, box) {
   const words = []
-  const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT)
-  const range = document.createRange()
+  const doc = section.ownerDocument
+  const walker = doc.createTreeWalker(section, NodeFilter.SHOW_TEXT)
+  const range = doc.createRange()
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.textContent
     for (const match of text.matchAll(/\S+/g)) {
