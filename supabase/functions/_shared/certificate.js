@@ -13,7 +13,6 @@ const INK = rgb(0.1, 0.12, 0.16)
 const MUTED = rgb(0.42, 0.45, 0.5)
 const RULE = rgb(0.85, 0.86, 0.88)
 
-
 export function formatTimestamp(value) {
   if (!value) return '—'
   const d = new Date(value)
