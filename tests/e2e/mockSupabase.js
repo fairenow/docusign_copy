@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { ADJUSTMENT_LIMITS } from '../../supabase/functions/_shared/signing.js'
+import { ADJUSTMENT_LIMITS, signerCanMove } from '../../supabase/functions/_shared/signing.js'
 
 export const SUPABASE_URL = 'https://e2e-test.supabase.co'
 export const STORAGE_KEY = 'sb-e2e-test-auth-token'
@@ -135,7 +135,8 @@ export async function installMockSupabase(page, db) {
       }
       Object.assign(env, {
         title: body.p_title, message: body.p_message, signing_order: body.p_signing_order,
-        remind_every_days: body.p_remind_every_days, expire_after_days: body.p_expire_after_days, updated_at: now()
+        remind_every_days: body.p_remind_every_days, expire_after_days: body.p_expire_after_days,
+        allow_signer_adjustments: body.p_allow_signer_adjustments, updated_at: now()
       })
       db.recipients = db.recipients.filter(r => r.envelope_id !== env.id)
         .concat(body.p_recipients.map(r => ({
@@ -157,7 +158,7 @@ export async function installMockSupabase(page, db) {
       db.templates.push({
         id, owner_id: ALICE.id, name: body.p_name, original_filename: env.original_filename, page_count: env.page_count,
         signing_order: env.signing_order, message: env.message, remind_every_days: env.remind_every_days,
-        expire_after_days: env.expire_after_days, shared: true, created_at: now()
+        expire_after_days: env.expire_after_days, allow_signer_adjustments: env.allow_signer_adjustments, shared: true, created_at: now()
       })
       for (const spec of body.p_roles) {
         const r = db.recipients.find(x => x.id === spec.recipient_id)
@@ -181,7 +182,8 @@ export async function installMockSupabase(page, db) {
       db.envelopes.push({
         id, owner_id: ALICE.id, title: body.p_title || t.name, message: t.message, status: 'draft', signing_order: t.signing_order,
         original_filename: t.original_filename, original_path: null, page_count: t.page_count,
-        remind_every_days: t.remind_every_days, expire_after_days: t.expire_after_days, created_at: now(), updated_at: now()
+        remind_every_days: t.remind_every_days, expire_after_days: t.expire_after_days,
+        allow_signer_adjustments: t.allow_signer_adjustments, created_at: now(), updated_at: now()
       })
       for (const role of db.templateRoles.filter(r => r.template_id === t.id)) {
         const person = body.p_people[role.id] ?? {}
@@ -249,7 +251,7 @@ export async function installMockSupabase(page, db) {
       if (method === 'POST') {
         const created = (Array.isArray(body) ? body : [body]).map(row => ({
           id: randomUUID(), owner_id: ALICE.id, status: 'draft', signing_order: 'sequential', message: null,
-          original_path: null, remind_every_days: 3, expire_after_days: 30, created_at: now(), updated_at: now(), ...row
+          original_path: null, remind_every_days: 3, expire_after_days: 30, allow_signer_adjustments: false, created_at: now(), updated_at: now(), ...row
         }))
         db.envelopes.push(...created)
         return respond(created)
@@ -409,7 +411,7 @@ async function installMockSigningApi(page, db) {
       }
       return json(route, 200, {
         state,
-        envelope: { id: env.id, title: env.title, message: env.message, sender: ALICE.name },
+        envelope: { id: env.id, title: env.title, message: env.message, allow_signer_adjustments: env.allow_signer_adjustments, sender: ALICE.name },
         recipient: { id: recipient.id, name: recipient.name, email: recipient.email },
         fields: state === 'ready' ? myFields : [],
         documentUrl: state === 'ready' ? `${SUPABASE_URL}/storage/v1/object/sign/documents/${env.original_path}?token=signed` : null
@@ -435,6 +437,8 @@ async function installMockSigningApi(page, db) {
       for (const [id, p] of Object.entries(positions)) {
         if (p.x < 0 || p.y < 0 || p.x + p.w > 1.000001 || p.y + p.h > 1.000001) return fail(400, 'Fields must stay on the page')
         const f = myFields.find(x => x.id === id)
+        const moved = ['x', 'y', 'w', 'h'].some(k => Math.abs(p[k] - f[k]) > 1e-6)
+        if (moved && !signerCanMove(f, env.allow_signer_adjustments)) return fail(400, 'This field cannot be moved')
         const { moveX, moveY, minScale, maxScale } = ADJUSTMENT_LIMITS
         if (Math.abs(p.x - f.x) > moveX + 1e-6 || Math.abs(p.y - f.y) > moveY + 1e-6 ||
             p.w < f.w * minScale - 1e-6 || p.w > f.w * maxScale + 1e-6 || p.h < f.h * minScale - 1e-6 || p.h > f.h * maxScale + 1e-6) {

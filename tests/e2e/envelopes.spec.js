@@ -106,6 +106,7 @@ test.describe('envelopes', () => {
     await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
 
     const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
+    expect(save.p_allow_signer_adjustments).toBe(false)
     expect(save.p_recipients).toEqual([expect.objectContaining({ name: 'Bob Signer', email: 'bob@flmlnk.com', role: 'signer', routing_order: 1 })])
     expect(save.p_fields.map(f => [f.type, f.page, f.required])).toEqual([['signature', 1, true], ['date', 1, true], ['initials', 2, true]])
     for (const f of save.p_fields) {

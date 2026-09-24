@@ -26,6 +26,7 @@ test('save a prepared envelope as a template, then start a new envelope from it'
   await page.getByRole('button', { name: 'Text', exact: true }).click()
   await page.getByLabel('Remind signers').selectOption({ label: 'Every week' })
   await page.getByLabel('Expires after').selectOption({ label: '14 days' })
+  await page.getByLabel('Let signers adjust their fields').check()
 
   // Unsaved changes are saved first, then the template is made from them
   await page.getByRole('button', { name: 'Save as template' }).click()
@@ -38,9 +39,9 @@ test('save a prepared envelope as a template, then start a new envelope from it'
   await expect(page.getByRole('status')).toContainText('Saved as a template')
 
   const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
-  expect(save).toMatchObject({ p_remind_every_days: 7, p_expire_after_days: 14 })
+  expect(save).toMatchObject({ p_remind_every_days: 7, p_expire_after_days: 14, p_allow_signer_adjustments: true })
   const [template] = db.templates
-  expect(template).toMatchObject({ name: 'NDA template', remind_every_days: 7, expire_after_days: 14 })
+  expect(template).toMatchObject({ name: 'NDA template', remind_every_days: 7, expire_after_days: 14, allow_signer_adjustments: true })
   expect(db.templateRoles).toEqual([expect.objectContaining({ name: 'Client', role: 'signer', default_email: null })])
   expect(db.templateFields.map(f => f.type)).toEqual(['signature', 'text'])
   expect(db.files.has(`templates/${template.id}/original.pdf`)).toBe(true)
@@ -67,6 +68,7 @@ test('save a prepared envelope as a template, then start a new envelope from it'
   await expect(page.getByTestId('field')).toHaveCount(2)
   await expect(page.getByLabel('Remind signers')).toHaveValue('7')
   await expect(page.getByLabel('Expires after')).toHaveValue('14')
+  await expect(page.getByLabel('Let signers adjust their fields')).toBeChecked()
   await expect(page.getByText('Everything is in place.')).toBeVisible()
   expect(db.files.has(`documents/${created}/original.pdf`)).toBe(true)
   expect(db.envelopes.find(e => e.id === created).original_path).toBe(`${created}/original.pdf`)
@@ -132,4 +134,5 @@ test('a sent envelope shows its reminder schedule and deadline', async ({ page }
   await expect(page.getByText('Reminders every 3 days')).toBeVisible()
   await expect(page.getByTestId('expires-at')).toContainText('Expires')
   await expect(page.getByLabel('Remind signers')).toHaveCount(0)
+  await expect(page.getByTestId('signer-adjustments')).toHaveText('Signers cannot move fields')
 })

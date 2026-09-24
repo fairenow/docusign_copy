@@ -80,6 +80,7 @@ export function draftFromEnvelope(envelope) {
     signingOrder: envelope.signing_order,
     remindEveryDays: envelope.remind_every_days ?? null,
     expireAfterDays: envelope.expire_after_days ?? DEFAULT_EXPIRE_DAYS,
+    allowSignerAdjustments: envelope.allow_signer_adjustments ?? false,
     recipients,
     fields: (envelope.fields ?? []).map(fieldFromRow)
   }

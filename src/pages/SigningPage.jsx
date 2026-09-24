@@ -6,7 +6,7 @@ import { usePdf } from '../hooks/usePdf'
 import { fitWidthZoom } from '../lib/viewer'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
-import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel, limitAdjustment } from '../../supabase/functions/_shared/signing.js'
+import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel, limitAdjustment, signerCanMove } from '../../supabase/functions/_shared/signing.js'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
 import FillField from '../components/FillField'
@@ -75,6 +75,7 @@ export default function SigningPage() {
   }, [identity])
 
   const fields = useMemo(() => session?.fields ?? [], [session])
+  const adjustable = session?.envelope?.allow_signer_adjustments === true
   // Required fields still to fill in, in document order ("Date signed" fills itself)
   const remaining = useMemo(() => fields.filter(f => !isFieldComplete(f, values[f.id])), [fields, values])
   const incompleteIds = useMemo(() => new Set(remaining.map(f => f.id)), [remaining])
@@ -88,8 +89,9 @@ export default function SigningPage() {
     text: f.type === 'date' ? signingDate() : f.type === 'text' ? values[f.id] ?? '' : undefined,
     // "Date signed" is filled in by the server when you finish
     locked: f.type === 'date',
+    fixed: !signerCanMove(f, adjustable),
     checked: f.type === 'checkbox' ? values[f.id] === 'true' : undefined
-  })), [fields, values, positions])
+  })), [fields, values, positions, adjustable])
 
   const setValue = useCallback((id, value) => setValues(v => ({ ...v, [id]: value })), [])
 
@@ -140,13 +142,13 @@ export default function SigningPage() {
   // geometry is kept
   const moveField = useCallback((id, patch) => {
     const field = fields.find(f => f.id === id)
-    if (!field) return
+    if (!field || !signerCanMove(field, adjustable)) return
     setPositions(p => {
       const next = { x: field.x, y: field.y, w: field.w, h: field.h, ...p[id] }
       for (const key of ['x', 'y', 'w', 'h']) if (typeof patch[key] === 'number') next[key] = patch[key]
       return { ...p, [id]: limitAdjustment(field, next) }
     })
-  }, [fields])
+  }, [fields, adjustable])
 
   const clearValue = useCallback((id) => setValues(v => {
     const next = { ...v }
@@ -312,7 +314,7 @@ export default function SigningPage() {
             </button>
           )}
           {remaining.length === 0 && finishButton('sm:hidden')}
-          <span className="hidden md:inline text-xs text-gray-500">Drag a field to move it, or its corner to resize.</span>
+          {adjustable && <span className="hidden md:inline text-xs text-gray-500">Drag a field to move it, or its corner to resize.</span>}
           <div className="hidden sm:block">
             <PageControls currentPage={currentPage} totalPages={pageSizes.length} zoom={zoom} onPageChange={setCurrentPage} onZoomChange={setZoom} />
           </div>

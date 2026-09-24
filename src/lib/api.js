@@ -117,6 +117,7 @@ export async function saveDraft(envelopeId, draft) {
     p_signing_order: draft.signingOrder,
     p_remind_every_days: draft.remindEveryDays,
     p_expire_after_days: draft.expireAfterDays,
+    p_allow_signer_adjustments: draft.allowSignerAdjustments,
     p_recipients: draft.recipients.map(recipientToRow),
     p_fields: draft.fields.map(fieldToRow)
   }))

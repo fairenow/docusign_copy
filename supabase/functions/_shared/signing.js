@@ -81,6 +81,9 @@ export function validateSigningValues(fields, input) {
  */
 export const ADJUSTMENT_LIMITS = { moveX: 0.15, moveY: 0.10, minScale: 0.5, maxScale: 2 }
 
+/** Whether a signer may move a field: only when the sender allowed it, and never "Date signed". */
+export const signerCanMove = (field, allowed) => allowed === true && field.type !== 'date'
+
 /** Keep a move/resize (page fractions) within ADJUSTMENT_LIMITS and on the page. */
 export function limitAdjustment(original, next) {
   const { moveX, moveY, minScale, maxScale } = ADJUSTMENT_LIMITS

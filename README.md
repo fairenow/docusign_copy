@@ -118,7 +118,9 @@ Sending and signing run in one Edge Function (`supabase/functions/signing-api`, 
    hash is stored.
 2. **Sign** — the signer agrees to use electronic signatures, fills in their fields (guided), adopts
    a drawn or typed signature and finishes, or declines with a reason. Team members can also sign
-   from the dashboard without the link. "Date signed" is set by the server.
+   from the dashboard without the link. "Date signed" is set by the server. Fields stay where
+   the sender put them unless the sender ticked **Let signers adjust their fields**; then signers
+   may nudge or resize their own boxes a little (never "Date signed"), and each change is audited.
 3. **Complete** — when the last signer finishes, every field is stamped into the original PDF, a
    certificate of completion (signers, times, IP addresses, browsers, activity, fingerprints) is
    appended, the result is stored as `signed.pdf` with its SHA-256, and everyone is emailed a copy.

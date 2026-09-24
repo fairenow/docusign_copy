@@ -24,6 +24,7 @@ import SendChecklist from '../components/envelope/SendChecklist'
 import ActivityPanel from '../components/envelope/ActivityPanel'
 import ReminderSettings from '../components/envelope/ReminderSettings'
 import SaveTemplateDialog from '../components/templates/SaveTemplateDialog'
+import SignerAdjustmentSetting from '../components/envelope/SignerAdjustmentSetting'
 import ErrorBanner from '../components/ErrorBanner'
 
 /**
@@ -472,6 +473,10 @@ export default function EnvelopeEditorPage() {
                       expireAfterDays={draft.expireAfterDays}
                       onChange={update}
                     />
+                    <SignerAdjustmentSetting
+                      checked={draft.allowSignerAdjustments}
+                      onChange={(allowSignerAdjustments) => update({ allowSignerAdjustments })}
+                    />
                   </>
                 )}
               </div>
@@ -493,6 +498,7 @@ export default function EnvelopeEditorPage() {
                 <p className="text-sm text-gray-600 whitespace-pre-wrap">{draft.message || 'No message.'}</p>
               </section>
               <ReminderSettings readOnly remindEveryDays={draft.remindEveryDays} expiresAt={envelope.expires_at} />
+              <SignerAdjustmentSetting readOnly checked={draft.allowSignerAdjustments} />
             </div>
           )}
         </aside>
