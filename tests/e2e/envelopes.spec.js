@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDict, PDFDocument, PDFName } from 'pdf-lib'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 
@@ -257,4 +257,22 @@ test('quick sign still fills and downloads a PDF without an account', async ({ p
   expect(file.suggestedFilename()).toBe('contract_signed.pdf')
   const out = await PDFDocument.load(await (await import('node:fs/promises')).readFile(await file.path()))
   expect(out.getPageCount()).toBe(2)
+})
+
+test('Word documents keep their layout: pages, page breaks and searchable text', async ({ page }) => {
+  await page.goto('/quick-sign')
+  await page.getByTestId('file-input').setInputFiles('tests/e2e/fixtures/consent.docx')
+  await expect(page.getByTestId('document-page')).toBeVisible()
+  // Three pages of flowing text, then the signature page after the explicit page break
+  await expect(page.getByText('1 / 4')).toBeVisible()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download PDF' }).click()
+  const bytes = await (await import('node:fs/promises')).readFile(await (await download).path())
+  const out = await PDFDocument.load(bytes)
+  expect(out.getPageCount()).toBe(4)
+  expect(out.getPage(0).getSize()).toEqual({ width: 612, height: 792 })
+  // The page text is kept (invisible) so the PDF stays searchable
+  const fonts = out.getPage(0).node.Resources().lookup(PDFName.of('Font'), PDFDict)
+  expect(fonts.keys().length).toBeGreaterThan(0)
 })

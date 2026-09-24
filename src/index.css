@@ -89,38 +89,6 @@ body {
   border-radius: 4px;
 }
 
-/* DOCX content styling */
-.docx-content {
-  padding: 2rem;
-  min-width: 612px;
-  min-height: 792px;
-  background: white;
-  color: #1e293b;
-  font-size: 12pt;
-  line-height: 1.6;
-}
-
-.docx-content p {
-  margin-bottom: 1em;
-}
-
-.docx-content h1, .docx-content h2, .docx-content h3 {
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-  font-weight: bold;
-}
-
-.docx-content table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
-}
-
-.docx-content td, .docx-content th {
-  border: 1px solid #ccc;
-  padding: 0.5em;
-}
-
 /* Checkbox field */
 .checkbox-field {
   width: 20px;
