@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import { isSupabaseConfigured } from '../lib/supabase'
 import FullPageMessage from '../components/FullPageMessage'
@@ -12,7 +12,7 @@ export default function RequireAuth({ children }) {
     return (
       <FullPageMessage title="Backend not configured">
         Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to use envelopes.
-        You can still use <a className="text-blue-400 underline" href="/quick-sign">Quick sign</a>.
+        You can still use <Link className="text-blue-400 underline" to="/quick-sign">Quick sign</Link>.
       </FullPageMessage>
     )
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createElement, elementFromDetected, clamp, DEFAULT_SIZES } from './fields'
+import { createElement, elementFromDetected, clamp, nextFieldY, DEFAULT_SIZES } from './fields'
 
 const letter = { width: 612, height: 792 }
 
@@ -58,5 +58,14 @@ describe('clamp', () => {
     expect(clamp(5, 0, 1)).toBe(1)
     expect(clamp(-1, 0, 1)).toBe(0)
     expect(clamp(0.5, 0, -1)).toBe(0)
+  })
+})
+
+describe('nextFieldY', () => {
+  it('cascades down the page and wraps', () => {
+    const on = (page, n) => Array.from({ length: n }, () => ({ page }))
+    expect(nextFieldY([], 1)).toBeCloseTo(0.15)
+    expect(nextFieldY([...on(1, 2), ...on(2, 5)], 1)).toBeCloseTo(0.33)
+    expect(nextFieldY(on(1, 8), 1)).toBeCloseTo(0.15)
   })
 })

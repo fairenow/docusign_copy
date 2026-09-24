@@ -7,10 +7,9 @@ const BASE_SCALE = 1.5
 /**
  * Renders one PDF page with its fields on top.
  *
- * mode 'fill'    - fields are filled in place (Quick sign)
- * mode 'prepare' - fields are placeholders assigned to recipients (envelope editor)
- * readOnly       - fields can be viewed but not moved, edited or deleted
- *
+ * renderField(element, { isSelected, scale, containerSize, onUpdate }) draws a field's content;
+ * onActivateElement(element) runs when a field is clicked without being dragged.
+ * readOnly: fields can be selected but not moved, resized or deleted.
  * Selection can be controlled with selectedId/onSelectedIdChange; otherwise it is internal.
  */
 export default function DocumentViewer({
@@ -19,14 +18,13 @@ export default function DocumentViewer({
   elements,
   currentPage,
   zoom,
-  mode = 'fill',
+  renderField,
   readOnly = false,
-  getAppearance,
   selectedId: controlledSelectedId,
   onSelectedIdChange,
   onUpdateElement,
   onDeleteElement,
-  onSignElement
+  onActivateElement
 }) {
   const canvasRef = useRef(null)
   const [internalSelectedId, setInternalSelectedId] = useState(null)
@@ -104,23 +102,26 @@ export default function DocumentViewer({
           />
 
           <div className="absolute inset-0">
-            {pageElements.map(element => (
-              <OverlayElement
-                key={element.id}
-                element={element}
-                mode={mode}
-                readOnly={readOnly}
-                appearance={getAppearance?.(element)}
-                scale={scale}
-                containerSize={displaySize}
-                pageSize={pageSize}
-                isSelected={selectedId === element.id}
-                onSelect={() => setSelectedId(element.id)}
-                onUpdate={(updates) => onUpdateElement?.(element.id, updates)}
-                onDelete={() => onDeleteElement?.(element.id)}
-                onSign={() => onSignElement?.(element)}
-              />
-            ))}
+            {pageElements.map(element => {
+              const isSelected = selectedId === element.id
+              const onUpdate = (updates) => onUpdateElement?.(element.id, updates)
+              return (
+                <OverlayElement
+                  key={element.id}
+                  element={element}
+                  readOnly={readOnly}
+                  containerSize={displaySize}
+                  pageSize={pageSize}
+                  isSelected={isSelected}
+                  onSelect={() => setSelectedId(element.id)}
+                  onUpdate={onUpdate}
+                  onDelete={() => onDeleteElement?.(element.id)}
+                  onActivate={() => onActivateElement?.(element)}
+                >
+                  {renderField(element, { isSelected, scale, containerSize: displaySize, onUpdate })}
+                </OverlayElement>
+              )
+            })}
           </div>
         </div>
       )}

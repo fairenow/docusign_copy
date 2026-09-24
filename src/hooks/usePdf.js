@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { openPdf } from '../lib/documents'
 
-const EMPTY = { doc: null, pageSizes: [], error: null, loading: false }
+const EMPTY = { doc: null, pageSizes: [], error: null }
 
 /**
  * Open PDF bytes with pdf.js. Re-opens when `bytes` changes and destroys the
@@ -11,22 +11,16 @@ export function usePdf(bytes) {
   const [state, setState] = useState(EMPTY)
 
   useEffect(() => {
-    if (!bytes) {
-      setState(EMPTY)
-      return
-    }
+    setState(EMPTY)
+    if (!bytes) return
     let cancelled = false
     let opened = null
-    setState({ ...EMPTY, loading: true })
 
     openPdf(bytes)
       .then(({ doc, pageSizes }) => {
         opened = doc
-        if (cancelled) {
-          doc.destroy()
-          return
-        }
-        setState({ doc, pageSizes, error: null, loading: false })
+        if (cancelled) doc.destroy()
+        else setState({ doc, pageSizes, error: null })
       })
       .catch(error => {
         if (!cancelled) setState({ ...EMPTY, error })

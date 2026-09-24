@@ -1,5 +1,3 @@
-import { loadPdfDocument } from './pdfjs'
-
 export const MAX_FILE_SIZE = 50 * 1024 * 1024
 export const ACCEPTED_FILE_TYPES = '.pdf,.docx'
 
@@ -28,13 +26,14 @@ export async function fileToPdfBytes(file) {
  * Page sizes are the displayed (rotation-applied) sizes in PDF points.
  */
 export async function openPdf(bytes) {
+  // Loaded on demand so pages that never show a PDF (e.g. /login) do not download pdf.js
+  const { loadPdfDocument } = await import('./pdfjs')
   const doc = await loadPdfDocument(bytes)
-  const pageSizes = []
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i)
+  const pages = await Promise.all(Array.from({ length: doc.numPages }, (_, i) => doc.getPage(i + 1)))
+  const pageSizes = pages.map(page => {
     const { width, height } = page.getViewport({ scale: 1 })
-    pageSizes.push({ width, height })
-  }
+    return { width, height }
+  })
   return { doc, pageSizes }
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  draftFromEnvelope, fieldToRow, newField, fieldSummary, recipientToRow, newRecipient, moveRecipient,
-  validateForSave, validateForSend, envelopeGroup, filterEnvelopes, currentSigners, RECIPIENT_COLORS
+  draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient,
+  validateForSave, validateForSend, envelopeGroup, currentSigners, RECIPIENT_COLORS
 } from './envelopeModel'
 
 const signer = (over = {}) => ({ id: 'r1', name: 'Bob', email: 'bob@flmlnk.com', role: 'signer', routingOrder: 1, color: '#2563eb', ...over })
@@ -104,10 +104,11 @@ describe('dashboard grouping', () => {
 
   it('groups by status and keeps declined/voided under All only', () => {
     const list = [env({ id: 'd', status: 'draft' }), env({ id: 'c', status: 'completed' }), env({ id: 'v', status: 'voided' })]
-    expect(filterEnvelopes(list, 'draft', me).map(e => e.id)).toEqual(['d'])
-    expect(filterEnvelopes(list, 'completed', me).map(e => e.id)).toEqual(['c'])
-    expect(filterEnvelopes(list, 'all', me)).toHaveLength(3)
-    expect(envelopeGroup(list[2], me)).toBe('closed')
+    const groups = groupEnvelopes(list, me)
+    expect(groups.draft.map(e => e.id)).toEqual(['d'])
+    expect(groups.completed.map(e => e.id)).toEqual(['c'])
+    expect(groups.closed.map(e => e.id)).toEqual(['v'])
+    expect(groups.all).toHaveLength(3)
   })
 })
 
@@ -118,8 +119,16 @@ describe('newField', () => {
     expect(f).toMatchObject({ page: 3, recipientId: 'r1', required: false, type: 'checkbox' })
     expect(newField('signature', { page: 1, pageSize: { width: 612, height: 792 } }, 'r1').required).toBe(true)
   })
+})
 
-  it('summarizes fields by type', () => {
-    expect(fieldSummary([field(), field({ id: 'f2' }), field({ id: 'f3', type: 'date' })])).toBe('2 signature, 1 date signed')
+describe('permissions', () => {
+  const owner = { id: 'u1' }
+  const other = { id: 'u2' }
+  it('lets only the owner edit/delete drafts and void sent envelopes', () => {
+    const draft = { owner_id: 'u1', status: 'draft' }
+    const sent = { owner_id: 'u1', status: 'sent' }
+    expect([canEdit(draft, owner), canDelete(draft, owner), canVoid(draft, owner)]).toEqual([true, true, false])
+    expect([canEdit(sent, owner), canVoid(sent, owner)]).toEqual([false, true])
+    expect([canEdit(draft, other), canVoid(sent, other), canEdit(draft, null)]).toEqual([false, false, false])
   })
 })

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useBlocker, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Send } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { downloadDocument, fetchEnvelope, saveDraft } from '../lib/api'
 import {
   draftFromEnvelope, moveRecipient, newField, newRecipient, renumberRecipients,
-  validateForSave, validateForSend, STATUS_LABELS
+  validateForSave, validateForSend, canEdit, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
+import { nextFieldY } from '../lib/fields'
 import { usePdf } from '../hooks/usePdf'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
+import PlaceholderField from '../components/envelope/PlaceholderField'
 import FullPageMessage from '../components/FullPageMessage'
 import RecipientsPanel from '../components/envelope/RecipientsPanel'
 import FieldPalette from '../components/envelope/FieldPalette'
@@ -59,7 +61,7 @@ export default function EnvelopeEditorPage() {
     return () => { cancelled = true }
   }, [envelopeId])
 
-  const editable = Boolean(envelope && user && envelope.status === 'draft' && envelope.owner_id === user.id)
+  const editable = Boolean(envelope) && canEdit(envelope, user)
   const dirty = useMemo(
     () => editable && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
     [editable, draft, savedDraft]
@@ -67,12 +69,6 @@ export default function EnvelopeEditorPage() {
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
 
   useUnsavedChangesWarning(dirty)
-  const blocker = useBlocker(dirty)
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    if (window.confirm('You have unsaved changes. Leave without saving?')) blocker.proceed()
-    else blocker.reset()
-  }, [blocker])
 
   const update = useCallback((patch) => setDraft(d => ({ ...d, ...patch })), [])
 
@@ -113,9 +109,7 @@ export default function EnvelopeEditorPage() {
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize || !activeRecipientId) return
-    const onPage = draft.fields.filter(f => f.page === currentPage).length
-    // Cascade new fields down the page so they do not stack on top of each other
-    const field = newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: 0.15 + (onPage % 8) * 0.09 })
+    const field = newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) })
     update({ fields: [...draft.fields, field] })
     setSelectedFieldId(field.id)
   }
@@ -163,9 +157,9 @@ export default function EnvelopeEditorPage() {
     () => new Map((draft?.recipients ?? []).map(r => [r.id, r])),
     [draft?.recipients]
   )
-  const getAppearance = useCallback((field) => {
+  const renderField = useCallback((field) => {
     const r = recipientsById.get(field.recipientId)
-    return { color: r?.color, label: r?.name || r?.email || 'Unassigned' }
+    return <PlaceholderField field={field} color={r?.color ?? RECIPIENT_COLORS[0]} assignee={r?.name || r?.email || 'Unassigned'} />
   }, [recipientsById])
 
   if (loadError) {
@@ -244,10 +238,10 @@ export default function EnvelopeEditorPage() {
             onSigningOrderChange={(signingOrder) => update({ signingOrder })}
           />
 
-          {editable && <FieldPalette recipient={activeRecipient} onAdd={addField} />}
+          {editable && <FieldPalette recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} />}
 
           <section>
-            <h2 className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-2">Message to recipients</h2>
+            <h2 className="section-heading mb-2">Message to recipients</h2>
             {editable ? (
               <textarea
                 value={draft.message}
@@ -286,9 +280,8 @@ export default function EnvelopeEditorPage() {
               elements={draft.fields}
               currentPage={currentPage}
               zoom={zoom}
-              mode="prepare"
+              renderField={renderField}
               readOnly={!editable}
-              getAppearance={getAppearance}
               selectedId={selectedFieldId}
               onSelectedIdChange={setSelectedFieldId}
               onUpdateElement={updateField}

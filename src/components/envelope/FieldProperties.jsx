@@ -1,5 +1,5 @@
 import { Trash2, X } from 'lucide-react'
-import { FIELD_LABELS } from '../../lib/fields'
+import { FIELD_LABELS, FONT_SIZES } from '../../lib/fields'
 
 export default function FieldProperties({ field, recipients, onChange, onDelete, onClose }) {
   const signers = recipients.filter(r => r.role === 'signer')
@@ -47,7 +47,7 @@ export default function FieldProperties({ field, recipients, onChange, onDelete,
             onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
             className="w-full bg-dark-700 border border-dark-600 rounded-lg px-2 py-1.5 text-sm text-gray-100"
           >
-            {[8, 10, 11, 12, 14, 16, 18, 24].map(size => <option key={size} value={size}>{size} pt</option>)}
+            {FONT_SIZES.map(size => <option key={size} value={size}>{size} pt</option>)}
           </select>
         </label>
       )}

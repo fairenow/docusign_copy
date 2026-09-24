@@ -15,39 +15,39 @@ import {
   FileText,
   List
 } from 'lucide-react'
-import { FIELD_TYPES, getFieldStats, groupFieldsByType, groupFieldsByPage } from '../utils/formFieldDetector'
+import { DETECTED_FIELD_TYPES, getFieldStats, groupFieldsByType, groupFieldsByPage } from '../utils/formFieldDetector'
 
 // Icon mapping for field types
 const fieldIcons = {
-  [FIELD_TYPES.TEXT]: Type,
-  [FIELD_TYPES.CHECKBOX]: CheckSquare,
-  [FIELD_TYPES.RADIO]: Circle,
-  [FIELD_TYPES.SIGNATURE]: Pen,
-  [FIELD_TYPES.DATE]: Calendar,
-  [FIELD_TYPES.INITIALS]: Hash,
-  [FIELD_TYPES.DROPDOWN]: List
+  [DETECTED_FIELD_TYPES.TEXT]: Type,
+  [DETECTED_FIELD_TYPES.CHECKBOX]: CheckSquare,
+  [DETECTED_FIELD_TYPES.RADIO]: Circle,
+  [DETECTED_FIELD_TYPES.SIGNATURE]: Pen,
+  [DETECTED_FIELD_TYPES.DATE]: Calendar,
+  [DETECTED_FIELD_TYPES.INITIALS]: Hash,
+  [DETECTED_FIELD_TYPES.DROPDOWN]: List
 }
 
 // Color mapping for field types
 const fieldColors = {
-  [FIELD_TYPES.TEXT]: 'text-blue-400 bg-blue-500/20 border-blue-500/50',
-  [FIELD_TYPES.CHECKBOX]: 'text-green-400 bg-green-500/20 border-green-500/50',
-  [FIELD_TYPES.RADIO]: 'text-purple-400 bg-purple-500/20 border-purple-500/50',
-  [FIELD_TYPES.SIGNATURE]: 'text-amber-400 bg-amber-500/20 border-amber-500/50',
-  [FIELD_TYPES.DATE]: 'text-teal-400 bg-teal-500/20 border-teal-500/50',
-  [FIELD_TYPES.INITIALS]: 'text-pink-400 bg-pink-500/20 border-pink-500/50',
-  [FIELD_TYPES.DROPDOWN]: 'text-indigo-400 bg-indigo-500/20 border-indigo-500/50'
+  [DETECTED_FIELD_TYPES.TEXT]: 'text-blue-400 bg-blue-500/20 border-blue-500/50',
+  [DETECTED_FIELD_TYPES.CHECKBOX]: 'text-green-400 bg-green-500/20 border-green-500/50',
+  [DETECTED_FIELD_TYPES.RADIO]: 'text-purple-400 bg-purple-500/20 border-purple-500/50',
+  [DETECTED_FIELD_TYPES.SIGNATURE]: 'text-amber-400 bg-amber-500/20 border-amber-500/50',
+  [DETECTED_FIELD_TYPES.DATE]: 'text-teal-400 bg-teal-500/20 border-teal-500/50',
+  [DETECTED_FIELD_TYPES.INITIALS]: 'text-pink-400 bg-pink-500/20 border-pink-500/50',
+  [DETECTED_FIELD_TYPES.DROPDOWN]: 'text-indigo-400 bg-indigo-500/20 border-indigo-500/50'
 }
 
 // Label mapping for field types
 const fieldLabels = {
-  [FIELD_TYPES.TEXT]: 'Text',
-  [FIELD_TYPES.CHECKBOX]: 'Checkbox',
-  [FIELD_TYPES.RADIO]: 'Radio',
-  [FIELD_TYPES.SIGNATURE]: 'Signature',
-  [FIELD_TYPES.DATE]: 'Date',
-  [FIELD_TYPES.INITIALS]: 'Initials',
-  [FIELD_TYPES.DROPDOWN]: 'Dropdown'
+  [DETECTED_FIELD_TYPES.TEXT]: 'Text',
+  [DETECTED_FIELD_TYPES.CHECKBOX]: 'Checkbox',
+  [DETECTED_FIELD_TYPES.RADIO]: 'Radio',
+  [DETECTED_FIELD_TYPES.SIGNATURE]: 'Signature',
+  [DETECTED_FIELD_TYPES.DATE]: 'Date',
+  [DETECTED_FIELD_TYPES.INITIALS]: 'Initials',
+  [DETECTED_FIELD_TYPES.DROPDOWN]: 'Dropdown'
 }
 
 function FieldItem({ field, isSelected, onSelect, onPlace }) {

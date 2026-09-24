@@ -3,7 +3,7 @@
  * row <-> editor-state mapping, draft validation and dashboard grouping.
  * No Supabase or DOM access here, so it is covered by unit tests.
  */
-import { FIELD_LABELS, createElement, newId } from './fields'
+import { DEFAULT_FONT_SIZE, newId, placeField } from './fields'
 
 export const RECIPIENT_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
 
@@ -87,21 +87,14 @@ export function draftFromEnvelope(envelope) {
  * A new placeholder field assigned to a recipient, placed on `page`.
  * Only the properties stored in the database are kept.
  */
-export function newField(type, { page, pageSize }, recipientId, props = {}) {
-  const el = createElement(type, { page, pageSize }, props)
+export function newField(type, placement, recipientId, props = {}) {
   return {
-    id: el.id,
-    type,
-    page,
-    x: el.x,
-    y: el.y,
-    w: el.w,
-    h: el.h,
+    ...placeField(type, placement, props),
     recipientId,
     // A checkbox is an optional choice by default; everything else must be filled in
     required: type !== 'checkbox',
     label: '',
-    fontSize: el.fontSize ?? 12
+    fontSize: DEFAULT_FONT_SIZE
   }
 }
 
@@ -220,10 +213,24 @@ export function envelopeGroup(envelope, user) {
   }
 }
 
-export function filterEnvelopes(envelopes, groupId, user) {
-  if (groupId === 'all') return envelopes
-  return envelopes.filter(e => envelopeGroup(e, user) === groupId)
+/**
+ * Envelopes bucketed by dashboard group in one pass: { all, action, waiting, draft, completed, closed }.
+ */
+export function groupEnvelopes(envelopes, user) {
+  const groups = { all: envelopes, action: [], waiting: [], draft: [], completed: [], closed: [] }
+  for (const e of envelopes) groups[envelopeGroup(e, user)].push(e)
+  return groups
 }
+
+// ---------------------------------------------------------------------------
+// Permissions (the database enforces these; the UI uses them to show actions)
+// ---------------------------------------------------------------------------
+
+const isOwner = (envelope, user) => Boolean(user) && envelope.owner_id === user.id
+
+export const canEdit = (envelope, user) => isOwner(envelope, user) && envelope.status === 'draft'
+export const canDelete = canEdit
+export const canVoid = (envelope, user) => isOwner(envelope, user) && envelope.status === 'sent'
 
 export const STATUS_LABELS = {
   draft: 'Draft',
@@ -233,9 +240,10 @@ export const STATUS_LABELS = {
   voided: 'Voided'
 }
 
-/** e.g. "2 signature, 1 date signed" */
-export function fieldSummary(fields) {
-  const counts = {}
-  for (const f of fields) counts[f.type] = (counts[f.type] ?? 0) + 1
-  return Object.entries(counts).map(([type, n]) => `${n} ${FIELD_LABELS[type].toLowerCase()}`).join(', ')
+export const RECIPIENT_STATUS = {
+  pending: { label: 'Not sent', icon: '·' },
+  sent: { label: 'Sent', icon: '✉' },
+  viewed: { label: 'Viewed', icon: '👁' },
+  signed: { label: 'Signed', icon: '✓' },
+  declined: { label: 'Declined', icon: '✕' }
 }

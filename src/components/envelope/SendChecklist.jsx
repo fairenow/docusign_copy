@@ -3,7 +3,7 @@ import { CheckCircle2, AlertCircle } from 'lucide-react'
 export default function SendChecklist({ problems }) {
   return (
     <section>
-      <h2 className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-2">Ready to send?</h2>
+      <h2 className="section-heading mb-2">Ready to send?</h2>
       {problems.length === 0 ? (
         <p className="text-sm text-green-300 flex items-center gap-2"><CheckCircle2 size={14} /> Everything is in place.</p>
       ) : (

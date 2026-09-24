@@ -1,6 +1,5 @@
 import { ChevronUp, ChevronDown, Trash2, UserPlus } from 'lucide-react'
-
-const STATUS_TEXT = { pending: 'Not sent', sent: 'Sent', viewed: 'Viewed', signed: 'Signed', declined: 'Declined' }
+import { RECIPIENT_STATUS } from '../../lib/envelopeModel'
 
 /**
  * Recipients of an envelope. The active signer receives newly added fields.
@@ -22,7 +21,7 @@ export default function RecipientsPanel({
   return (
     <section>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-xs font-semibold text-dark-500 uppercase tracking-wide">Recipients</h2>
+        <h2 className="section-heading">Recipients</h2>
         {!readOnly && (
           <label className="flex items-center gap-2 text-xs text-dark-400 cursor-pointer">
             <input
@@ -68,7 +67,7 @@ export default function RecipientsPanel({
                   />
                 )}
                 {readOnly ? (
-                  <span className="text-xs text-dark-400">{STATUS_TEXT[r.status]}</span>
+                  <span className="text-xs text-dark-400">{RECIPIENT_STATUS[r.status]?.label}</span>
                 ) : (
                   <div className="flex items-center">
                     {sequential && (

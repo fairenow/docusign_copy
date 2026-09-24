@@ -134,6 +134,11 @@ body {
   cursor: pointer;
 }
 
+/* Small uppercase heading above a sidebar section */
+.section-heading {
+  @apply text-xs font-semibold text-dark-500 uppercase tracking-wide;
+}
+
 /* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);

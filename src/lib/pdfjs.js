@@ -5,11 +5,9 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
 export function loadPdfDocument(bytes) {
-  // pdf.js transfers the buffer to its worker, so hand it a copy
+  // pdf.js transfers the buffer to its worker (emptying it), so hand it a copy
   return pdfjsLib.getDocument({
     data: bytes.slice(),
     isEvalSupported: false
   }).promise
 }
-
-export { pdfjsLib }

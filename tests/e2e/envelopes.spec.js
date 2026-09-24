@@ -66,6 +66,7 @@ test.describe('envelopes', () => {
     expect(db.files.has(`documents/${envelopeId}/original.pdf`)).toBe(true)
 
     await expect(page.getByTestId('document-page')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Signature', exact: true })).toBeDisabled() // no signer yet
     await expect(page.getByTestId('send-problems')).toContainText('Add at least one signer.')
 
     // Add a signer and place their fields
@@ -114,6 +115,7 @@ test.describe('envelopes', () => {
   test('moving and resizing a field keeps it on the page', async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    await expect(page.getByTestId('document-page')).toBeVisible()
     await page.getByRole('button', { name: 'Add recipient' }).click()
     await page.getByLabel('Recipient name').fill('Bob')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')

@@ -26,6 +26,7 @@ export const FIELD_LABELS = {
 }
 
 export const DEFAULT_FONT_SIZE = 12
+export const FONT_SIZES = [8, 10, 11, 12, 14, 16, 18, 24]
 
 // Minimum size (in PDF points) when resizing
 export const MIN_SIZE = 8
@@ -39,13 +40,14 @@ export function formatToday() {
 }
 
 /**
- * Create a field element.
+ * Geometry for a new field: { id, type, page, x, y, w, h } in page fractions.
  * @param {string} type
  * @param {{ page: number, pageSize: { width: number, height: number } }} placement
  *   pageSize is the displayed page size in PDF points
- * @param {object} props additional props (x, y, w, h fractions; text; data; ...)
+ * @param {{ x?, y?, w?, h?, aspect? }} props optional position/size (fractions) or image aspect ratio
  */
-export function createElement(type, { page, pageSize }, props = {}) {
+export function placeField(type, { page, pageSize }, props = {}) {
+  if (!DEFAULT_SIZES[type]) throw new Error(`Unknown field type: ${type}`)
   const size = { ...DEFAULT_SIZES[type] }
 
   // Size image-based fields to the image's aspect ratio
@@ -57,7 +59,7 @@ export function createElement(type, { page, pageSize }, props = {}) {
   const w = Math.min(props.w ?? size.width / pageSize.width, 1)
   const h = Math.min(props.h ?? size.height / pageSize.height, 1)
 
-  const base = {
+  return {
     id: newId(),
     type,
     page,
@@ -66,7 +68,23 @@ export function createElement(type, { page, pageSize }, props = {}) {
     w,
     h
   }
+}
 
+/**
+ * Vertical position for the next field added to `page`, cascading down the page
+ * so new fields do not stack exactly on top of each other.
+ */
+export function nextFieldY(fields, page) {
+  const onPage = fields.filter(f => f.page === page).length
+  return 0.15 + (onPage % 8) * 0.09
+}
+
+/**
+ * Create a fill-in element (Quick sign): geometry plus the value the user fills in.
+ * @param {object} props geometry props (see placeField) plus text, data, checked, fontSize, color
+ */
+export function createElement(type, placement, props = {}) {
+  const base = placeField(type, placement, props)
   switch (type) {
     case 'text':
       return { ...base, text: props.text ?? '', fontSize: props.fontSize ?? DEFAULT_FONT_SIZE, color: props.color ?? '#000000' }
@@ -77,8 +95,6 @@ export function createElement(type, { page, pageSize }, props = {}) {
     case 'signature':
     case 'initials':
       return { ...base, data: props.data ?? null, text: props.text ?? '' }
-    default:
-      throw new Error(`Unknown field type: ${type}`)
   }
 }
 

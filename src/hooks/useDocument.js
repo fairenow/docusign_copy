@@ -48,7 +48,6 @@ export function useDocument() {
     pdfBytes,
     pdfDoc,
     pageSizes,
-    totalPages: pageSizes.length,
     error,
     loadFile,
     detectedFields,

@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
 import DocumentViewer from '../components/DocumentViewer'
+import FillField from '../components/FillField'
 import FileDropzone from '../components/FileDropzone'
 import Toolbar from '../components/Toolbar'
 import LoadingOverlay from '../components/LoadingOverlay'
 import { useDocument } from '../hooks/useDocument'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
-import { createElement, elementFromDetected } from '../lib/fields'
+import { createElement, elementFromDetected, nextFieldY } from '../lib/fields'
 import { renderTypedSignature } from '../lib/signatureImage'
 
 /**
@@ -30,7 +31,6 @@ export default function QuickSignPage() {
     pdfBytes,
     pdfDoc,
     pageSizes,
-    totalPages,
     sourceType,
     error: documentError,
     loadFile,
@@ -49,12 +49,10 @@ export default function QuickSignPage() {
   const addElement = useCallback((type, props = {}) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize) return
-    setElements(prev => {
-      // Stagger new fields so they don't stack exactly on top of each other
-      const onPage = prev.filter(el => el.page === currentPage).length
-      const y = props.y ?? 0.2 + (onPage % 10) * 0.05
-      return [...prev, createElement(type, { page: currentPage, pageSize }, { ...props, y })]
-    })
+    setElements(prev => [
+      ...prev,
+      createElement(type, { page: currentPage, pageSize }, { y: nextFieldY(prev, currentPage), ...props })
+    ])
   }, [currentPage, pageSizes])
 
   const updateElement = useCallback((id, updates) => {
@@ -90,8 +88,13 @@ export default function QuickSignPage() {
     setActivePanel(null)
   }, [pendingSignId, addElement, updateElement])
 
-  // Fill an empty signature/initials placeholder
-  const handleSignElement = useCallback(async (element) => {
+  // A click on a field: toggle checkboxes, sign empty signature/initials placeholders
+  const handleActivateElement = useCallback(async (element) => {
+    if (element.type === 'checkbox') {
+      updateElement(element.id, { checked: !element.checked })
+      return
+    }
+    if ((element.type !== 'signature' && element.type !== 'initials') || element.data) return
     if (element.type === 'initials') {
       const initials = await getInitials()
       if (initials) updateElement(element.id, { data: initials.data, text: initials.text })
@@ -104,6 +107,8 @@ export default function QuickSignPage() {
       setActivePanel('signature')
     }
   }, [getInitials, savedSignature, updateElement])
+
+  const renderField = useCallback((element, ctx) => <FillField element={element} {...ctx} />, [])
 
   const handleAddInitials = useCallback(async () => {
     const initials = await getInitials()
@@ -183,7 +188,7 @@ export default function QuickSignPage() {
           <Toolbar
             fileName={file.name}
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={pageSizes.length}
             zoom={zoom}
             onPageChange={setCurrentPage}
             onZoomChange={setZoom}
@@ -205,7 +210,8 @@ export default function QuickSignPage() {
           zoom={zoom}
           onUpdateElement={updateElement}
           onDeleteElement={deleteElement}
-          onSignElement={handleSignElement}
+          renderField={renderField}
+          onActivateElement={handleActivateElement}
         />
         )}
       </main>

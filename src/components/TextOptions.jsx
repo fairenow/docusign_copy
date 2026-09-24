@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { DEFAULT_FONT_SIZE, FONT_SIZES } from '../lib/fields'
 
 export default function TextOptions({ onApply }) {
-  const [fontSize, setFontSize] = useState('12')
+  const [fontSize, setFontSize] = useState(String(DEFAULT_FONT_SIZE))
   const [color, setColor] = useState('#000000')
 
   const handleApply = () => {
@@ -18,12 +19,7 @@ export default function TextOptions({ onApply }) {
             onChange={(e) => setFontSize(e.target.value)}
             className="w-full p-2 bg-dark-800 border border-dark-600 rounded-lg text-gray-200 text-sm"
           >
-            <option value="10">10 pt</option>
-            <option value="12">12 pt</option>
-            <option value="14">14 pt</option>
-            <option value="16">16 pt</option>
-            <option value="18">18 pt</option>
-            <option value="24">24 pt</option>
+            {FONT_SIZES.map(size => <option key={size} value={size}>{size} pt</option>)}
           </select>
         </div>
         <div className="flex-1">

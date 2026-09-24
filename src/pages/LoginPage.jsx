@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { ALLOWED_EMAIL_DOMAIN, isSupabaseConfigured } from '../lib/supabase'
+import Brand from '../components/Brand'
+import ErrorBanner from '../components/ErrorBanner'
 
 // Only allow same-site relative paths as the post-login destination.
 // Browsers treat "\" like "/", so "/\evil.com" would be protocol-relative too.
@@ -43,12 +45,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-900 p-8">
       <div className="w-full max-w-sm bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center">
-        <h1 className="text-2xl font-bold gradient-text mb-2">📝 DocSign</h1>
+        <h1 className="mb-2"><Brand className="text-2xl" /></h1>
         <p className="text-dark-400 text-sm mb-8">Send documents for signature and track them in one place.</p>
 
-        {error && (
-          <p role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</p>
-        )}
+        <ErrorBanner>{error}</ErrorBanner>
 
         <button
           onClick={handleSignIn}
@@ -61,7 +61,7 @@ export default function LoginPage() {
         <p className="mt-4 text-xs text-dark-500">Use your @{ALLOWED_EMAIL_DOMAIN} account.</p>
 
         <p className="mt-8 text-xs text-dark-500">
-          Just need to sign something yourself? <a href="/quick-sign" className="text-blue-400 hover:underline">Quick sign</a> works without an account.
+          Just need to sign something yourself? <Link to="/quick-sign" className="text-blue-400 hover:underline">Quick sign</Link> works without an account.
         </p>
       </div>
     </div>

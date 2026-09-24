@@ -4,7 +4,6 @@
  */
 import { supabase } from './supabase'
 import { fileToPdfBytes, stripExtension } from './documents'
-import { loadPdfDocument } from './pdfjs'
 import { fieldToRow, recipientToRow } from './envelopeModel'
 
 const BUCKET = 'documents'
@@ -29,7 +28,7 @@ function toError(error) {
   return new Error(message)
 }
 
-export const originalPath = (envelopeId) => `${envelopeId}/original.pdf`
+const originalPath = (envelopeId) => `${envelopeId}/original.pdf`
 
 // ---------------------------------------------------------------------------
 // Profiles
@@ -68,6 +67,7 @@ export async function fetchEnvelope(id) {
 export async function createEnvelopeFromFile(file) {
   const { bytes } = await fileToPdfBytes(file)
   // Only the page count is needed here; opening validates the PDF
+  const { loadPdfDocument } = await import('./pdfjs')
   const doc = await loadPdfDocument(bytes)
   const pageCount = doc.numPages
   doc.destroy()

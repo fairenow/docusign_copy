@@ -1,13 +1,13 @@
-import { Pen, Hash, Type, Calendar, CheckSquare } from 'lucide-react'
 import { FIELD_LABELS, FIELD_TYPES } from '../../lib/fields'
+import { FIELD_ICONS } from '../fieldIcons'
 
-const ICONS = { signature: Pen, initials: Hash, text: Type, date: Calendar, checkbox: CheckSquare }
-
-export default function FieldPalette({ recipient, onAdd }) {
+export default function FieldPalette({ recipient, documentReady, onAdd }) {
   return (
     <section>
-      <h2 className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-2">Fields</h2>
-      {recipient ? (
+      <h2 className="section-heading mb-2">Fields</h2>
+      {!documentReady ? (
+        <p className="text-xs text-dark-400 mb-2">Loading the document…</p>
+      ) : recipient ? (
         <p className="text-xs text-dark-400 mb-2">
           Adding to the current page for{' '}
           <span className="font-medium" style={{ color: recipient.color }}>{recipient.name || 'this signer'}</span>
@@ -17,12 +17,12 @@ export default function FieldPalette({ recipient, onAdd }) {
       )}
       <div className="grid grid-cols-2 gap-2">
         {FIELD_TYPES.map(type => {
-          const Icon = ICONS[type]
+          const Icon = FIELD_ICONS[type]
           return (
             <button
               key={type}
               type="button"
-              disabled={!recipient}
+              disabled={!recipient || !documentReady}
               onClick={() => onAdd(type)}
               className="p-2 rounded-lg bg-dark-700 border border-dark-600 text-sm text-gray-200 flex items-center gap-2 hover:border-blue-500 disabled:opacity-40 disabled:hover:border-dark-600"
             >

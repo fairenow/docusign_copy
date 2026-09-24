@@ -8,6 +8,7 @@ import {
   EncryptedPDFError
 } from 'pdf-lib'
 import { stripExtension } from './documents'
+import { DEFAULT_FONT_SIZE } from './fields'
 
 /**
  * Return the fields that still need input before the document can be exported.
@@ -78,7 +79,7 @@ export async function buildSignedPdf(pdfBytes, elements) {
       case 'date': {
         const text = encodable(font, el.text || '')
         if (!text) break
-        const size = Number(el.fontSize) || 12
+        const size = Number(el.fontSize) || DEFAULT_FONT_SIZE
         page.drawText(text, {
           x: x + 2,
           y: y + (h - size * 0.7) / 2,

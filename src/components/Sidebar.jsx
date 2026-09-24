@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import Brand from './Brand'
 import { Pen, Type, Calendar, Hash, CheckSquare, Sparkles } from 'lucide-react'
 import SignaturePanel from './SignaturePanel'
 import TextOptions from './TextOptions'
@@ -45,10 +47,8 @@ export default function Sidebar({
   return (
     <aside className="w-72 bg-dark-800 border-r border-dark-700 flex flex-col flex-shrink-0">
       <div className="p-5 border-b border-dark-700">
-        <h1 className="text-2xl font-bold gradient-text flex items-center gap-2">
-          📝 DocSign
-        </h1>
-        <a href="/" className="text-xs text-dark-400 hover:text-gray-200">← Envelopes</a>
+        <h1><Brand className="text-2xl" /></h1>
+        <Link to="/" className="text-xs text-dark-400 hover:text-gray-200">← Envelopes</Link>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
@@ -91,7 +91,7 @@ export default function Sidebar({
           </button>
         )}
 
-        <p className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-3">
+        <p className="section-heading mb-3">
           Add Fields
         </p>
 

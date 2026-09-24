@@ -4,7 +4,7 @@
  */
 
 // Field type constants
-export const FIELD_TYPES = {
+export const DETECTED_FIELD_TYPES = {
   TEXT: 'text',
   CHECKBOX: 'checkbox',
   RADIO: 'radio',
@@ -61,33 +61,33 @@ function detectFieldType(fieldName, fieldType, fieldFlags) {
   if (fieldType === 'Btn') {
     // Check if it's a radio button (has Radio flag) or checkbox
     if (fieldFlags && (fieldFlags & 32768)) { // Radio flag
-      return FIELD_TYPES.RADIO
+      return DETECTED_FIELD_TYPES.RADIO
     }
-    return FIELD_TYPES.CHECKBOX
+    return DETECTED_FIELD_TYPES.CHECKBOX
   }
 
   if (fieldType === 'Ch') {
-    return FIELD_TYPES.DROPDOWN
+    return DETECTED_FIELD_TYPES.DROPDOWN
   }
 
   if (fieldType === 'Sig') {
-    return FIELD_TYPES.SIGNATURE
+    return DETECTED_FIELD_TYPES.SIGNATURE
   }
 
   // For text fields, check patterns to determine specific type
   if (SIGNATURE_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.SIGNATURE
+    return DETECTED_FIELD_TYPES.SIGNATURE
   }
 
   if (DATE_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.DATE
+    return DETECTED_FIELD_TYPES.DATE
   }
 
   if (INITIAL_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.INITIALS
+    return DETECTED_FIELD_TYPES.INITIALS
   }
 
-  return FIELD_TYPES.TEXT
+  return DETECTED_FIELD_TYPES.TEXT
 }
 
 /**
@@ -108,13 +108,13 @@ function getFieldLabel(fieldName, detectedType, index) {
 
   // Generate default label based on type
   const typeLabels = {
-    [FIELD_TYPES.TEXT]: 'Text Field',
-    [FIELD_TYPES.CHECKBOX]: 'Checkbox',
-    [FIELD_TYPES.RADIO]: 'Radio Button',
-    [FIELD_TYPES.SIGNATURE]: 'Signature',
-    [FIELD_TYPES.DATE]: 'Date Field',
-    [FIELD_TYPES.INITIALS]: 'Initials',
-    [FIELD_TYPES.DROPDOWN]: 'Dropdown'
+    [DETECTED_FIELD_TYPES.TEXT]: 'Text Field',
+    [DETECTED_FIELD_TYPES.CHECKBOX]: 'Checkbox',
+    [DETECTED_FIELD_TYPES.RADIO]: 'Radio Button',
+    [DETECTED_FIELD_TYPES.SIGNATURE]: 'Signature',
+    [DETECTED_FIELD_TYPES.DATE]: 'Date Field',
+    [DETECTED_FIELD_TYPES.INITIALS]: 'Initials',
+    [DETECTED_FIELD_TYPES.DROPDOWN]: 'Dropdown'
   }
 
   return `${typeLabels[detectedType] || 'Field'} ${index + 1}`
@@ -249,7 +249,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Signature'),
-      type: FIELD_TYPES.SIGNATURE,
+      type: DETECTED_FIELD_TYPES.SIGNATURE,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 20),
       y: Math.round(lastItem.y - 5),
@@ -267,7 +267,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Date'),
-      type: FIELD_TYPES.DATE,
+      type: DETECTED_FIELD_TYPES.DATE,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 10),
       y: Math.round(lastItem.y - 2),
@@ -285,7 +285,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Initials'),
-      type: FIELD_TYPES.INITIALS,
+      type: DETECTED_FIELD_TYPES.INITIALS,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 10),
       y: Math.round(lastItem.y - 2),
@@ -304,7 +304,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Checkbox'),
-      type: FIELD_TYPES.CHECKBOX,
+      type: DETECTED_FIELD_TYPES.CHECKBOX,
       page: pageNum,
       x: Math.round(firstItem.x - 25),
       y: Math.round(firstItem.y),
@@ -325,7 +325,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
         id: `detected-field-${pageNum}-${index}`,
         name: '',
         label: colonMatch[1].trim() || 'Text Field',
-        type: FIELD_TYPES.TEXT,
+        type: DETECTED_FIELD_TYPES.TEXT,
         page: pageNum,
         x: Math.round(lastItem.x + lastItem.width + 10),
         y: Math.round(lastItem.y - 2),

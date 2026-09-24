@@ -4,8 +4,9 @@ import { FilePlus, Trash2, Ban, RefreshCw } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { ACCEPTED_FILE_TYPES } from '../lib/documents'
-import { ENVELOPE_GROUPS, STATUS_LABELS, envelopeGroup, filterEnvelopes } from '../lib/envelopeModel'
+import { ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, groupEnvelopes } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
+import ErrorBanner from '../components/ErrorBanner'
 
 const STATUS_STYLES = {
   draft: 'bg-dark-600 text-gray-200',
@@ -14,8 +15,6 @@ const STATUS_STYLES = {
   declined: 'bg-red-500/15 text-red-300',
   voided: 'bg-dark-600 text-dark-400 line-through'
 }
-
-const RECIPIENT_STATUS_ICON = { signed: '✓', declined: '✕', viewed: '👁', sent: '✉', pending: '·' }
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -49,16 +48,8 @@ export default function DashboardPage() {
     }
   }, [refresh])
 
-  const counts = useMemo(() => {
-    const result = { all: envelopes?.length ?? 0 }
-    for (const e of envelopes ?? []) {
-      const g = envelopeGroup(e, user)
-      result[g] = (result[g] ?? 0) + 1
-    }
-    return result
-  }, [envelopes, user])
-
-  const visible = useMemo(() => filterEnvelopes(envelopes ?? [], group, user), [envelopes, group, user])
+  const groups = useMemo(() => groupEnvelopes(envelopes ?? [], user), [envelopes, user])
+  const visible = groups[group]
 
   const handleNewEnvelope = async (e) => {
     const file = e.target.files?.[0]
@@ -78,7 +69,8 @@ export default function DashboardPage() {
     if (!window.confirm(`Delete the draft "${envelope.title}"? This cannot be undone.`)) return
     try {
       await deleteDraft(envelope)
-      await refresh()
+      // Update locally; Realtime will also trigger a refetch
+      setEnvelopes(list => list.filter(e => e.id !== envelope.id))
     } catch (err) {
       alert('Could not delete the draft: ' + err.message)
     }
@@ -88,8 +80,8 @@ export default function DashboardPage() {
     const reason = window.prompt(`Void "${envelope.title}"? Signers will no longer be able to sign it.\n\nReason (optional):`)
     if (reason === null) return
     try {
-      await voidEnvelope(envelope.id, reason)
-      await refresh()
+      const voided = await voidEnvelope(envelope.id, reason)
+      setEnvelopes(list => list.map(e => (e.id === envelope.id ? { ...e, ...voided, recipients: e.recipients } : e)))
     } catch (err) {
       alert('Could not void the envelope: ' + err.message)
     }
@@ -126,12 +118,12 @@ export default function DashboardPage() {
             }`}
           >
             {g.label}
-            {counts[g.id] ? <span className="ml-2 text-xs text-dark-500">{counts[g.id]}</span> : null}
+            {groups[g.id].length ? <span className="ml-2 text-xs text-dark-500">{groups[g.id].length}</span> : null}
           </button>
         ))}
       </div>
 
-      {error && <p role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</p>}
+      <ErrorBanner>{error}</ErrorBanner>
 
       {envelopes === null && !error ? (
         <p className="text-dark-400 text-sm py-12 text-center">Loading…</p>
@@ -143,7 +135,7 @@ export default function DashboardPage() {
             <EnvelopeRow
               key={envelope.id}
               envelope={envelope}
-              isOwner={envelope.owner_id === user.id}
+              user={user}
               onDelete={() => handleDelete(envelope)}
               onVoid={() => handleVoid(envelope)}
             />
@@ -156,7 +148,7 @@ export default function DashboardPage() {
   )
 }
 
-function EnvelopeRow({ envelope, isOwner, onDelete, onVoid }) {
+function EnvelopeRow({ envelope, user, onDelete, onVoid }) {
   const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
   const updated = new Date(envelope.updated_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -166,7 +158,7 @@ function EnvelopeRow({ envelope, isOwner, onDelete, onVoid }) {
         <p className="text-gray-100 font-medium truncate">{envelope.title}</p>
         <p className="text-xs text-dark-400 truncate">
           {recipients.length
-            ? recipients.map(r => `${RECIPIENT_STATUS_ICON[r.status] ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
+            ? recipients.map(r => `${RECIPIENT_STATUS[r.status]?.icon ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
             : 'No recipients yet'}
         </p>
       </Link>
@@ -175,12 +167,12 @@ function EnvelopeRow({ envelope, isOwner, onDelete, onVoid }) {
       </span>
       <span className="text-xs text-dark-500 w-40 text-right whitespace-nowrap">{updated}</span>
       <div className="w-8 flex justify-end">
-        {isOwner && envelope.status === 'draft' && (
+        {canDelete(envelope, user) && (
           <button onClick={onDelete} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Delete draft">
             <Trash2 size={16} />
           </button>
         )}
-        {isOwner && envelope.status === 'sent' && (
+        {canVoid(envelope, user) && (
           <button onClick={onVoid} className="p-1.5 rounded text-dark-400 hover:text-red-400 hover:bg-dark-700" title="Void envelope">
             <Ban size={16} />
           </button>

@@ -12,8 +12,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          pdfjs: ['pdfjs-dist'],
-          react: ['react', 'react-dom']
+          react: ['react', 'react-dom', 'react-router-dom']
         }
       }
     }

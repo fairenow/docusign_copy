@@ -52,7 +52,6 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(() => ({
-    session,
     user: session?.user ?? null,
     profile,
     isLoading: session === undefined,
