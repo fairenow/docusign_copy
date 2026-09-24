@@ -7,7 +7,7 @@ module.exports = {
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended'
   ],
-  ignorePatterns: ['dist', 'node_modules', 'supabase/functions'],
+  ignorePatterns: ['dist', 'node_modules', 'supabase/functions', '.agents', 'playwright-report', 'test-results'],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],
@@ -16,6 +16,7 @@ module.exports = {
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]
   },
   overrides: [
-    { files: ['*.cjs', '*.config.js'], env: { node: true } }
+    { files: ['*.cjs', '*.config.js', 'tests/**'], env: { node: true } },
+    { files: ['src/**/*.test.js'], env: { node: true } }
   ]
 }
