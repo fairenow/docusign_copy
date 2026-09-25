@@ -514,7 +514,7 @@ test('Quick sign: saved signature and initials in one click, placed exactly wher
   // Today's date, filled in
   await page.getByRole('button', { name: "Today's date" }).click()
   await placePickedField(page)
-  const today = await page.evaluate(() => new Date().toLocaleDateString())
+  const today = await page.evaluate(() => new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()))
   await expect(page.locator('[data-field-type="date"] input')).toHaveValue(today)
 
   // Esc puts a picked-up field back

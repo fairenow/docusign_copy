@@ -22,6 +22,8 @@ export const FIELD_TYPES = ['signature', 'initials', 'text', 'date', 'checkbox']
 export const SENDER_FIELD_TYPES = ['prefill']
 
 export { FIELD_LABELS, DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'
+// Today's date as envelopes print it (MM/DD/YYYY), so every date field looks the same
+import { signingDate } from '../../supabase/functions/_shared/signing.js'
 import { DEFAULT_FONT_SIZE } from '../../supabase/functions/_shared/labels.js'
 export const FONT_SIZES = [8, 10, 11, 12, 14, 16, 18, 24]
 
@@ -32,9 +34,6 @@ export function newId() {
   return crypto.randomUUID()
 }
 
-function formatToday() {
-  return new Date().toLocaleDateString()
-}
 
 /**
  * Geometry for a new field: { id, type, page, x, y, w, h } in page fractions.
@@ -77,7 +76,7 @@ export function createElement(type, placement, props = {}) {
     case 'text':
       return { ...base, text: props.text ?? '', fontSize: props.fontSize ?? DEFAULT_FONT_SIZE, color: props.color ?? '#000000' }
     case 'date':
-      return { ...base, text: props.text ?? formatToday(), fontSize: props.fontSize ?? DEFAULT_FONT_SIZE, color: '#000000' }
+      return { ...base, text: props.text ?? signingDate(), fontSize: props.fontSize ?? DEFAULT_FONT_SIZE, color: '#000000' }
     case 'checkbox':
       return { ...base, checked: props.checked ?? false }
     case 'signature':

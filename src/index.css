@@ -109,8 +109,11 @@
   font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
 }
 
-/* Text input in overlay */
+/* Text input in a field: a block that fills the field exactly, so the text sits centred in
+   its box (as inline content it sat on the page's line of text, which at small zoom is taller
+   than the field, and dropped below the box) */
 .overlay-text-input {
+  display: block;
   border: none;
   background: transparent;
   font-size: inherit;
@@ -118,7 +121,8 @@
   color: inherit;
   outline: none;
   width: 100%;
-  min-width: 80px;
+  min-width: 0;
+  line-height: normal;
 }
 
 /* Loading spinner */
