@@ -14,8 +14,10 @@ import { SkeletonRows } from '../components/Skeleton'
 import { useFeedback } from '../components/feedback/useFeedback'
 import ErrorBanner from '../components/ErrorBanner'
 
-// A deleted draft can be brought back this long, then it is deleted for good
+// A deleted draft can be brought back this long, then it is deleted for good. Pending deletes
+// outlive the page, so a draft stays hidden if you leave and come back within that time.
 const UNDO_DELETE_MS = 6000
+const pendingDeletes = new Set()
 
 const PROGRESS_STYLES = {
   waiting: 'text-gray-700',
@@ -47,7 +49,7 @@ export default function DashboardPage() {
   const [query, setQuery] = useState('')
   const { ask, notify } = useFeedback()
   // Drafts deleted a moment ago, hidden until the undo window passes
-  const [hiddenIds, setHiddenIds] = useState(() => new Set())
+  const [hiddenIds, setHiddenIds] = useState(() => new Set(pendingDeletes))
   // "sent 3 min ago" stays true while the page is open
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -101,12 +103,11 @@ export default function DashboardPage() {
 
   // Deleting hides the draft at once and offers Undo; it is deleted when that runs out (even
   // if you have moved to another page meanwhile)
-  const setHidden = (id, hidden) => setHiddenIds(ids => {
-    const next = new Set(ids)
-    if (hidden) next.add(id)
-    else next.delete(id)
-    return next
-  })
+  const setHidden = (id, hidden) => {
+    if (hidden) pendingDeletes.add(id)
+    else pendingDeletes.delete(id)
+    setHiddenIds(new Set(pendingDeletes))
+  }
 
   const handleDelete = (envelope) => {
     const whose = isOwner(envelope, user) ? '' : ` by ${senderName(envelope)}`

@@ -1,10 +1,8 @@
 // POST (hourly, from pg_cron) — expire overdue envelopes and email reminders.
 // The job sends a secret that only the database knows; svc_run_reminders checks it.
 import { json, HttpError } from '../http.ts'
-import { admin, audit, ownerOf, rpc, OWNER_SELECT } from '../supabase.ts'
-import { emailConfig } from '../config.ts'
-import { sendEmail } from '../mail.ts'
-import { emailSigningLinks, type SigningLink } from '../notify.ts'
+import { admin, ownerOf, rpc, OWNER_SELECT } from '../supabase.ts'
+import { emailSender, emailSigningLinks, type SigningLink } from '../notify.ts'
 import { expiredEmail } from '../emails.js'
 
 interface Run {
@@ -31,14 +29,5 @@ async function notifyOwnerOfExpiry(envelopeId: string) {
   const { data, error } = await admin.from('envelopes').select(`title, ${OWNER_SELECT}`).eq('id', envelopeId).single()
   if (error) throw error
   const owner = ownerOf(data)
-  try {
-    const { appUrl, logoUrl } = emailConfig()
-    await sendEmail({
-      to: owner.email,
-      ...expiredEmail({ ownerName: owner.name, title: data.title, link: `${appUrl}/envelopes/${envelopeId}`, logoUrl })
-    })
-  } catch (err) {
-    await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind: 'expired' } })
-    throw err
-  }
+  await emailSender(envelopeId, owner, 'expired', (links) => expiredEmail({ ownerName: owner.name, title: data.title, ...links }))
 }

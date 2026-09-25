@@ -101,7 +101,7 @@ async function attachDocument(envelopeId, bytes) {
   try {
     unwrap(await db.storage.from(BUCKET).upload(originalPath(envelopeId), pdfBlob(bytes), PDF_UPLOAD))
     unwrap(await db.from('envelopes').update({ original_path: originalPath(envelopeId) }).eq('id', envelopeId))
-    justUploaded.set(originalPath(envelopeId), bytes)
+    justUploaded = { path: originalPath(envelopeId), bytes }
   } catch (err) {
     await db.storage.from(BUCKET).remove([originalPath(envelopeId)])
     await db.from('envelopes').delete().eq('id', envelopeId)
@@ -109,14 +109,14 @@ async function attachDocument(envelopeId, bytes) {
   }
 }
 
-// A document this tab just uploaded, handed to the editor it opens next instead of downloading it
-// again. Used once, then forgotten.
-const justUploaded = new Map()
+// The document this tab just uploaded, handed to the editor it opens next instead of downloading
+// it again. Only the latest is kept, and it is forgotten once used.
+let justUploaded = null // { path, bytes }
 
 export async function downloadDocument(path, bucket = BUCKET) {
-  if (bucket === BUCKET && justUploaded.has(path)) {
-    const bytes = justUploaded.get(path)
-    justUploaded.delete(path)
+  if (bucket === BUCKET && justUploaded?.path === path) {
+    const { bytes } = justUploaded
+    justUploaded = null
     return bytes
   }
   const blob = unwrap(await client().storage.from(bucket).download(path))

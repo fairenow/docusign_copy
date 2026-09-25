@@ -65,14 +65,27 @@ export async function emailSenderSigned(envelopeId: string, recipientId: string)
   const signer = recipients.find(r => r.id === recipientId)
   if (!signer || !owner.email || signer.email?.toLowerCase() === owner.email.toLowerCase()) return
   const waitingOn = recipients.filter(r => r.role === 'signer' && r.status !== 'signed').map(r => r.name)
+  await emailSender(envelopeId, owner, 'signed_notice', (links) =>
+    signedEmail({ ownerName: owner.name, recipientName: signer.name, title: envelope.title, waitingOn, ...links }))
+}
+
+type EmailContent = { subject: string; html: string; text: string }
+
+/**
+ * Email the sender about their envelope. `build` gets the envelope's link and the logo.
+ * Best effort: a failure is logged and recorded in the audit trail as `kind`.
+ */
+export async function emailSender(
+  envelopeId: string,
+  owner: { email: string },
+  kind: string,
+  build: (links: { link: string; logoUrl: string }) => EmailContent
+) {
   try {
     const { appUrl, logoUrl } = emailConfig()
-    await sendEmail({
-      to: owner.email,
-      ...signedEmail({ ownerName: owner.name, recipientName: signer.name, title: envelope.title, waitingOn, link: `${appUrl}/envelopes/${envelopeId}`, logoUrl })
-    })
+    await sendEmail({ to: owner.email, ...build({ link: `${appUrl}/envelopes/${envelopeId}`, logoUrl }) })
   } catch (err) {
     console.error(err)
-    await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind: 'signed_notice' } })
+    await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind } })
   }
 }
