@@ -126,6 +126,21 @@ export function elementFromDetected(field, pageSize, { initials } = {}) {
   return createElement(known, { page: field.page, pageSize }, props)
 }
 
+/**
+ * The rectangle a field being placed takes with the pointer at (x, y), in page fractions.
+ * Nothing snaps: the field goes exactly where the preview shows it. Its bottom-left corner is
+ * at the pointer, so pointing at the start of a line puts the field on it; a checkbox is
+ * centred on it. `props.aspect` sizes a signature image as placeField does.
+ */
+export function placementRect(type, pageSize, x, y, props = {}) {
+  const { w, h } = placeField(type, { page: 1, pageSize }, { aspect: props.aspect })
+  const [left, top] = type === 'checkbox' ? [x - w / 2, y - h / 2] : [x, y - h]
+  return { x: clamp(left, 0, 1 - w), y: clamp(top, 0, 1 - h), w, h }
+}
+
+/** A mouse or trackpad: fields can follow the pointer until clicked into place (touch has no hover). */
+export const canHover = () => Boolean(window.matchMedia?.('(hover: hover) and (pointer: fine)').matches)
+
 export function clamp(value, min, max) {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }

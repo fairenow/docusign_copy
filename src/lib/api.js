@@ -289,7 +289,8 @@ export const getSigningSession = (identity) => signingApi('session', identity)
 export const submitSigning = (identity, values, consent, positions = {}) => signingApi('submit', { ...identity, values, consent, positions })
 export const declineSigning = (identity, reason) => signingApi('decline', { ...identity, reason })
 
-export const sendEnvelope = (envelopeId) => signingApi('send', { envelopeId })
+// signNow: you are about to sign it yourself in the app, so you are not emailed a link
+export const sendEnvelope = (envelopeId, { signNow = false } = {}) => signingApi('send', { envelopeId, signNow })
 export const resendSigningLink = (envelopeId, recipientId) => signingApi('resend', { envelopeId, recipientId })
 export const retryFinalize = (envelopeId) => signingApi('finalize', { envelopeId })
 

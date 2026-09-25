@@ -37,7 +37,7 @@ export default function DocumentViewer({
   onActivateElement,
   onElementGestureEnd, // (element, kind, event) after a field was moved or resized
   constrainElement,
-  // Placing a new field: { rectAt(pageNumber, x, y) -> rect, render(rect), onPlace(pageNumber, rect) }.
+  // Placing a new field: { rectAt(pageNumber, x, y) -> rect, render(rect, { scale, containerSize }), onPlace(pageNumber, rect) }.
   // The field follows the pointer as a preview and a click puts it there.
   placing = null,
   // Pages to sketch while the document is still loading (e.g. the envelope's page count)
@@ -170,6 +170,8 @@ export default function DocumentViewer({
                 placing={placing}
                 preview={preview?.page === pageNumber ? preview.rect : null}
                 onPreview={setPreview}
+                scale={scale}
+                containerSize={displaySize}
               />
             )}
           </div>
@@ -183,7 +185,7 @@ export default function DocumentViewer({
  * Above a page while a field is being placed: the preview follows the pointer and a click
  * places the field (on top of fields already there, so they do not catch the click).
  */
-function PlacementLayer({ pageNumber, placing, preview, onPreview }) {
+function PlacementLayer({ pageNumber, placing, preview, onPreview, scale, containerSize }) {
   const rectAt = (e) => {
     const box = e.currentTarget.getBoundingClientRect()
     return placing.rectAt(pageNumber, (e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height)
@@ -206,7 +208,7 @@ function PlacementLayer({ pageNumber, placing, preview, onPreview }) {
           style={{ left: `${preview.x * 100}%`, top: `${preview.y * 100}%`, width: `${preview.w * 100}%`, height: `${preview.h * 100}%` }}
           data-testid="placement-preview"
         >
-          {placing.render(preview)}
+          {placing.render(preview, { scale, containerSize })}
         </div>
       )}
     </div>

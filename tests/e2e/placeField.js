@@ -5,6 +5,11 @@ const placed = new WeakMap()
 
 export async function addField(page, name, { page: pageNumber } = {}) {
   await page.getByRole('button', { name, exact: true }).click()
+  await placePickedField(page, { page: pageNumber })
+}
+
+/** Click the field that is following the pointer onto the page in view (or `page`). */
+export async function placePickedField(page, { page: pageNumber } = {}) {
   let target = pageNumber
   if (!target) {
     const indicator = page.getByTestId('page-indicator')

@@ -391,7 +391,8 @@ function addAudit(db, envelopeId, action, recipientId = null, actorId = null) {
   db.audit.push({ id: db.audit.length + 1, envelope_id: envelopeId, recipient_id: recipientId, actor_user_id: actorId, action, ip: '203.0.113.7', details: {}, created_at: now() })
 }
 
-function issueTokens(db, env) {
+// signNow: the owner signs in the app straight away, so no link is emailed to them
+function issueTokens(db, env, { skipEmail } = {}) {
   const signers = db.recipients.filter(r => r.envelope_id === env.id && r.role === 'signer')
   const pending = signers.filter(r => r.status !== 'signed')
   const turn = Math.min(...pending.map(r => r.routing_order))
@@ -401,6 +402,10 @@ function issueTokens(db, env) {
     db.tokens.set(token, r.id)
     r.status = 'sent'
     r.sent_at = now()
+    if (r.email.toLowerCase() === skipEmail) {
+      addAudit(db, env.id, 'recipient_signing_in_app', r.id)
+      continue
+    }
     db.emails.push({ to: r.email, kind: 'signing_request', link: `/sign/${token}`, token })
     addAudit(db, env.id, 'recipient_notified', r.id)
   }
@@ -444,7 +449,7 @@ async function installMockSigningApi(page, db) {
         env.status = 'sent'
         env.sent_at = now()
         addAudit(db, env.id, 'envelope_sent')
-        issueTokens(db, env)
+        issueTokens(db, env, { skipEmail: body.signNow === true ? user.email.toLowerCase() : undefined })
         return json(route, 200, { notified: db.emails.length, failed: [] })
       }
       if (action === 'resend') {
@@ -543,6 +548,10 @@ async function installMockSigningApi(page, db) {
         env.final_path = `${env.id}/signed.pdf`
         db.files.set(`documents/${env.final_path}`, db.files.get(`documents/${env.original_path}`))
         addAudit(db, env.id, 'envelope_completed')
+        // Everyone, copy recipients and the sender included, gets the signed PDF
+        const owner = db.profiles.find(p => p.id === env.owner_id)
+        const to = new Set([owner?.email, ...db.recipients.filter(r => r.envelope_id === env.id).map(r => r.email)].filter(Boolean))
+        for (const email of to) db.emails.push({ to: email, kind: 'completed' })
       } else {
         issueTokens(db, env)
         // The sender hears about each signature (not their own)

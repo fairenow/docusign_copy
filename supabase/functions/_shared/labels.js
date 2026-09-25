@@ -19,6 +19,7 @@ export const ACTION_LABELS = {
   envelope_created: 'Envelope created',
   envelope_sent: 'Sent for signature',
   recipient_notified: 'Signing request emailed',
+  recipient_signing_in_app: 'Signing in the app (no email)',
   recipient_reminded: 'Signing link re-sent',
   recipient_auto_reminded: 'Reminder emailed',
   recipient_viewed: 'Viewed',

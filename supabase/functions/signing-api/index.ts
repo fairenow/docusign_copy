@@ -1,6 +1,6 @@
 // Signing API: one Edge Function, routed by the last path segment.
 //
-//   POST /signing-api/send      { envelopeId }                          signed-in owner
+//   POST /signing-api/send      { envelopeId, signNow? }                signed-in owner
 //   POST /signing-api/resend    { envelopeId, recipientId }             signed-in owner
 //   POST /signing-api/finalize  { envelopeId }                          signed-in owner/admin (retry)
 //   POST /signing-api/session   { token } | { envelopeId }              signer (link or team member)

@@ -3,7 +3,7 @@ import { answerDialog } from './dialogs'
 import { PDFDocument } from 'pdf-lib'
 import { ALICE, createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
-import { addField } from './placeField'
+import { addField, placePickedField } from './placeField'
 
 let db
 
@@ -408,6 +408,7 @@ test('quick sign still fills and downloads a PDF without an account', async ({ p
   await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByRole('button', { name: 'Text Field' }).click()
   await page.getByRole('button', { name: 'Add Text Field' }).click()
+  await placePickedField(page)
   await page.locator('.overlay-element input').fill('Jane Doe')
 
   const download = page.waitForEvent('download')
@@ -469,4 +470,59 @@ test('Quick sign opens the signature pad over the page, where you are', async ({
 
   await expect(dialog).toHaveCount(0)
   await expect(placeholder.locator('img')).toBeInViewport()
+})
+
+test('Quick sign: saved signature and initials in one click, placed exactly where you click, with today\'s date', async ({ page }) => {
+  // A 3:1 and a 1:1 image
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAYAAAAb4BS0AAAAC0lEQVR4nGNgQAIAAA0AATBGj/4AAAAASUVORK5CYII='
+  const square = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII='
+  db.savedSignatures.push(
+    { id: crypto.randomUUID(), kind: 'signature', image: png, created_at: '2026-09-01T00:00:00Z' },
+    { id: crypto.randomUUID(), kind: 'initials', image: square, created_at: '2026-09-02T00:00:00Z' }
+  )
+  await signInAs(page, ALICE)
+  await page.goto('/quick-sign')
+  await page.getByTestId('file-input').setInputFiles(await pdfFile('contract.pdf'))
+  await expect(page.getByTestId('document-page').first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await page.getByRole('button', { name: 'Place your saved signature' }).click()
+  await expect(page.getByRole('status')).toContainText('Click where the signature should start')
+
+  // The preview follows the pointer; the click puts the field's bottom-left corner there
+  const layer = page.locator('[data-page="1"] [data-testid="placement-layer"]')
+  const box = await layer.boundingBox()
+  const at = { x: box.x + 101, y: box.y + 203 }
+  await page.mouse.move(at.x, at.y)
+  await expect(page.getByTestId('placement-preview').locator('img')).toHaveAttribute('src', png)
+  await page.mouse.click(at.x, at.y)
+  const signature = page.locator('[data-field-type="signature"]')
+  await expect(signature.locator('img')).toHaveAttribute('src', png)
+  const placed = await signature.boundingBox()
+  expect(Math.abs(placed.x - at.x)).toBeLessThan(1.5)
+  expect(Math.abs(placed.y + placed.height - at.y)).toBeLessThan(1.5)
+  await expect(page.getByTestId('placement-layer')).toHaveCount(0)
+
+  // Initials from the same panel
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await page.getByRole('button', { name: 'Place your saved initials' }).click()
+  await placePickedField(page)
+  await expect(page.locator('[data-field-type="initials"] img')).toHaveAttribute('src', square)
+
+  // Today's date, filled in
+  await page.getByRole('button', { name: "Today's date" }).click()
+  await placePickedField(page)
+  const today = await page.evaluate(() => new Date().toLocaleDateString())
+  await expect(page.locator('[data-field-type="date"] input')).toHaveValue(today)
+
+  // Esc puts a picked-up field back
+  await page.getByRole('button', { name: 'Checkbox' }).click()
+  await expect(page.getByTestId('placement-layer').first()).toBeAttached()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('placement-layer')).toHaveCount(0)
+  await expect(page.locator('[data-field-type="checkbox"]')).toHaveCount(0)
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download PDF' }).click()
+  expect((await download).suggestedFilename()).toBe('contract_signed.pdf')
 })

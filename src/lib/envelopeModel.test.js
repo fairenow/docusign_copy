@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient, addSelfAsSigner, recipientByEmail,
-  validateForSave, validateForSend, envelopeGroup, currentSigners, isMine, matchesSearch, RECIPIENT_COLORS
+  validateForSave, validateForSend, envelopeGroup, currentSigners, isMine, matchesSearch, signsAlone, RECIPIENT_COLORS
 } from './envelopeModel'
 
 const signer = (over = {}) => ({ id: 'r1', name: 'Bob', email: 'bob@flmlnk.com', role: 'signer', routingOrder: 1, color: '#2563eb', ...over })
@@ -196,5 +196,18 @@ describe('permissions', () => {
     const e = { title: 'Mutual NDA', owner: { full_name: 'Sara S', email: 'sara.s@flmlnk.com' }, recipients: [{ name: 'Acme Legal', email: 'legal@acme.example' }] }
     expect(['nda', 'SARA', 'acme', '', '  '].every(q => matchesSearch(e, q))).toBe(true)
     expect(matchesSearch(e, 'jordan')).toBe(false)
+  })
+})
+
+describe('signsAlone', () => {
+  const me = { email: 'Alice@flmlnk.com' }
+  const draft = (...recipients) => ({ recipients })
+  it('is true when you are the only signer, whoever gets a copy', () => {
+    expect(signsAlone(draft({ role: 'signer', email: 'alice@flmlnk.com' }, { role: 'cc', email: 'carol@client.com' }), me)).toBe(true)
+  })
+  it('is false with another signer, or no signer at all', () => {
+    expect(signsAlone(draft({ role: 'signer', email: 'alice@flmlnk.com' }, { role: 'signer', email: 'bob@flmlnk.com' }), me)).toBe(false)
+    expect(signsAlone(draft({ role: 'cc', email: 'alice@flmlnk.com' }), me)).toBe(false)
+    expect(signsAlone(draft({ role: 'signer', email: 'alice@flmlnk.com' }), null)).toBe(false)
   })
 })

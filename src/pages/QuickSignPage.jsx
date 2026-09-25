@@ -10,9 +10,10 @@ import LoadingOverlay from '../components/LoadingOverlay'
 import { useFeedback } from '../components/feedback/useFeedback'
 import Modal from '../components/Modal'
 import SignaturePanel from '../components/SignaturePanel'
+import PlacementHint from '../components/PlacementHint'
 import { useDocument } from '../hooks/useDocument'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
-import { createElement, elementFromDetected, nextFieldY } from '../lib/fields'
+import { FIELD_LABELS, canHover, createElement, elementFromDetected, nextFieldY, placementRect } from '../lib/fields'
 import { renderTypedSignature, signatureFromImage } from '../lib/signatureImage'
 import { useAuth } from '../auth/useAuth'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
@@ -36,6 +37,8 @@ export default function QuickSignPage() {
   const [savedInitials, setSavedInitials] = useState(null)
   // Signature placeholder being signed in the pop-up (opens over the page, where you are)
   const [signingFieldId, setSigningFieldId] = useState(null)
+  // A field picked up with the mouse: { type, props }, following the pointer until clicked onto a page
+  const [pending, setPending] = useState(null)
 
   // Ready by the time a file is picked
   useEffect(preloadPdfViewer, [])
@@ -80,9 +83,15 @@ export default function QuickSignPage() {
     if (documentError) notify(`Could not open the document: ${documentError.message}`, { tone: 'error' })
   }, [documentError, notify])
 
+  // With a mouse the field follows the pointer until it is clicked onto the page, as in the
+  // envelope editor. Touch screens have no hover: it is added to the current page at once.
   const addElement = useCallback((type, props = {}) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize) return
+    if (canHover()) {
+      setPending({ type, props })
+      return
+    }
     setElements(prev => [
       ...prev,
       createElement(type, { page: currentPage, pageSize }, { y: nextFieldY(prev, currentPage), ...props })
@@ -120,6 +129,15 @@ export default function QuickSignPage() {
     setActivePanel(null)
   }, [addElement])
 
+  // From the sidebar: one of your saved signatures or initials, in one click
+  const handleUseSaved = useCallback(async (row) => {
+    const image = await signatureFromImage(row.image)
+    if (row.kind === 'signature') return handleSignatureCreated(image)
+    setSavedInitials({ ...image, text: '' })
+    addElement('initials', { data: image.data, aspect: image.aspect })
+    setActivePanel(null)
+  }, [addElement, handleSignatureCreated])
+
   // From the pop-up: fill the placeholder that was clicked
   const handlePlaceholderSigned = (signature) => {
     setSavedSignature(signature)
@@ -144,6 +162,25 @@ export default function QuickSignPage() {
   }, [getInitials, savedSignature, updateElement])
 
   const renderField = useCallback((element, ctx) => <FillField element={element} {...ctx} />, [])
+
+  useEffect(() => {
+    if (!pending) return
+    const onKeyDown = (e) => { if (e.key === 'Escape') setPending(null) }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [pending])
+
+  const placing = pending && {
+    rectAt: (pageNumber, x, y) => placementRect(pending.type, pageSizes[pageNumber - 1], x, y, pending.props),
+    // The preview is the field as it will be: the signature itself, today's date
+    render: (rect, ctx) => (
+      <FillField element={createElement(pending.type, { page: 1, pageSize: pageSizes[0] }, { ...pending.props, ...rect })} {...ctx} onUpdate={() => {}} />
+    ),
+    onPlace: (pageNumber, rect) => {
+      setElements(prev => [...prev, createElement(pending.type, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] }, { ...pending.props, ...rect })])
+      setPending(null)
+    }
+  }
 
   const handleAddInitials = useCallback(async () => {
     const initials = await getInitials()
@@ -213,6 +250,8 @@ export default function QuickSignPage() {
         activePanel={activePanel}
         onActivePanelChange={setActivePanel}
         onAddSignature={thenShowDocument(handleSignatureCreated)}
+        savedSignatures={saved}
+        onUseSaved={thenShowDocument(handleUseSaved)}
         onAddText={thenShowDocument((options) => addElement('text', options))}
         onAddDate={thenShowDocument(() => addElement('date'))}
         onAddInitials={thenShowDocument(handleAddInitials)}
@@ -239,6 +278,7 @@ export default function QuickSignPage() {
           />
         )}
 
+        {placing && <PlacementHint what={pending.type === 'date' ? "today's date" : FIELD_LABELS[pending.type].toLowerCase()} />}
         {!file && (
           <div className="md:hidden px-4 h-14 flex items-center justify-between bg-white border-b border-gray-200 flex-shrink-0">
             <Brand />
@@ -261,6 +301,7 @@ export default function QuickSignPage() {
           onDeleteElement={deleteElement}
           renderField={renderField}
           onActivateElement={handleActivateElement}
+          placing={placing}
         />
         )}
       </main>

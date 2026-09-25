@@ -8,7 +8,7 @@ import { STATUS_LABELS, senderName } from '../../lib/envelopeModel'
  */
 export default function EditorHeader({
   envelope, draft, editable, editingTemplate, ownsEnvelope, dirty, saveStatus, saving, busy,
-  sendProblems, mySigningTurn, awaitingFinalize,
+  sendProblems, mySigningTurn, awaitingFinalize, selfSign,
   onTitleChange, onSave, onSend, onSaveAsTemplate, onFinishTemplate, onCancelTemplate, onRetryFinalize, onDownloadSigned
 }) {
   return (
@@ -81,10 +81,12 @@ export default function EditorHeader({
           <button
             onClick={onSend}
             disabled={sendProblems.length > 0 || busy === 'send'}
-            title={sendProblems.length ? 'Fix the items under "Ready to send?" first' : 'Email signing links'}
+            title={sendProblems.length ? 'Fix the items under "Ready to send?" first' : selfSign ? 'Sign it yourself now' : 'Email signing links'}
             className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2"
           >
-            <Send size={16} /> {busy === 'send' ? 'Sending…' : 'Send'}
+            {selfSign
+              ? <><PenLine size={16} /> {busy === 'send' ? 'Opening…' : 'Sign now'}</>
+              : <><Send size={16} /> {busy === 'send' ? 'Sending…' : 'Send'}</>}
           </button>
         </>
       ) : (

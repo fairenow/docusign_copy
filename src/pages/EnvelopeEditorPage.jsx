@@ -7,9 +7,9 @@ import {
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
-  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, RECIPIENT_COLORS
+  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, signsAlone, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
-import { FIELD_LABELS, clamp, nextFieldY, placeField } from '../lib/fields'
+import { FIELD_LABELS, canHover, nextFieldY, placementRect } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
@@ -20,6 +20,7 @@ import { useFeedback } from '../components/feedback/useFeedback'
 import { preloadPdfViewer } from '../lib/documents'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
+import PlacementHint from '../components/PlacementHint'
 import PlaceholderField from '../components/envelope/PlaceholderField'
 import PrefillField from '../components/envelope/PrefillField'
 import SuggestedField from '../components/envelope/SuggestedField'
@@ -157,6 +158,7 @@ export default function EnvelopeEditorPage() {
     [canEditNow, draft, savedDraft]
   )
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
+  const selfSign = Boolean(draft && !editingTemplate) && signsAlone(draft, user)
   const mySigningTurn = Boolean(envelope && user) && envelopeGroup(envelope, user) === 'action'
   // Everyone signed but the final PDF was not produced (e.g. a failed background step)
   const awaitingFinalize = Boolean(envelope) && canManage &&
@@ -178,6 +180,9 @@ export default function EnvelopeEditorPage() {
     update({ recipients: [...draft.recipients, recipient] })
     setActiveRecipientId(recipient.id)
   }
+
+  // Someone who is emailed the signed PDF (a "copy" recipient)
+  const addCopyRecipient = () => update({ recipients: [...draft.recipients, { ...newRecipient(draft.recipients), role: 'cc' }] })
 
   const changeRecipient = (id, patch) => {
     setDraft(d => {
@@ -253,21 +258,12 @@ export default function EnvelopeEditorPage() {
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize) return
-    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+    if (canHover()) {
       setPlacingType(current => (current === type ? null : type))
       return
     }
     insertField(newField(type, { page: currentPage, pageSize }, signerForNewField(type), { y: nextFieldY(draft.fields, currentPage) }))
   }
-
-  // The rectangle a field being placed would take with the pointer at (x, y). Nothing snaps:
-  // the field goes exactly where the preview shows it. Its bottom-left corner is at the pointer,
-  // so pointing at the start of a line puts the field on it; a checkbox is centred on it.
-  const placementRect = useCallback((type, pageNumber, x, y) => {
-    const { w, h } = placeField(type, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] })
-    const [left, top] = type === 'checkbox' ? [x - w / 2, y - h / 2] : [x, y - h]
-    return { x: clamp(left, 0, 1 - w), y: clamp(top, 0, 1 - h), w, h }
-  }, [pageSizes])
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
   const selectField = useCallback((id) => {
@@ -363,8 +359,27 @@ export default function EnvelopeEditorPage() {
     }
   }
 
+  // Only you sign: no email to yourself; sign straight away. Copies go out when you finish.
+  const handleSignNow = async () => {
+    const copies = draft.recipients.filter(r => r.role === 'cc')
+    const sure = await confirm({
+      title: `Sign "${draft.title}" now?`,
+      message: copies.length
+        ? `When you finish, the signed PDF is emailed to you and to ${copies.map(r => r.name || r.email).join(', ')}.`
+        : 'When you finish, the signed PDF is emailed to you. To email it to someone else too, add them under "Send the signed copy to".',
+      confirmLabel: 'Sign now'
+    })
+    if (!sure) return
+    runAction('send', async () => {
+      if (dirty && !(await save())) throw new Error('Fix the problems above, then try again.')
+      await sendEnvelope(envelopeId, { signNow: true })
+      navigate(`/envelopes/${envelopeId}/sign`)
+    })
+  }
+
   const handleSend = async () => {
     if (sendProblems.length) return
+    if (selfSign) return handleSignNow()
     const signers = draft.recipients.filter(r => r.role === 'signer')
     const first = draft.signingOrder === 'sequential' ? signers.slice(0, 1) : signers
     const who = first.map(r => r.name).join(', ')
@@ -481,7 +496,7 @@ export default function EnvelopeEditorPage() {
   // A picked-up field shows where it would go, in its signer's color, until clicked into place
   const placingFor = activeRecipient ?? firstSigner
   const placing = placingType && editable ? {
-    rectAt: (pageNumber, x, y) => placementRect(placingType, pageNumber, x, y),
+    rectAt: (pageNumber, x, y) => placementRect(placingType, pageSizes[pageNumber - 1], x, y),
     render: () => (
       <PlaceholderField
         field={{ type: placingType, required: placingType !== 'checkbox' }}
@@ -520,6 +535,7 @@ export default function EnvelopeEditorPage() {
         onTitleChange={(title) => update({ title }, 'title')}
         onSave={() => save()}
         onSend={handleSend}
+        selfSign={selfSign}
         onSaveAsTemplate={() => setTemplateDialog('open')}
         onFinishTemplate={handleFinishTemplate}
         onCancelTemplate={handleCancelTemplate}
@@ -533,11 +549,7 @@ export default function EnvelopeEditorPage() {
         suggest={{ run: suggest, ready: Boolean(pdfDoc), busy: suggesting }}
       />
 
-      {placing && (
-        <p role="status" className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-900">
-          Click where the {FIELD_LABELS[placingType].toLowerCase()} field should start (its bottom-left corner follows the pointer). Press Esc to cancel.
-        </p>
-      )}
+      {placing && <PlacementHint what={`${FIELD_LABELS[placingType].toLowerCase()} field`} />}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
       {templateDialog === 'saved' && (
         <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
@@ -613,7 +625,7 @@ export default function EnvelopeEditorPage() {
                   <p className="text-sm text-gray-500">Select a field on the document to change who fills it in, its label, or whether it is required.</p>
                 ) : (
                   <>
-                    {!editingTemplate && <GettingStarted draft={draft} />}
+                    {!editingTemplate && <GettingStarted draft={draft} selfSign={selfSign} />}
                     {suggestNotice && <p role="status" className="text-sm text-gray-600">{suggestNotice}</p>}
                     {suggestions && (
                       <SuggestionsPanel
@@ -644,6 +656,18 @@ export default function EnvelopeEditorPage() {
                       onSigningOrderChange={(signingOrder) => update({ signingOrder })}
                       signingMyself={signingMyself}
                     />
+                    {selfSign && (
+                      <section className="rounded-lg border border-gray-200 p-3" data-testid="send-copy">
+                        <h2 className="text-sm font-semibold text-gray-900">Send the signed copy to</h2>
+                        <p className="text-xs text-gray-600 mt-0.5 mb-2">
+                          You sign now; the moment you finish, the signed PDF is emailed to you
+                          {draft.recipients.some(r => r.role === 'cc') ? ' and to everyone marked "Gets a copy" above' : ''}. No need to download and attach it.
+                        </p>
+                        <button onClick={addCopyRecipient} className="btn-secondary w-full px-3 py-2 rounded-md text-sm">
+                          Add someone to email it to
+                        </button>
+                      </section>
+                    )}
                     <p className="text-xs text-gray-500">
                       {activeRecipient
                         ? <>Adding to the current page for <span className="font-medium" style={{ color: activeRecipient.color }}>{activeRecipient.name || 'this signer'}</span>. Pick a field on the left.</>

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { createMockDb, installMockSupabase, signInAs } from './mockSupabase'
 import { pdfFile } from './fixtures'
+import { placePickedField } from './placeField'
 
 // The preview server sends the production security headers (see vite.config.js)
 test('security headers are sent and the app works under the content security policy', async ({ page }) => {
@@ -24,6 +25,7 @@ test('security headers are sent and the app works under the content security pol
   await page.getByRole('button', { name: 'Type', exact: true }).click()
   await page.getByPlaceholder('Your Name').fill('Alice Owner')
   await page.getByRole('button', { name: 'Add to Doc' }).click()
+  await placePickedField(page)
   await expect(page.locator('[data-field-type="signature"] img')).toBeVisible()
   expect(violations).toEqual([])
 })

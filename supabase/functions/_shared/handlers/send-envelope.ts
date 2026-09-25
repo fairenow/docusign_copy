@@ -1,4 +1,6 @@
-// POST { envelopeId } — the owner sends a draft for signature (signed-in users only).
+// POST { envelopeId, signNow? } — the owner sends a draft for signature (signed-in users only).
+// signNow: the owner is about to sign in the app, so they are not emailed a link themselves
+// (the database leaves them out and records "signing in the app" instead of "emailed").
 import { json, readJson, requireUuid, HttpError } from '../http.ts'
 import { admin, requireUser, rpc } from '../supabase.ts'
 import { emailConfig } from '../config.ts'
@@ -7,7 +9,8 @@ import { emailSigningLinks, type SigningLink } from '../notify.ts'
 
 export async function sendEnvelope(req: Request): Promise<Response> {
   const user = await requireUser(req)
-  const envelopeId = requireUuid((await readJson(req)).envelopeId, 'envelopeId')
+  const body = await readJson(req)
+  const envelopeId = requireUuid(body.envelopeId, 'envelopeId')
   // Fail before anything changes if emails cannot be sent
   emailConfig()
 
@@ -29,7 +32,8 @@ export async function sendEnvelope(req: Request): Promise<Response> {
   const { notify } = await rpc<{ notify: SigningLink[] }>('svc_send_envelope', {
     p_envelope_id: envelopeId,
     p_owner_id: user.id,
-    p_original_sha256: originalSha
+    p_original_sha256: originalSha,
+    p_sign_now: body.signNow === true
   })
   const result = await emailSigningLinks(envelopeId, notify)
   return json({ notified: result.sent, failed: result.failed })

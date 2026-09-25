@@ -12,6 +12,8 @@ export default function Sidebar({
   activePanel,
   onActivePanelChange,
   onAddSignature,
+  savedSignatures = [], // [{ id, kind: 'signature' | 'initials', image }], newest first
+  onUseSaved,
   onAddText,
   onAddDate,
   onAddInitials,
@@ -41,6 +43,7 @@ export default function Sidebar({
   }
 
   const handleAddSignature = requireDocument(onAddSignature)
+  const handleUseSaved = requireDocument(onUseSaved)
   const handleAddText = requireDocument(onAddText)
   const handleAddDate = requireDocument(onAddDate)
   const handleAddInitials = requireDocument(onAddInitials)
@@ -111,7 +114,27 @@ export default function Sidebar({
         </button>
 
         {activePanel === 'signature' && (
-          <SignaturePanel onApply={handleAddSignature} />
+          <>
+            {savedSignatures.length > 0 && (
+              <div className="mb-3" data-testid="saved-signatures">
+                <p className="text-xs font-medium text-gray-600 mb-1.5">Yours: click one to place it</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {savedSignatures.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleUseSaved(s)}
+                      aria-label={`Place your saved ${s.kind}`}
+                      className={`h-14 rounded-md border border-gray-300 bg-white p-1 hover:border-blue-600 ${s.kind === 'signature' ? 'col-span-2' : ''}`}
+                    >
+                      <img src={s.image} alt="" className="w-full h-full object-contain" draggable={false} />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">Or make a new one:</p>
+              </div>
+            )}
+            <SignaturePanel onApply={handleAddSignature} />
+          </>
         )}
 
         {/* Text Button */}
@@ -137,7 +160,7 @@ export default function Sidebar({
           className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
         >
           <Calendar size={20} />
-          <span>Date Field</span>
+          <span>Today&apos;s date</span>
         </button>
 
         {/* Initials Button */}

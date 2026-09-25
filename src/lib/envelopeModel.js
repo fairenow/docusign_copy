@@ -377,6 +377,12 @@ export function groupEnvelopes(envelopes, user) {
 
 // Only the sender edits and sends a draft. Admins (a fixed list in the database) may also
 // delete any draft and void, resend or finish any sent envelope, but never act as the sender.
+/** You are the only signer: the envelope can be signed right away, without emailing yourself. */
+export const signsAlone = (draft, user) => {
+  const signers = draft.recipients.filter(r => r.role === 'signer')
+  return signers.length > 0 && signers.every(r => sameEmail(r.email, user?.email))
+}
+
 /** Whether `user` created this envelope (or template). */
 export const isOwner = (envelope, user) => Boolean(user && envelope) && envelope.owner_id === user.id
 

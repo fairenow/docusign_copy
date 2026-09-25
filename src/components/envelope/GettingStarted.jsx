@@ -15,7 +15,7 @@ const readHidden = () => {
  * Three steps for a first envelope, ticked off as they are done. Hidden for good once the
  * person chooses "Hide guide" (remembered in this browser).
  */
-export default function GettingStarted({ draft }) {
+export default function GettingStarted({ draft, selfSign = false }) {
   const [hidden, setHidden] = useState(readHidden)
   if (hidden) return null
 
@@ -25,7 +25,9 @@ export default function GettingStarted({ draft }) {
   const steps = [
     { done: named, title: 'Add who signs', hint: 'Name and email for each signer, or tick "I need to sign this document".' },
     { done: placed, title: 'Place their fields', hint: 'Pick a field on the left and click it onto the page, or use Suggest fields.' },
-    { done: false, title: 'Send', hint: 'Press Send at the top. Everyone gets an email with their own link.' }
+    selfSign
+      ? { done: false, title: 'Sign it', hint: 'Press Sign now at the top. The signed PDF is emailed to you and anyone you add below.' }
+      : { done: false, title: 'Send', hint: 'Press Send at the top. Everyone gets an email with their own link.' }
   ]
 
   const hide = () => {

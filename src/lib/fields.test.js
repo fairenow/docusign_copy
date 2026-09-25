@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createElement, elementFromDetected, clamp, nextFieldY, DEFAULT_SIZES } from './fields'
+import { createElement, elementFromDetected, clamp, nextFieldY, placementRect, DEFAULT_SIZES } from './fields'
 
 const letter = { width: 612, height: 792 }
 
@@ -67,5 +67,30 @@ describe('nextFieldY', () => {
     expect(nextFieldY([], 1)).toBeCloseTo(0.15)
     expect(nextFieldY([...on(1, 2), ...on(2, 5)], 1)).toBeCloseTo(0.33)
     expect(nextFieldY(on(1, 8), 1)).toBeCloseTo(0.15)
+  })
+})
+
+describe('placementRect', () => {
+  it('puts the bottom-left corner at the pointer, exactly (nothing snaps)', () => {
+    const r = placementRect('text', letter, 0.2, 0.5)
+    expect(r.x).toBeCloseTo(0.2)
+    expect(r.y + r.h).toBeCloseTo(0.5)
+    expect(r.w).toBeCloseTo(DEFAULT_SIZES.text.width / letter.width)
+  })
+
+  it('centres a checkbox on the pointer and keeps every field on the page', () => {
+    const box = placementRect('checkbox', letter, 0.5, 0.5)
+    expect(box.x + box.w / 2).toBeCloseTo(0.5)
+    expect(box.y + box.h / 2).toBeCloseTo(0.5)
+    const corner = placementRect('text', letter, 0.99, 0.01)
+    expect(corner.x + corner.w).toBeCloseTo(1)
+    expect(corner.y).toBe(0)
+  })
+
+  it('sizes a signature image to its aspect ratio, as it will be placed', () => {
+    const r = placementRect('signature', letter, 0.1, 0.5, { aspect: 2 })
+    const placed = createElement('signature', { page: 1, pageSize: letter }, { aspect: 2, ...r })
+    expect(r.w * letter.width).toBeCloseTo(DEFAULT_SIZES.signature.height * 2)
+    expect([placed.x, placed.y, placed.w, placed.h]).toEqual([r.x, r.y, r.w, r.h])
   })
 })
