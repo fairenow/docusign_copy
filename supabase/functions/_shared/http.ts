@@ -27,7 +27,8 @@ const PG_STATUS: Record<string, number> = { P0002: 404, '22023': 400, '42501': 4
 /** Wrap a POST handler with CORS, JSON errors and logging of unexpected failures. */
 export function serve(handler: (req: Request) => Promise<Response>) {
   Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
+    // Browsers may reuse this answer for 2 hours (Chrome's maximum) instead of asking before every call
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...corsHeaders, 'Access-Control-Max-Age': '7200' } })
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
     try {
       return await handler(req)

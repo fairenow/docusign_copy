@@ -4,7 +4,7 @@ import { FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } fr
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
-import { ACCEPTED_FILE_TYPES } from '../lib/documents'
+import { ACCEPTED_FILE_TYPES, CONVERTIBLE_EXTENSIONS } from '../lib/documents'
 import {
   ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes, isMine, matchesSearch, senderName
 } from '../lib/envelopeModel'
@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [envelopes, setEnvelopes] = useState(null)
   const [error, setError] = useState(null)
   const [group, setGroup] = useState('all')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(null) // what is being done, shown over the page
   // Admins see everyone's envelopes; "Mine" narrows that to what they sent or were sent
   const [scope, setScope] = useState('mine') // 'mine' | 'everyone'
   const [query, setQuery] = useState('')
@@ -66,13 +66,14 @@ export default function DashboardPage() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setBusy(true)
+    const isWord = CONVERTIBLE_EXTENSIONS.includes(file.name.split('.').pop().toLowerCase())
+    setBusy(isWord ? 'Converting your Word document…' : 'Preparing your document…')
     try {
       const id = await createEnvelopeFromFile(file)
       navigate(`/envelopes/${id}`)
     } catch (err) {
       alert('Could not create the envelope: ' + err.message)
-      setBusy(false)
+      setBusy(null)
     }
   }
 
@@ -201,7 +202,7 @@ export default function DashboardPage() {
         </ul>
       )}
 
-      <LoadingOverlay visible={busy} />
+      <LoadingOverlay visible={Boolean(busy)} message={busy} />
     </div>
   )
 }

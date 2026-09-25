@@ -336,6 +336,8 @@ test('Word documents are converted on the server, exactly as LibreOffice lays th
   const expected = await (await import('node:fs/promises')).readFile('tests/e2e/fixtures/consent.libreoffice.pdf')
   expect(stored.indexOf(expected)).toBeGreaterThanOrEqual(0)
   expect(db.envelopes[0]).toMatchObject({ title: 'consent', page_count: 4 })
+  // The editor uses the PDF it just uploaded instead of downloading it again
+  expect(db.calls.filter(c => c.type === 'storage' && c.method === 'GET')).toEqual([])
 })
 
 test('Quick sign asks you to sign in before converting a Word document', async ({ page }) => {

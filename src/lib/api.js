@@ -77,9 +77,11 @@ export async function fetchEnvelope(id) {
  * @returns {Promise<string>} the new envelope id
  */
 export async function createEnvelopeFromFile(file) {
+  // pdf.js loads while a Word document is being converted
+  const pdfjs = import('./pdfjs')
   const { bytes } = await fileToPdfBytes(file)
   // Only the page count is needed here; opening validates the PDF
-  const { loadPdfDocument } = await import('./pdfjs')
+  const { loadPdfDocument } = await pdfjs
   const doc = await loadPdfDocument(bytes)
   const pageCount = doc.numPages
   doc.destroy()
@@ -99,6 +101,7 @@ async function attachDocument(envelopeId, bytes) {
   try {
     unwrap(await db.storage.from(BUCKET).upload(originalPath(envelopeId), pdfBlob(bytes), PDF_UPLOAD))
     unwrap(await db.from('envelopes').update({ original_path: originalPath(envelopeId) }).eq('id', envelopeId))
+    justUploaded.set(originalPath(envelopeId), bytes)
   } catch (err) {
     await db.storage.from(BUCKET).remove([originalPath(envelopeId)])
     await db.from('envelopes').delete().eq('id', envelopeId)
@@ -106,7 +109,16 @@ async function attachDocument(envelopeId, bytes) {
   }
 }
 
+// A document this tab just uploaded, handed to the editor it opens next instead of downloading it
+// again. Used once, then forgotten.
+const justUploaded = new Map()
+
 export async function downloadDocument(path, bucket = BUCKET) {
+  if (bucket === BUCKET && justUploaded.has(path)) {
+    const bytes = justUploaded.get(path)
+    justUploaded.delete(path)
+    return bytes
+  }
   const blob = unwrap(await client().storage.from(bucket).download(path))
   return new Uint8Array(await blob.arrayBuffer())
 }

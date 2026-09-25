@@ -16,6 +16,9 @@ export async function convertDocument(req: Request): Promise<Response> {
   if (!bytes.length) throw new HttpError(400, 'The file is empty.')
   assertLooksLike(ext, bytes)
 
+  const started = Date.now()
   const pdf = await convertToPdf(bytes, ext, config)
+  // Sizes and time only, never names or content: for checking the converter's speed
+  console.log(`converted ${ext} ${bytes.length} B -> ${pdf.length} B in ${Date.now() - started} ms`)
   return new Response(pdf, { headers: { ...corsHeaders, 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store' } })
 }
