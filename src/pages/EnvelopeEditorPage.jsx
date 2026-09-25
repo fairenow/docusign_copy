@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Download, LayoutTemplate, PenLine, RotateCw, Save, Se
 import { useAuth } from '../auth/useAuth'
 import {
   cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
-  retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, subscribeToEnvelopeChanges
+  originalPath, retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
@@ -15,6 +15,7 @@ import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
+import { preloadPdfViewer } from '../lib/documents'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
@@ -89,20 +90,24 @@ export default function EnvelopeEditorPage() {
 
   useEffect(() => {
     let cancelled = false
+    preloadPdfViewer()
+    // The document is always stored at <id>/original.pdf, so it downloads alongside the details
+    const download = downloadDocument(originalPath(envelopeId))
+    download.catch(() => {}) // reported below, once we know whether the envelope exists
     ;(async () => {
       try {
         const loaded = await reload()
         if (cancelled) return
         setActiveRecipientId(loaded.recipients.find(r => r.role === 'signer')?.id ?? null)
         if (!loaded.original_path) throw new Error('This envelope has no document.')
-        const bytes = await downloadDocument(loaded.original_path)
+        const bytes = await download
         if (!cancelled) setPdfBytes(bytes)
       } catch (err) {
         if (!cancelled) setLoadError(err.message)
       }
     })()
     return () => { cancelled = true }
-  }, [reload])
+  }, [reload, envelopeId])
 
   // Keep a sent envelope's progress live as signers view and sign
   const isSent = envelope ? envelope.status !== 'draft' : false

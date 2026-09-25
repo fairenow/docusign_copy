@@ -4,6 +4,7 @@ import { ChevronRight, CheckCircle2, XCircle, Clock, PenLine } from 'lucide-reac
 import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
 import { fitWidthZoom } from '../lib/viewer'
+import { preloadPdfViewer } from '../lib/documents'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
 import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel, limitAdjustment, signerCanMove } from '../../supabase/functions/_shared/signing.js'
@@ -56,6 +57,7 @@ export default function SigningPage() {
 
   useEffect(() => {
     let cancelled = false
+    preloadPdfViewer()
     ;(async () => {
       try {
         const s = await getSigningSession(identity)

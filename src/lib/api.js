@@ -35,7 +35,7 @@ function toError(error) {
 }
 
 // Envelopes and templates store their document as <id>/original.pdf in their bucket
-const originalPath = (id) => `${id}/original.pdf`
+export const originalPath = (id) => `${id}/original.pdf`
 const pdfBlob = (bytes) => new Blob([bytes], { type: 'application/pdf' })
 const PDF_UPLOAD = { contentType: 'application/pdf', upsert: false }
 

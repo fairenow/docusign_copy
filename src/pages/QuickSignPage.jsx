@@ -16,6 +16,7 @@ import { renderTypedSignature, signatureFromImage } from '../lib/signatureImage'
 import { useAuth } from '../auth/useAuth'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { fitWidthZoom } from '../lib/viewer'
+import { preloadPdfViewer } from '../lib/documents'
 
 /**
  * Single-user signing: open a document, fill and sign it, download the result.
@@ -34,6 +35,9 @@ export default function QuickSignPage() {
   const [savedInitials, setSavedInitials] = useState(null)
   // Signature placeholder being signed in the pop-up (opens over the page, where you are)
   const [signingFieldId, setSigningFieldId] = useState(null)
+
+  // Ready by the time a file is picked
+  useEffect(preloadPdfViewer, [])
 
   // Signed-in team members start with their newest saved signature and initials
   const { user } = useAuth()

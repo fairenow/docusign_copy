@@ -25,6 +25,14 @@ export async function fileToPdfBytes(file) {
 }
 
 /**
+ * Start loading pdf.js and its worker. Pages call this while their document is still
+ * downloading, so the two arrive together instead of one after the other.
+ */
+export function preloadPdfViewer() {
+  import('./pdfjs').then(({ sharedWorker }) => sharedWorker()).catch(() => {})
+}
+
+/**
  * Open PDF bytes with pdf.js and measure every page.
  * Page sizes are the displayed (rotation-applied) sizes in PDF points.
  */
