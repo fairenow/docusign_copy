@@ -299,11 +299,27 @@ export function groupEnvelopes(envelopes, user) {
 // Permissions (the database enforces these; the UI uses them to show actions)
 // ---------------------------------------------------------------------------
 
+// Only the sender edits and sends a draft. Admins (a fixed list in the database) may also
+// delete any draft and void, resend or finish any sent envelope, but never act as the sender.
 const isOwner = (envelope, user) => Boolean(user) && envelope.owner_id === user.id
 
 export const canEdit = (envelope, user) => isOwner(envelope, user) && envelope.status === 'draft'
-export const canDelete = canEdit
-export const canVoid = (envelope, user) => isOwner(envelope, user) && envelope.status === 'sent'
+export const canDelete = (envelope, user, isAdmin = false) => (isOwner(envelope, user) || isAdmin) && envelope.status === 'draft'
+export const canVoid = (envelope, user, isAdmin = false) => (isOwner(envelope, user) || isAdmin) && envelope.status === 'sent'
+
+/** Sent by the user, or sent to them. What a member sees; an admin's "Mine" view. */
+export const isMine = (envelope, user) => isOwner(envelope, user) ||
+  (envelope.status !== 'draft' && (envelope.recipients ?? []).some(r => r.email && r.email.toLowerCase() === user?.email?.toLowerCase()))
+
+export const senderName = (envelope) => envelope.owner?.full_name || envelope.owner?.email || 'A teammate'
+
+/** Case-insensitive search over title, sender and recipients. */
+export function matchesSearch(envelope, query) {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return [envelope.title, envelope.owner?.full_name, envelope.owner?.email, ...(envelope.recipients ?? []).flatMap(r => [r.name, r.email])]
+    .some(text => text?.toLowerCase().includes(q))
+}
 
 export const STATUS_LABELS = {
   draft: 'Draft',

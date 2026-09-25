@@ -100,7 +100,13 @@ The database schema lives in `supabase/migrations/` and is applied to the projec
 Access rules (row level security):
 
 - Sign-ups are limited to the domains in `private.allowed_email_domains` (seeded with
-  `flmlnk.com`). The first user to sign up becomes an admin.
+  `flmlnk.com`).
+- Admins are the email addresses in `private.admin_emails` (devantew@ and sara.s@); a trigger
+  keeps `profiles.role` in line with that list, so the app cannot promote anyone. Change it
+  with a migration. Admins see every envelope (dashboard: **Mine / Everyone**), and may void,
+  resend or finish any sent envelope and delete any draft; only the sender edits and sends.
+  Actions an admin takes on someone else's envelope are recorded under the admin's name.
+- Everyone else sees the envelopes they created and the sent ones addressed to them.
 - Owners edit envelopes only while they are drafts. Sending, signing and completing
   happen in Edge Functions with the service role; voiding uses the `void_envelope` RPC.
 - Team members listed as recipients can see an envelope once it has been sent.

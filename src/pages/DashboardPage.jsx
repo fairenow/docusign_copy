@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate } from 'lucide-react'
+import { FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { ACCEPTED_FILE_TYPES } from '../lib/documents'
-import { ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes } from '../lib/envelopeModel'
+import {
+  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes, isMine, matchesSearch, senderName
+} from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
 import ErrorBanner from '../components/ErrorBanner'
 
@@ -19,13 +21,17 @@ const STATUS_STYLES = {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const [envelopes, setEnvelopes] = useState(null)
   const [error, setError] = useState(null)
   const [group, setGroup] = useState('all')
   const [busy, setBusy] = useState(false)
+  // Admins see everyone's envelopes; "Mine" narrows that to what they sent or were sent
+  const [scope, setScope] = useState('mine') // 'mine' | 'everyone'
+  const [query, setQuery] = useState('')
 
   const refresh = useCallback(async () => {
     try {
@@ -50,7 +56,10 @@ export default function DashboardPage() {
     }
   }, [refresh])
 
-  const groups = useMemo(() => groupEnvelopes(envelopes ?? [], user), [envelopes, user])
+  const shown = useMemo(() => (envelopes ?? []).filter(e =>
+    (!isAdmin || scope === 'everyone' || isMine(e, user)) && matchesSearch(e, query)
+  ), [envelopes, isAdmin, scope, user, query])
+  const groups = useMemo(() => groupEnvelopes(shown, user), [shown, user])
   const visible = groups[group]
 
   const handleNewEnvelope = async (e) => {
@@ -68,7 +77,8 @@ export default function DashboardPage() {
   }
 
   const handleDelete = async (envelope) => {
-    if (!window.confirm(`Delete the draft "${envelope.title}"? This cannot be undone.`)) return
+    const whose = envelope.owner_id === user?.id ? '' : ` by ${senderName(envelope)}`
+    if (!window.confirm(`Delete the draft "${envelope.title}"${whose}? This cannot be undone.`)) return
     try {
       await deleteDraft(envelope)
       // Update locally; Realtime will also trigger a refetch
@@ -122,6 +132,34 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <label className="relative flex-1 min-w-[12rem] max-w-md">
+          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={isAdmin && scope === 'everyone' ? 'Search by title, sender or recipient' : 'Search by title or recipient'}
+            aria-label="Search envelopes"
+            className="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+          />
+        </label>
+        {isAdmin && (
+          <div className="flex rounded-lg border border-gray-300 bg-white p-0.5 text-sm" role="group" aria-label="Whose envelopes">
+            {[['mine', 'Mine'], ['everyone', 'Everyone']].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setScope(id)}
+                aria-pressed={scope === id}
+                className={`px-3 py-1.5 rounded-md ${scope === id ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0" role="tablist">
         {ENVELOPE_GROUPS.map(g => (
           <button
@@ -144,7 +182,9 @@ export default function DashboardPage() {
       {envelopes === null && !error ? (
         <p className="text-gray-500 text-sm py-12 text-center">Loading…</p>
       ) : visible.length === 0 ? (
-        <EmptyState group={group} onNew={() => fileInputRef.current?.click()} />
+        query.trim()
+          ? <p className="py-16 text-center text-gray-500">No envelopes match “{query.trim()}”.</p>
+          : <EmptyState group={group} onNew={() => fileInputRef.current?.click()} />
       ) : (
         <ul className="divide-y divide-gray-200 bg-white border border-gray-200 rounded-xl overflow-hidden">
           {visible.map(envelope => (
@@ -152,6 +192,7 @@ export default function DashboardPage() {
               key={envelope.id}
               envelope={envelope}
               user={user}
+              isAdmin={isAdmin}
               onDelete={() => handleDelete(envelope)}
               onVoid={() => handleVoid(envelope)}
               onDownload={() => handleDownload(envelope)}
@@ -165,7 +206,7 @@ export default function DashboardPage() {
   )
 }
 
-function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
+function EnvelopeRow({ envelope, user, isAdmin, onDelete, onVoid, onDownload }) {
   const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
   const updated = formatDateTime(envelope.updated_at)
 
@@ -176,6 +217,9 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
         className="basis-full sm:basis-auto sm:flex-1 min-w-0"
       >
         <p className="text-gray-900 font-medium truncate">{envelope.title}</p>
+        {envelope.owner_id !== user?.id && (
+          <p className="text-xs text-gray-600 truncate">Sent by {senderName(envelope)}</p>
+        )}
         <p className="text-xs text-gray-500 truncate">
           {recipients.length
             ? recipients.map(r => `${RECIPIENT_STATUS[r.status]?.icon ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
@@ -192,12 +236,12 @@ function EnvelopeRow({ envelope, user, onDelete, onVoid, onDownload }) {
             <Download size={16} />
           </button>
         )}
-        {canDelete(envelope, user) && (
+        {canDelete(envelope, user, isAdmin) && (
           <button onClick={onDelete} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Delete draft">
             <Trash2 size={16} />
           </button>
         )}
-        {canVoid(envelope, user) && (
+        {canVoid(envelope, user, isAdmin) && (
           <button onClick={onVoid} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Void envelope">
             <Ban size={16} />
           </button>

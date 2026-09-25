@@ -7,8 +7,16 @@ import { formatDateTime } from '../../lib/format'
 const WARNING_ACTIONS = new Set(['email_failed', 'finalize_failed', 'recipient_declined', 'envelope_voided', 'envelope_declined'])
 
 /** Signer progress and the audit trail of a sent envelope. */
-export default function ActivityPanel({ recipients, events, canResend, onResend, resendingId }) {
+export default function ActivityPanel({ recipients, events, canResend, onResend, resendingId, ownerId }) {
   const nameOf = (id) => recipients.find(r => r.id === id)?.name
+  // Someone other than the sender acting on the envelope (an admin) is named; a signer
+  // acting on their own part is already named
+  const byOther = (e) => {
+    if (!e.actor_user_id || e.actor_user_id === ownerId || !e.actor) return null
+    const signer = recipients.find(r => r.id === e.recipient_id)
+    if (signer?.email && signer.email.toLowerCase() === e.actor.email?.toLowerCase()) return null
+    return e.actor.full_name || e.actor.email
+  }
   return (
     <>
       <section>
@@ -44,6 +52,7 @@ export default function ActivityPanel({ recipients, events, canResend, onResend,
               <p className={WARNING_ACTIONS.has(e.action) ? 'text-amber-700' : 'text-gray-800'}>
                 {ACTION_LABELS[e.action] ?? e.action}
                 {nameOf(e.recipient_id) ? ` · ${nameOf(e.recipient_id)}` : ''}
+                {byOther(e) ? ` · by ${byOther(e)}` : ''}
               </p>
               <p className="text-gray-500">
                 {formatDateTime(e.created_at)}

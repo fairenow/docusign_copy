@@ -66,9 +66,15 @@ const now = () => new Date().toISOString()
 // What a template keeps of a field (and gives back to a new envelope's field)
 const pickFieldLayout = ({ page, type, x, y, w, h, required, label, font_size }) => ({ page, type, x, y, w, h, required, label, font_size })
 
+const personOf = (db, id) => {
+  const p = db.profiles.find(x => x.id === id)
+  return p ? { full_name: p.full_name, email: p.email } : null
+}
+
 function withChildren(db, envelope) {
   return {
     ...envelope,
+    owner: personOf(db, envelope.owner_id),
     recipients: db.recipients.filter(r => r.envelope_id === envelope.id),
     fields: db.fields.filter(f => f.envelope_id === envelope.id)
   }
@@ -276,7 +282,9 @@ export async function installMockSupabase(page, db) {
         return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
       }
     }
-    if (table === 'audit_events' && method === 'GET') return respond(applyFilters(db.audit, params))
+    if (table === 'audit_events' && method === 'GET') {
+      return respond(applyFilters(db.audit, params).map(e => ({ ...e, actor: personOf(db, e.actor_user_id) })))
+    }
 
     if (table === 'templates') {
       if (method === 'GET') {
@@ -298,7 +306,12 @@ export async function installMockSupabase(page, db) {
 
     if (table === 'envelopes') {
       if (method === 'GET') {
-        const rows = applyFilters(db.envelopes, params)
+        // Like RLS: admins see everything; others their own envelopes and sent ones addressed to them
+        const me = requestUser(request)
+        const isAdmin = db.profiles.find(p => p.id === me?.id)?.role === 'admin'
+        const visible = db.envelopes.filter(e => isAdmin || e.owner_id === me?.id || (e.status !== 'draft' &&
+          db.recipients.some(r => r.envelope_id === e.id && r.email?.toLowerCase() === me?.email?.toLowerCase())))
+        const rows = applyFilters(visible, params)
           .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
           .map(e => withChildren(db, e))
         return respond(rows)
@@ -374,8 +387,8 @@ export function seedEnvelope(db, { pdf, status = 'sent', recipients = [], fields
 // signing-api Edge Function (same rules as the database functions, simplified)
 // ---------------------------------------------------------------------------
 
-function addAudit(db, envelopeId, action, recipientId = null) {
-  db.audit.push({ id: db.audit.length + 1, envelope_id: envelopeId, recipient_id: recipientId, actor_user_id: null, action, ip: '203.0.113.7', details: {}, created_at: now() })
+function addAudit(db, envelopeId, action, recipientId = null, actorId = null) {
+  db.audit.push({ id: db.audit.length + 1, envelope_id: envelopeId, recipient_id: recipientId, actor_user_id: actorId, action, ip: '203.0.113.7', details: {}, created_at: now() })
 }
 
 function issueTokens(db, env) {
@@ -419,10 +432,11 @@ async function installMockSigningApi(page, db) {
     db.calls.push({ type: 'function', action, body })
     const fail = (status, error) => json(route, status, { error })
 
-    // Owner actions
+    // Owner actions (resend and finalize also for admins)
     if (action === 'send' || action === 'resend' || action === 'finalize') {
       if (!user) return fail(401, 'Please sign in')
-      const env = db.envelopes.find(e => e.id === body.envelopeId && e.owner_id === user.id)
+      const isAdmin = db.profiles.find(p => p.id === user.id)?.role === 'admin'
+      const env = db.envelopes.find(e => e.id === body.envelopeId && (e.owner_id === user.id || (isAdmin && action !== 'send')))
       if (!env) return fail(404, 'Envelope not found')
       if (action === 'send') {
         if (env.status !== 'draft') return fail(409, 'This envelope has already been sent')
@@ -438,7 +452,7 @@ async function installMockSigningApi(page, db) {
         const token = 'resent' + randomUUID().replace(/-/g, '') + 'xxxxxx'
         db.tokens.set(token, r.id)
         db.emails.push({ to: r.email, kind: 'signing_request', link: `/sign/${token}`, token })
-        addAudit(db, env.id, 'recipient_reminded', r.id)
+        addAudit(db, env.id, 'recipient_reminded', r.id, user.id)
         return json(route, 200, { resent: true })
       }
       env.status = 'completed'

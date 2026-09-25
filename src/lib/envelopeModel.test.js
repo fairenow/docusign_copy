@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient, addSelfAsSigner, recipientByEmail,
-  validateForSave, validateForSend, envelopeGroup, currentSigners, RECIPIENT_COLORS
+  validateForSave, validateForSend, envelopeGroup, currentSigners, isMine, matchesSearch, RECIPIENT_COLORS
 } from './envelopeModel'
 
 const signer = (over = {}) => ({ id: 'r1', name: 'Bob', email: 'bob@flmlnk.com', role: 'signer', routingOrder: 1, color: '#2563eb', ...over })
@@ -174,5 +174,27 @@ describe('permissions', () => {
     expect([canEdit(draft, owner), canDelete(draft, owner), canVoid(draft, owner)]).toEqual([true, true, false])
     expect([canEdit(sent, owner), canVoid(sent, owner)]).toEqual([false, true])
     expect([canEdit(draft, other), canVoid(sent, other), canEdit(draft, null)]).toEqual([false, false, false])
+  })
+
+  it('lets admins delete any draft and void any sent envelope, but not edit them', () => {
+    const draft = { owner_id: 'u1', status: 'draft' }
+    const sent = { owner_id: 'u1', status: 'sent' }
+    expect([canEdit(draft, other), canDelete(draft, other, true), canVoid(sent, other, true)]).toEqual([false, true, true])
+    expect([canDelete(sent, other, true), canVoid(draft, other, true)]).toEqual([false, false])
+  })
+
+  it('knows what is yours: sent by you, or sent to you', () => {
+    const me = { id: 'u2', email: 'Bob@flmlnk.com' }
+    const toMe = { owner_id: 'u1', status: 'sent', recipients: [{ email: 'bob@flmlnk.com' }] }
+    expect(isMine({ owner_id: 'u2', status: 'draft' }, me)).toBe(true)
+    expect(isMine(toMe, me)).toBe(true)
+    expect(isMine({ ...toMe, status: 'draft' }, me)).toBe(false)
+    expect(isMine({ owner_id: 'u1', status: 'sent', recipients: [] }, me)).toBe(false)
+  })
+
+  it('searches the title, sender and recipients', () => {
+    const e = { title: 'Mutual NDA', owner: { full_name: 'Sara S', email: 'sara.s@flmlnk.com' }, recipients: [{ name: 'Acme Legal', email: 'legal@acme.example' }] }
+    expect(['nda', 'SARA', 'acme', '', '  '].every(q => matchesSearch(e, q))).toBe(true)
+    expect(matchesSearch(e, 'jordan')).toBe(false)
   })
 })

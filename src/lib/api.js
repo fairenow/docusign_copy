@@ -51,8 +51,9 @@ export async function fetchProfile(userId) {
 // Envelopes
 // ---------------------------------------------------------------------------
 
+const OWNER_COLUMNS = 'owner:profiles!envelopes_owner_id_fkey (full_name, email)'
 const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, expires_at, updated_at, created_at, ' +
-  'recipients (id, name, email, role, routing_order, status, signed_at)'
+  `recipients (id, name, email, role, routing_order, status, signed_at), ${OWNER_COLUMNS}`
 
 export async function listEnvelopes() {
   // Working copies used to edit a template are not envelopes to the user
@@ -63,7 +64,7 @@ export async function listEnvelopes() {
 export async function fetchEnvelope(id) {
   const envelope = unwrap(await client()
     .from('envelopes')
-    .select('*, recipients (*), fields (*)')
+    .select(`*, recipients (*), fields (*), ${OWNER_COLUMNS}`)
     .eq('id', id)
     .maybeSingle())
   if (!envelope) throw new Error('Envelope not found, or you do not have access to it.')
@@ -289,7 +290,7 @@ export async function downloadSignedPdf(envelope) {
 export async function listAuditEvents(envelopeId) {
   return unwrap(await client()
     .from('audit_events')
-    .select('id, created_at, action, recipient_id, actor_user_id, ip, details')
+    .select('id, created_at, action, recipient_id, actor_user_id, ip, details, actor:profiles!audit_events_actor_user_id_fkey (full_name, email)')
     .eq('envelope_id', envelopeId)
     .order('id'))
 }

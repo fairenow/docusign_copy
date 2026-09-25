@@ -8,7 +8,7 @@ import {
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
-  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, RECIPIENT_COLORS, STATUS_LABELS
+  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, senderName, RECIPIENT_COLORS, STATUS_LABELS
 } from '../lib/envelopeModel'
 import { FIELD_LABELS, nextFieldY, placeField } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
@@ -125,6 +125,9 @@ export default function EnvelopeEditorPage() {
   }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
+  const isAdmin = profile?.role === 'admin'
+  // Admins can resend or finish anyone's envelope
+  const canManage = Boolean(envelope) && canVoid(envelope, user, isAdmin)
   const editingTemplate = Boolean(envelope?.editing_template_id)
 
   // Phones and narrow windows: fit the page to the screen (beside the field toolbar)
@@ -142,7 +145,7 @@ export default function EnvelopeEditorPage() {
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
   const mySigningTurn = Boolean(envelope && user) && envelopeGroup(envelope, user) === 'action'
   // Everyone signed but the final PDF was not produced (e.g. a failed background step)
-  const awaitingFinalize = Boolean(envelope) && envelope.status === 'sent' && canVoid(envelope, user) &&
+  const awaitingFinalize = Boolean(envelope) && canManage &&
     envelope.recipients.every(r => r.role !== 'signer' || r.status === 'signed')
 
   useUnsavedChangesWarning(dirty)
@@ -520,6 +523,7 @@ export default function EnvelopeEditorPage() {
             {editable
               ? <span className={dirty ? 'text-amber-700' : undefined} data-testid="save-status">{saveStatus}</span>
               : <span data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>}
+            {!isOwner && <> · Sent by {senderName(envelope)}</>}
             {envelope.original_filename && <> · {envelope.original_filename}</>}
           </p>
         </div>
@@ -760,7 +764,8 @@ export default function EnvelopeEditorPage() {
               <ActivityPanel
                 recipients={draft.recipients}
                 events={events}
-                canResend={canVoid(envelope, user)}
+                canResend={canManage}
+                ownerId={envelope.owner_id}
                 onResend={handleResend}
                 resendingId={action.busy}
               />
