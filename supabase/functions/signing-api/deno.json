@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "pdf-lib": "npm:pdf-lib@1.17.1",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.116.0"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.ns"]
+  }
+}

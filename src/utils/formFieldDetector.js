@@ -4,7 +4,7 @@
  */
 
 // Field type constants
-export const FIELD_TYPES = {
+export const DETECTED_FIELD_TYPES = {
   TEXT: 'text',
   CHECKBOX: 'checkbox',
   RADIO: 'radio',
@@ -39,14 +39,15 @@ const INITIAL_PATTERNS = [
   /^init$/i
 ]
 
+// Word boundaries so e.g. "Agreement" or "checkout" don't look like checkboxes
 const CHECKBOX_PATTERNS = [
-  /agree/i,
-  /accept/i,
-  /confirm/i,
-  /acknowledge/i,
-  /consent/i,
-  /check/i,
-  /select/i,
+  /\bagree\b/i,
+  /\baccept\b/i,
+  /\bconfirm\b/i,
+  /\backnowledge\b/i,
+  /\bconsent\b/i,
+  /\bcheck\b/i,
+  /\bselect\b/i,
   /yes\/no/i
 ]
 
@@ -60,33 +61,33 @@ function detectFieldType(fieldName, fieldType, fieldFlags) {
   if (fieldType === 'Btn') {
     // Check if it's a radio button (has Radio flag) or checkbox
     if (fieldFlags && (fieldFlags & 32768)) { // Radio flag
-      return FIELD_TYPES.RADIO
+      return DETECTED_FIELD_TYPES.RADIO
     }
-    return FIELD_TYPES.CHECKBOX
+    return DETECTED_FIELD_TYPES.CHECKBOX
   }
 
   if (fieldType === 'Ch') {
-    return FIELD_TYPES.DROPDOWN
+    return DETECTED_FIELD_TYPES.DROPDOWN
   }
 
   if (fieldType === 'Sig') {
-    return FIELD_TYPES.SIGNATURE
+    return DETECTED_FIELD_TYPES.SIGNATURE
   }
 
   // For text fields, check patterns to determine specific type
   if (SIGNATURE_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.SIGNATURE
+    return DETECTED_FIELD_TYPES.SIGNATURE
   }
 
   if (DATE_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.DATE
+    return DETECTED_FIELD_TYPES.DATE
   }
 
   if (INITIAL_PATTERNS.some(p => p.test(name))) {
-    return FIELD_TYPES.INITIALS
+    return DETECTED_FIELD_TYPES.INITIALS
   }
 
-  return FIELD_TYPES.TEXT
+  return DETECTED_FIELD_TYPES.TEXT
 }
 
 /**
@@ -107,13 +108,13 @@ function getFieldLabel(fieldName, detectedType, index) {
 
   // Generate default label based on type
   const typeLabels = {
-    [FIELD_TYPES.TEXT]: 'Text Field',
-    [FIELD_TYPES.CHECKBOX]: 'Checkbox',
-    [FIELD_TYPES.RADIO]: 'Radio Button',
-    [FIELD_TYPES.SIGNATURE]: 'Signature',
-    [FIELD_TYPES.DATE]: 'Date Field',
-    [FIELD_TYPES.INITIALS]: 'Initials',
-    [FIELD_TYPES.DROPDOWN]: 'Dropdown'
+    [DETECTED_FIELD_TYPES.TEXT]: 'Text Field',
+    [DETECTED_FIELD_TYPES.CHECKBOX]: 'Checkbox',
+    [DETECTED_FIELD_TYPES.RADIO]: 'Radio Button',
+    [DETECTED_FIELD_TYPES.SIGNATURE]: 'Signature',
+    [DETECTED_FIELD_TYPES.DATE]: 'Date Field',
+    [DETECTED_FIELD_TYPES.INITIALS]: 'Initials',
+    [DETECTED_FIELD_TYPES.DROPDOWN]: 'Dropdown'
   }
 
   return `${typeLabels[detectedType] || 'Field'} ${index + 1}`
@@ -122,7 +123,7 @@ function getFieldLabel(fieldName, detectedType, index) {
 /**
  * Extract AcroForm fields from a PDF document using PDF.js
  */
-export async function extractPDFFormFields(pdfDoc) {
+async function extractPDFFormFields(pdfDoc) {
   const fields = []
 
   try {
@@ -138,14 +139,12 @@ export async function extractPDFFormFields(pdfDoc) {
       )
 
       for (const annot of formAnnotations) {
-        // Convert PDF coordinates to canvas coordinates
-        const [x1, y1, x2, y2] = annot.rect
-
-        // PDF coordinates start from bottom-left, convert to top-left
-        const canvasX = x1 * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const canvasY = viewport.height - (y2 * (viewport.height / page.getViewport({ scale: 1 }).height))
-        const width = (x2 - x1) * (viewport.width / page.getViewport({ scale: 1 }).width)
-        const height = (y2 - y1) * (viewport.height / page.getViewport({ scale: 1 }).height)
+        // Convert PDF coordinates to viewport coordinates (handles rotation and crop offsets)
+        const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle(annot.rect)
+        const canvasX = Math.min(vx1, vx2)
+        const canvasY = Math.min(vy1, vy2)
+        const width = Math.abs(vx2 - vx1)
+        const height = Math.abs(vy2 - vy1)
 
         const detectedType = detectFieldType(
           annot.fieldName || annot.alternativeText,
@@ -167,7 +166,9 @@ export async function extractPDFFormFields(pdfDoc) {
           readOnly: !!(annot.fieldFlags && (annot.fieldFlags & 1)),
           value: annot.fieldValue || '',
           options: annot.options || [],
-          source: 'acroform'
+          source: 'acroform',
+          pageWidth: viewport.width,
+          pageHeight: viewport.height
         })
       }
     }
@@ -182,7 +183,7 @@ export async function extractPDFFormFields(pdfDoc) {
  * Analyze text content to detect potential form field locations
  * This is useful for scanned documents or PDFs without AcroForms
  */
-export async function detectFieldsFromContent(pdfDoc) {
+async function detectFieldsFromContent(pdfDoc) {
   const detectedFields = []
 
   try {
@@ -199,9 +200,7 @@ export async function detectFieldsFromContent(pdfDoc) {
       for (const item of textContent.items) {
         if (!item.str) continue
 
-        const transform = item.transform
-        const x = transform[4] * 1.5
-        const y = viewport.height - (transform[5] * 1.5)
+        const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5])
 
         // Check if this is a new line
         if (Math.abs(y - lastY) > 10) {
@@ -209,7 +208,7 @@ export async function detectFieldsFromContent(pdfDoc) {
           if (lineText.trim()) {
             const field = analyzeLineForFields(lineText, lineItems, pageNum, detectedFields.length)
             if (field) {
-              detectedFields.push(field)
+              detectedFields.push({ ...field, pageWidth: viewport.width, pageHeight: viewport.height })
             }
           }
 
@@ -226,7 +225,7 @@ export async function detectFieldsFromContent(pdfDoc) {
       if (lineText.trim()) {
         const field = analyzeLineForFields(lineText, lineItems, pageNum, detectedFields.length)
         if (field) {
-          detectedFields.push(field)
+          detectedFields.push({ ...field, pageWidth: viewport.width, pageHeight: viewport.height })
         }
       }
     }
@@ -250,7 +249,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Signature'),
-      type: FIELD_TYPES.SIGNATURE,
+      type: DETECTED_FIELD_TYPES.SIGNATURE,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 20),
       y: Math.round(lastItem.y - 5),
@@ -268,7 +267,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Date'),
-      type: FIELD_TYPES.DATE,
+      type: DETECTED_FIELD_TYPES.DATE,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 10),
       y: Math.round(lastItem.y - 2),
@@ -286,7 +285,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Initials'),
-      type: FIELD_TYPES.INITIALS,
+      type: DETECTED_FIELD_TYPES.INITIALS,
       page: pageNum,
       x: Math.round(lastItem.x + lastItem.width + 10),
       y: Math.round(lastItem.y - 2),
@@ -305,7 +304,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
       id: `detected-field-${pageNum}-${index}`,
       name: '',
       label: extractLabel(lineText, 'Checkbox'),
-      type: FIELD_TYPES.CHECKBOX,
+      type: DETECTED_FIELD_TYPES.CHECKBOX,
       page: pageNum,
       x: Math.round(firstItem.x - 25),
       y: Math.round(firstItem.y),
@@ -326,7 +325,7 @@ function analyzeLineForFields(lineText, lineItems, pageNum, index) {
         id: `detected-field-${pageNum}-${index}`,
         name: '',
         label: colonMatch[1].trim() || 'Text Field',
-        type: FIELD_TYPES.TEXT,
+        type: DETECTED_FIELD_TYPES.TEXT,
         page: pageNum,
         x: Math.round(lastItem.x + lastItem.width + 10),
         y: Math.round(lastItem.y - 2),

@@ -1,0 +1,159 @@
+/**
+ * Draw field values onto an existing PDF with pdf-lib.
+ * Shared by the browser (Quick sign export) and the finalize Edge Function,
+ * so a document looks the same however it was signed.
+ *
+ * Element shape: { type, page, x, y, w, h, data?, text?, checked?, fontSize?, color? }
+ * with x/y/w/h as fractions (0–1) of the displayed page (after /Rotate).
+ */
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  pushGraphicsState,
+  popGraphicsState,
+  concatTransformationMatrix,
+  rectangle,
+  clip,
+  endPath,
+  EncryptedPDFError
+} from 'pdf-lib'
+import { DEFAULT_FONT_SIZE } from './labels.js'
+
+export async function loadPdf(bytes) {
+  try {
+    return await PDFDocument.load(bytes)
+  } catch (err) {
+    if (err instanceof EncryptedPDFError) {
+      throw new Error('This PDF is password-protected or encrypted and cannot be signed. Remove the protection and try again.')
+    }
+    throw err
+  }
+}
+
+export async function stampFields(doc, elements) {
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const images = new Map()
+  const embedImage = async (dataUrl) => {
+    if (!images.has(dataUrl)) images.set(dataUrl, await doc.embedPng(dataUrl))
+    return images.get(dataUrl)
+  }
+  const pages = doc.getPages()
+
+  for (const el of elements) {
+    const page = pages[el.page - 1]
+    if (!page) continue
+
+    // Existing content can leave the graphics state transformed. Normalizing the page makes
+    // pdf-lib wrap it in q/Q so our drawing starts from a clean state. Must happen before
+    // anything is drawn on the page.
+    page.node.normalize()
+
+    const { matrix, width: dispW, height: dispH } = displaySpace(page)
+    // Field rect in display space (points, origin bottom-left)
+    const w = el.w * dispW
+    const h = el.h * dispH
+    const x = el.x * dispW
+    const y = dispH - el.y * dispH - h
+
+    // Nothing drawn for a field may reach outside its box (1pt margin keeps borders whole)
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(...matrix),
+      rectangle(x - 1, y - 1, w + 2, h + 2),
+      clip(),
+      endPath()
+    )
+
+    switch (el.type) {
+      case 'signature':
+      case 'initials': {
+        if (!el.data) break
+        const image = await embedImage(el.data)
+        const scale = Math.min(w / image.width, h / image.height)
+        const iw = image.width * scale
+        const ih = image.height * scale
+        page.drawImage(image, { x: x + (w - iw) / 2, y: y + (h - ih) / 2, width: iw, height: ih })
+        break
+      }
+      // Sender's "Fill in now" text is printed on white, so it can cover a placeholder
+      case 'prefill':
+        page.drawRectangle({ x, y, width: w, height: h, color: rgb(1, 1, 1) })
+      // falls through
+      case 'text':
+      case 'date': {
+        const text = encodable(font, el.text || '')
+        if (!text) break
+        const size = Number(el.fontSize) || DEFAULT_FONT_SIZE
+        page.drawText(text, { x: x + 2, y: y + (h - size * 0.7) / 2, size, font, color: hexToRgb(el.color) })
+        break
+      }
+      case 'checkbox': {
+        page.drawRectangle({ x, y, width: w, height: h, borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 1 })
+        if (el.checked) {
+          const thickness = Math.max(1, Math.min(w, h) / 8)
+          const color = rgb(0.05, 0.05, 0.05)
+          page.drawLine({ start: { x: x + w * 0.2, y: y + h * 0.5 }, end: { x: x + w * 0.42, y: y + h * 0.25 }, thickness, color })
+          page.drawLine({ start: { x: x + w * 0.42, y: y + h * 0.25 }, end: { x: x + w * 0.8, y: y + h * 0.78 }, thickness, color })
+        }
+        break
+      }
+    }
+
+    page.pushOperators(popGraphicsState())
+  }
+}
+
+/** Convert stored field rows (with their signed `value`) into stampable elements. */
+export function elementsFromFieldRows(rows) {
+  return rows.map(row => ({
+    type: row.type,
+    page: row.page,
+    x: row.x,
+    y: row.y,
+    w: row.w,
+    h: row.h,
+    fontSize: row.font_size,
+    data: row.type === 'signature' || row.type === 'initials' ? row.value : undefined,
+    text: row.type === 'prefill' ? row.prefill ?? '' : row.type === 'text' || row.type === 'date' ? row.value ?? '' : undefined,
+    checked: row.type === 'checkbox' ? row.value === 'true' : undefined
+  }))
+}
+
+/**
+ * Transform from "display space" (the page as a viewer shows it, after /Rotate, origin at
+ * the bottom-left of the crop box) to PDF user space.
+ */
+function displaySpace(page) {
+  const { x, y, width: W, height: H } = page.getCropBox()
+  const rotation = ((page.getRotation().angle % 360) + 360) % 360
+
+  switch (rotation) {
+    case 90:
+      return { width: H, height: W, matrix: [0, 1, -1, 0, x + W, y] }
+    case 180:
+      return { width: W, height: H, matrix: [-1, 0, 0, -1, x + W, y + H] }
+    case 270:
+      return { width: H, height: W, matrix: [0, -1, 1, 0, x, y + H] }
+    default:
+      return { width: W, height: H, matrix: [1, 0, 0, 1, x, y] }
+  }
+}
+
+/** Standard PDF fonts only cover WinAnsi; drop characters they cannot encode. */
+export function encodable(font, text) {
+  return [...text].filter(ch => {
+    try {
+      font.encodeText(ch)
+      return true
+    } catch {
+      return false
+    }
+  }).join('')
+}
+
+function hexToRgb(hex) {
+  const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '')
+  if (!match) return rgb(0, 0, 0)
+  return rgb(parseInt(match[1], 16) / 255, parseInt(match[2], 16) / 255, parseInt(match[3], 16) / 255)
+}

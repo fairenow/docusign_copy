@@ -1,103 +1,64 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import Brand from './Brand'
 import { Pen, Type, Calendar, Hash, CheckSquare, Sparkles } from 'lucide-react'
 import SignaturePanel from './SignaturePanel'
 import TextOptions from './TextOptions'
 import DetectedFieldsPanel from './DetectedFieldsPanel'
+import { useFeedback } from './feedback/useFeedback'
+
+// One field tool: a quiet row that lifts on hover; the open one is outlined in the accent
+const toolClass = (active) => `w-full px-3 py-2.5 rounded-lg border text-sm font-medium flex items-center gap-3 mb-2 transition-[background-color,border-color,box-shadow,color] duration-150 ${
+  active ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-focus' : 'bg-white border-gray-200 text-gray-800 shadow-xs hover:border-gray-300 hover:bg-gray-50'
+}`
 
 export default function Sidebar({
-  onAddElement,
   hasDocument,
-  fileType,
+  activePanel,
+  onActivePanelChange,
+  onAddSignature,
+  savedSignatures = [], // [{ id, kind: 'signature' | 'initials', image }], newest first
+  onUseSaved,
+  onAddText,
+  onAddDate,
+  onAddInitials,
+  onAddCheckbox,
   detectedFields = [],
   isDetecting = false,
   onPlaceField,
   onPlaceAllFields,
   onDismissDetected,
-  onRedetect
+  onRedetect,
+  className = ''
 }) {
-  const [activePanel, setActivePanel] = useState(null)
   const [showDetectedFields, setShowDetectedFields] = useState(true)
+  const { notify } = useFeedback()
 
   const togglePanel = (panel) => {
-    setActivePanel(activePanel === panel ? null : panel)
+    onActivePanelChange(activePanel === panel ? null : panel)
   }
 
-  const handleAddSignature = (signatureData) => {
+  // Every add action needs a document to add to
+  const requireDocument = (action) => (...args) => {
     if (!hasDocument) {
-      alert('Please upload a document first')
+      notify('Upload a document first.', { tone: 'info' })
       return
     }
-    onAddElement({
-      type: 'signature',
-      data: signatureData,
-      x: 100,
-      y: 100
-    })
+    action(...args)
   }
 
-  const handleAddText = (options) => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'text',
-      text: '',
-      x: 100,
-      y: 100,
-      fontSize: options.fontSize,
-      color: options.color
-    })
-  }
-
-  const handleAddDate = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'date',
-      text: new Date().toLocaleDateString(),
-      x: 100,
-      y: 100
-    })
-  }
-
-  const handleAddInitials = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    const initials = prompt('Enter your initials:')
-    if (initials) {
-      onAddElement({
-        type: 'initials',
-        text: initials,
-        x: 100,
-        y: 100
-      })
-    }
-  }
-
-  const handleAddCheckbox = () => {
-    if (!hasDocument) {
-      alert('Please upload a document first')
-      return
-    }
-    onAddElement({
-      type: 'checkbox',
-      checked: false,
-      x: 100,
-      y: 100
-    })
-  }
+  const handleAddSignature = requireDocument(onAddSignature)
+  const handleUseSaved = requireDocument(onUseSaved)
+  const handleAddText = requireDocument(onAddText)
+  const handleAddDate = requireDocument(onAddDate)
+  const handleAddInitials = requireDocument(onAddInitials)
+  const handleAddCheckbox = requireDocument(onAddCheckbox)
 
   return (
-    <aside className="w-72 bg-dark-800 border-r border-dark-700 flex flex-col flex-shrink-0">
-      <div className="p-5 border-b border-dark-700">
-        <h1 className="text-2xl font-bold gradient-text flex items-center gap-2">
-          📝 DocSign
-        </h1>
+    <aside className={`w-full md:w-72 flex-1 md:flex-none bg-white border-r border-gray-200/80 flex-col flex-shrink-0 min-h-0 ${className || 'flex'}`}>
+      <div className="p-5 border-b border-gray-200">
+        <h1><Brand className="text-2xl" /></h1>
+        <Link to="/" className="mt-1 inline-block text-xs font-medium text-gray-500 hover:text-gray-900">← Envelopes</Link>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
@@ -119,58 +80,70 @@ export default function Sidebar({
         {hasDocument && !showDetectedFields && detectedFields.length > 0 && (
           <button
             onClick={() => setShowDetectedFields(true)}
-            className="w-full p-3 mb-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-lg text-gray-200 hover:border-blue-500/50 transition-all flex items-center gap-3"
+            className="w-full p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg text-gray-800 hover:border-blue-500/50 transition-all flex items-center gap-3"
           >
-            <Sparkles size={20} className="text-blue-400" />
+            <Sparkles size={20} className="text-blue-600" />
             <span className="text-sm">Show {detectedFields.length} detected fields</span>
           </button>
         )}
 
         {/* Re-detect button for PDF files when no fields shown */}
-        {hasDocument && fileType === 'pdf' && !showDetectedFields && detectedFields.length === 0 && !isDetecting && (
+        {hasDocument && !showDetectedFields && detectedFields.length === 0 && !isDetecting && (
           <button
             onClick={() => {
               setShowDetectedFields(true)
               onRedetect?.()
             }}
-            className="w-full p-3 mb-4 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3"
+            className={`${toolClass(false)} mb-4`}
           >
             <Sparkles size={20} />
             <span className="text-sm">Detect Form Fields</span>
           </button>
         )}
 
-        <p className="text-xs font-semibold text-dark-500 uppercase tracking-wide mb-3">
+        <p className="section-heading mb-3">
           Add Fields
         </p>
 
         {/* Signature Button */}
         <button
           onClick={() => togglePanel('signature')}
-          className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
-            activePanel === 'signature'
-              ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-dark-700 border-dark-600 text-gray-200 hover:bg-blue-600 hover:border-blue-600'
-          }`}
+          className={toolClass(activePanel === 'signature')}
         >
-          <Pen size={20} />
+          <Pen size={18} className="text-gray-500" aria-hidden="true" />
           <span>Signature</span>
         </button>
 
         {activePanel === 'signature' && (
-          <SignaturePanel onApply={handleAddSignature} />
+          <>
+            {savedSignatures.length > 0 && (
+              <div className="mb-3" data-testid="saved-signatures">
+                <p className="text-xs font-medium text-gray-600 mb-1.5">Yours: click one to place it</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {savedSignatures.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleUseSaved(s)}
+                      aria-label={`Place your saved ${s.kind}`}
+                      className={`h-14 rounded-md border border-gray-300 bg-white p-1 hover:border-blue-600 ${s.kind === 'signature' ? 'col-span-2' : ''}`}
+                    >
+                      <img src={s.image} alt="" className="w-full h-full object-contain" draggable={false} />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">Or make a new one:</p>
+              </div>
+            )}
+            <SignaturePanel onApply={handleAddSignature} />
+          </>
         )}
 
         {/* Text Button */}
         <button
           onClick={() => togglePanel('text')}
-          className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
-            activePanel === 'text'
-              ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-dark-700 border-dark-600 text-gray-200 hover:bg-blue-600 hover:border-blue-600'
-          }`}
+          className={toolClass(activePanel === 'text')}
         >
-          <Type size={20} />
+          <Type size={18} className="text-gray-500" aria-hidden="true" />
           <span>Text Field</span>
         </button>
 
@@ -181,27 +154,27 @@ export default function Sidebar({
         {/* Date Button */}
         <button
           onClick={handleAddDate}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <Calendar size={20} />
-          <span>Date Field</span>
+          <Calendar size={18} className="text-gray-500" aria-hidden="true" />
+          <span>Today&apos;s date</span>
         </button>
 
         {/* Initials Button */}
         <button
           onClick={handleAddInitials}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <Hash size={20} />
+          <Hash size={18} className="text-gray-500" aria-hidden="true" />
           <span>Initials</span>
         </button>
 
         {/* Checkbox Button */}
         <button
           onClick={handleAddCheckbox}
-          className="w-full p-3 bg-dark-700 border border-dark-600 rounded-lg text-gray-200 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <CheckSquare size={20} />
+          <CheckSquare size={18} className="text-gray-500" aria-hidden="true" />
           <span>Checkbox</span>
         </button>
       </div>

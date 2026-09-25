@@ -25,5 +25,6 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Lock files (optional - some teams prefer to commit these)
-package-lock.json
+# Test output
+test-results/
+playwright-report/

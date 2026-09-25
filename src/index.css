@@ -8,11 +8,53 @@
   box-sizing: border-box;
 }
 
-body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: #0f172a;
-  min-height: 100vh;
-  color: #e2e8f0;
+@layer base {
+  body {
+    @apply bg-gray-100 text-gray-900 font-sans antialiased;
+    min-height: 100vh;
+    /* Inter's single-storey a, open digits and tabular numbers for dates and counts */
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.012em;
+  }
+
+  /* One focus ring everywhere, for keyboard users only */
+  :focus-visible {
+    outline: 2px solid theme('colors.blue.500');
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Form fields: crisp borders and a soft accent glow when focused */
+  input:where([type='text'], [type='email'], [type='search'], [type='number'], [type='date'], :not([type])):not(.overlay-text-input),
+  select,
+  textarea {
+    @apply transition-[border-color,box-shadow] duration-150;
+  }
+  input:where([type='text'], [type='email'], [type='search'], [type='number'], [type='date'], :not([type])):not(.overlay-text-input):focus,
+  select:focus,
+  textarea:focus {
+    @apply border-blue-500 shadow-focus;
+    outline: none;
+  }
+  input[type='checkbox'], input[type='radio'] {
+    accent-color: theme('colors.blue.600');
+  }
+
+  ::selection {
+    background: theme('colors.blue.100');
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 /* Custom scrollbar */
@@ -22,16 +64,19 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
+  background: #d1d6df;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #99a1b2;
+  background-clip: content-box;
 }
 
 /* Signature canvas cursor */
@@ -47,11 +92,11 @@ body {
 }
 
 .overlay-element:hover {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid theme('colors.blue.400');
 }
 
 .overlay-element.selected {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid theme('colors.blue.600');
 }
 
 /* Drag ghost prevention */
@@ -59,8 +104,16 @@ body {
   pointer-events: none;
 }
 
-/* Text input in overlay */
+/* Text in fields uses the font the signed PDF is printed with (Helvetica), so it lines up the same */
+.pdf-text {
+  font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
+}
+
+/* Text input in a field: a block that fills the field exactly, so the text sits centred in
+   its box (as inline content it sat on the page's line of text, which at small zoom is taller
+   than the field, and dropped below the box) */
 .overlay-text-input {
+  display: block;
   border: none;
   background: transparent;
   font-size: inherit;
@@ -68,7 +121,8 @@ body {
   color: inherit;
   outline: none;
   width: 100%;
-  min-width: 80px;
+  min-width: 0;
+  line-height: normal;
 }
 
 /* Loading spinner */
@@ -82,43 +136,11 @@ body {
   animation: spin 1s linear infinite;
 }
 
-/* Document container */
+/* Document container: paper on the desk */
 .document-container {
   background: white;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-}
-
-/* DOCX content styling */
-.docx-content {
-  padding: 2rem;
-  min-width: 612px;
-  min-height: 792px;
-  background: white;
-  color: #1e293b;
-  font-size: 12pt;
-  line-height: 1.6;
-}
-
-.docx-content p {
-  margin-bottom: 1em;
-}
-
-.docx-content h1, .docx-content h2, .docx-content h3 {
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-  font-weight: bold;
-}
-
-.docx-content table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em 0;
-}
-
-.docx-content td, .docx-content th {
-  border: 1px solid #ccc;
-  padding: 0.5em;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(15, 21, 35, 0.05), 0 2px 4px rgba(15, 21, 35, 0.04), 0 12px 32px -8px rgba(15, 21, 35, 0.16);
 }
 
 /* Checkbox field */
@@ -134,19 +156,73 @@ body {
   cursor: pointer;
 }
 
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+@layer components {
+/* Small uppercase heading above a sidebar section */
+.section-heading {
+  @apply text-[11px] font-semibold text-gray-500 uppercase tracking-[0.08em];
 }
 
-/* Button gradient */
-.btn-gradient {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+/* Page titles and big moments: the display serif */
+.page-title {
+  @apply font-display font-normal text-gray-900 tracking-tight leading-none;
 }
 
-.btn-gradient:hover {
-  opacity: 0.9;
+/* A white surface floating on the page */
+.card {
+  @apply bg-white rounded-xl shadow-card;
+}
+
+/* Buttons: ink primary, quiet secondary, red for destructive. Pressing gives a slight dip. */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  @apply font-medium transition-[background-color,box-shadow,transform,color,border-color] duration-150 ease-out active:translate-y-px disabled:cursor-not-allowed disabled:active:translate-y-0;
+}
+
+/* Primary action button */
+.btn-primary {
+  @apply text-white shadow-button disabled:shadow-none disabled:text-white/80;
+  background: linear-gradient(180deg, theme('colors.gray.800'), theme('colors.gray.900'));
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, theme('colors.gray.700'), theme('colors.gray.800'));
+}
+.btn-primary:disabled {
+  background: theme('colors.gray.300');
+}
+
+/* Secondary (outlined) button */
+.btn-secondary {
+  @apply bg-white border border-gray-200 text-gray-800 shadow-xs hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50;
+}
+
+/* Destructive action button (delete, void, decline) */
+.btn-danger {
+  @apply bg-red-600 text-white shadow-button hover:bg-red-700 disabled:bg-red-300 disabled:shadow-none;
+}
+
+/* Segmented control (Draw / Type, Mine / Everyone): the chosen option lifts out */
+.segmented {
+  @apply inline-flex p-1 gap-1 rounded-lg bg-gray-100 border border-gray-200/70;
+}
+.segmented-item {
+  @apply px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 transition-[background-color,color,box-shadow] duration-150 hover:text-gray-900;
+}
+.segmented-item[aria-pressed='true'] {
+  @apply bg-white text-gray-900 shadow-sm;
+}
+
+/* Square icon button in toolbars */
+.icon-btn {
+  @apply inline-flex items-center justify-center rounded-lg text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed;
+}
+
+/* Status pill with a colored dot */
+.pill {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap;
+}
+.pill::before {
+  content: '';
+  @apply w-1.5 h-1.5 rounded-full bg-current opacity-80;
+}
 }

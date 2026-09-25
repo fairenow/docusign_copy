@@ -1,0 +1,147 @@
+import { admin, audit, ownerOf, rpc, OWNER_SELECT } from './supabase.ts'
+import { emailConfig } from './config.ts'
+import { sendEmail } from './mail.ts'
+import { sha256Hex, toBase64 } from './crypto.ts'
+import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
+import { appendCertificate } from './certificate.js'
+import { completedEmail } from './emails.js'
+
+// Resend's attachment limit is 40 MB after base64 encoding
+const MAX_ATTACHMENT_BYTES = 28 * 1024 * 1024
+
+/**
+ * Build the signed PDF (field values + certificate of completion), store it, mark the
+ * envelope completed and email everyone a copy. Safe to retry: it only completes an
+ * envelope that is fully signed and still 'sent'.
+ */
+export async function finalizeEnvelope(envelopeId: string) {
+  const { data: envelope, error } = await admin
+    .from('envelopes')
+    .select(`*, ${OWNER_SELECT}, recipients (*), fields (*)`)
+    .eq('id', envelopeId)
+    .single()
+  if (error) throw error
+  if (envelope.status !== 'sent') return { status: envelope.status }
+
+  const [{ data: events, error: eventsError }, { data: file, error: downloadError }] = await Promise.all([
+    admin
+      .from('audit_events')
+      .select('created_at, action, ip, recipient_id, actor_user_id')
+      .eq('envelope_id', envelopeId)
+      .order('id'),
+    admin.storage.from('documents').download(envelope.original_path)
+  ])
+  if (eventsError) throw eventsError
+  if (downloadError) throw downloadError
+
+  // deno-lint-ignore no-explicit-any
+  const recipients = [...envelope.recipients].sort((a: any, b: any) => a.routing_order - b.routing_order)
+  const owner = ownerOf(envelope)
+  const ownerName = owner.name
+  // deno-lint-ignore no-explicit-any
+  const nameOf = (e: any) => recipients.find((r: any) => r.id === e.recipient_id)?.name ?? (e.actor_user_id === envelope.owner_id ? ownerName : '')
+
+  // The certificate states this fingerprint, so the document must still be the one that was sent
+  const original = new Uint8Array(await file.arrayBuffer())
+  if (envelope.original_sha256 && await sha256Hex(original) !== envelope.original_sha256) {
+    throw new Error('The document no longer matches the one that was sent. Void this envelope and send it again.')
+  }
+  const [doc, logo] = await Promise.all([loadPdf(original), fetchLogo()])
+  await stampFields(doc, elementsFromFieldRows(envelope.fields))
+  await appendCertificate(doc, {
+    envelope: { ...envelope, completed_at: new Date().toISOString() },
+    sender: { name: ownerName, email: owner.email },
+    // deno-lint-ignore no-explicit-any
+    recipients: recipients.map((r: any) => ({
+      ...r,
+      // deno-lint-ignore no-explicit-any
+      signature: envelope.fields.find((f: any) => f.recipient_id === r.id && f.type === 'signature' && f.value)?.value
+    })),
+    // deno-lint-ignore no-explicit-any
+    events: events.map((e: any) => ({ ...e, who: nameOf(e) })),
+    logo
+  })
+  doc.setTitle(envelope.title)
+  doc.setModificationDate(new Date())
+  // Copy into a plain ArrayBuffer-backed array for hashing and upload
+  let bytes = new Uint8Array(await doc.save())
+  const signedPath = `${envelopeId}/signed.pdf`
+
+  // Never overwrite: a concurrent finalize (background step + owner retry) could otherwise replace
+  // the file after the other one recorded its hash. If a signed copy already exists (a concurrent
+  // run, or an earlier run that stopped before completing), use that copy so file and hash agree.
+  const { error: uploadError } = await admin.storage
+    .from('documents')
+    .upload(signedPath, new Blob([bytes], { type: 'application/pdf' }), { upsert: false, contentType: 'application/pdf' })
+  if (uploadError) {
+    const { status, statusCode } = uploadError as { status?: number; statusCode?: string }
+    if (status !== 409 && statusCode !== '409') throw uploadError
+    const { data: existing, error: existingError } = await admin.storage.from('documents').download(signedPath)
+    if (existingError) throw existingError
+    bytes = new Uint8Array(await existing.arrayBuffer())
+  }
+  const finalSha = await sha256Hex(bytes)
+
+  try {
+    await rpc('svc_mark_completed', { p_envelope_id: envelopeId, p_final_sha256: finalSha })
+  } catch (err) {
+    // Another request completed it first
+    if ((err as { code?: string }).code === '55000') return { status: 'completed' }
+    throw err
+  }
+
+  // Everyone gets a copy: signers, CC recipients and the sender
+  let appUrl: string | null = null
+  let logoUrl: string | undefined
+  try {
+    ({ appUrl, logoUrl } = emailConfig())
+  } catch (err) {
+    console.error(err)
+  }
+  const attachment = bytes.length <= MAX_ATTACHMENT_BYTES
+    ? [{ filename: `${envelope.title.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'document'}_signed.pdf`, content: toBase64(bytes) }]
+    : undefined
+  // deno-lint-ignore no-explicit-any
+  const people = new Map<string, { name: string; recipientId: string | null }>(recipients.map((r: any) => [r.email.toLowerCase(), { name: r.name, recipientId: r.id }]))
+  if (owner.email && !people.has(owner.email.toLowerCase())) people.set(owner.email.toLowerCase(), { name: ownerName, recipientId: null })
+
+  const entries = [...people]
+  const results = await Promise.allSettled(entries.map(([email, person]) => {
+    if (!appUrl) return Promise.reject(new Error('Email is not configured'))
+    const isOwner = email === owner.email.toLowerCase()
+    return sendEmail({
+      to: email,
+      ...completedEmail({ recipientName: person.name, title: envelope.title, link: isOwner ? `${appUrl}/envelopes/${envelopeId}` : null, logoUrl }),
+      attachments: attachment
+    })
+  }))
+  await audit(...entries.flatMap(([email, person], i) => {
+    const r = results[i]
+    if (r.status === 'fulfilled') return []
+    console.error(r.reason)
+    return [{ envelopeId, action: 'email_failed', recipientId: person.recipientId, details: { email, kind: 'completed' } }]
+  }))
+  return { status: 'completed' }
+}
+
+/** The logo the app serves, for the certificate. Best effort: without it the certificate has no logo. */
+async function fetchLogo(): Promise<Uint8Array | undefined> {
+  try {
+    const res = await fetch(emailConfig().logoUrl)
+    if (!res.ok || !res.headers.get('content-type')?.includes('image/png')) throw new Error(`HTTP ${res.status}`)
+    return new Uint8Array(await res.arrayBuffer())
+  } catch (err) {
+    console.error('Could not load the logo for the certificate:', err)
+    return undefined
+  }
+}
+
+/** Finalize, recording a failure in the audit trail so the sender can retry from the app. */
+export async function finalizeOrRecordFailure(envelopeId: string) {
+  try {
+    return await finalizeEnvelope(envelopeId)
+  } catch (err) {
+    await audit({ envelopeId, action: 'finalize_failed', details: { reason: (err as Error).message?.slice(0, 300) } })
+    throw err
+  }
+}
