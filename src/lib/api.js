@@ -54,7 +54,7 @@ export async function fetchProfile(userId) {
 
 const OWNER_COLUMNS = 'owner:profiles!envelopes_owner_id_fkey (full_name, email)'
 const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, expires_at, voided_at, updated_at, created_at, ' +
-  `recipients (id, name, email, role, routing_order, status, sent_at, viewed_at, signed_at, declined_at, last_reminded_at), ${OWNER_COLUMNS}`
+  `recipients (id, name, email, role, routing_order, status, sent_at, viewed_at, signed_at, declined_at, last_reminded_at), envelope_shares (user_id), ${OWNER_COLUMNS}`
 
 export async function listEnvelopes() {
   // Working copies used to edit a template are not envelopes to the user
@@ -65,7 +65,7 @@ export async function listEnvelopes() {
 export async function fetchEnvelope(id) {
   const envelope = unwrap(await client()
     .from('envelopes')
-    .select(`*, recipients (*), fields (*), ${OWNER_COLUMNS}`)
+    .select(`*, recipients (*), fields (*), envelope_shares (user_id, shared_by, created_at), ${OWNER_COLUMNS}`)
     .eq('id', id)
     .maybeSingle())
   if (!envelope) throw new Error('Envelope not found, or you do not have access to it.')
@@ -327,4 +327,63 @@ export async function saveSignature(kind, image) {
 
 export async function deleteSavedSignature(id) {
   unwrap(await client().from('saved_signatures').delete().eq('id', id))
+}
+
+// ---------------------------------------------------------------------------
+// Team collaboration: sharing an envelope with a teammate, and comments
+// ---------------------------------------------------------------------------
+
+/** Everyone on the team (for sharing and @mentions). */
+export async function listTeam() {
+  return unwrap(await client().from('profiles').select('id, email, full_name, role').order('full_name'))
+}
+
+/** Give a teammate view-and-comment access, then email them (best effort). */
+export async function shareEnvelope(envelopeId, userId) {
+  unwrap(await client().from('envelope_shares').insert({ envelope_id: envelopeId, user_id: userId }))
+  signingApi('share', { envelopeId, userId }).catch(err => console.error('Could not email the teammate:', err))
+}
+
+export async function unshareEnvelope(envelopeId, userId) {
+  unwrap(await client().from('envelope_shares').delete().eq('envelope_id', envelopeId).eq('user_id', userId))
+}
+
+const COMMENT_COLUMNS = 'id, envelope_id, parent_id, author_id, body, page, x, y, mentions, resolved_at, resolved_by, created_at'
+
+export async function listComments(envelopeId) {
+  return unwrap(await client().from('envelope_comments').select(COMMENT_COLUMNS).eq('envelope_id', envelopeId).order('created_at'))
+}
+
+/** Post a comment (optionally pinned, or a reply); the people it mentions are emailed. */
+export async function addComment({ envelopeId, parentId = null, body, pin = null, mentions = [] }) {
+  const comment = unwrap(await client().from('envelope_comments').insert({
+    envelope_id: envelopeId,
+    parent_id: parentId,
+    body,
+    page: pin?.page ?? null,
+    x: pin?.x ?? null,
+    y: pin?.y ?? null,
+    mentions
+  }).select(COMMENT_COLUMNS).single())
+  signingApi('mention', { commentId: comment.id }).catch(err => console.error('Could not email the mentioned teammates:', err))
+  return comment
+}
+
+/** Resolve or reopen; the database records who resolved it and when. */
+export async function setCommentResolved(id, resolved) {
+  return unwrap(await client().from('envelope_comments').update({ resolved_at: resolved ? new Date().toISOString() : null })
+    .eq('id', id).select(COMMENT_COLUMNS).single())
+}
+
+export async function deleteComment(id) {
+  unwrap(await client().from('envelope_comments').delete().eq('id', id))
+}
+
+export function subscribeToComments(envelopeId, onChange) {
+  if (!supabase) return () => {}
+  const channel = supabase
+    .channel(`comments-${crypto.randomUUID()}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'envelope_comments', filter: `envelope_id=eq.${envelopeId}` }, onChange)
+    .subscribe()
+  return () => { supabase.removeChannel(channel) }
 }

@@ -395,7 +395,10 @@ export const canVoid = (envelope, user, isAdmin = false) => (isOwner(envelope, u
 export const canManageTemplate = (template, user, isAdmin = false) => isOwner(template, user) || isAdmin
 
 /** Sent by the user, or sent to them. What a member sees; an admin's "Mine" view. */
-export const isMine = (envelope, user) => isOwner(envelope, user) ||
+/** Shared with this user by its owner or an admin: they can view it and comment. */
+export const isSharedWith = (envelope, user) => Boolean(user) && (envelope?.envelope_shares ?? []).some(s => s.user_id === user.id)
+
+export const isMine = (envelope, user) => isOwner(envelope, user) || isSharedWith(envelope, user) ||
   (envelope.status !== 'draft' && (envelope.recipients ?? []).some(r => sameEmail(r.email, user?.email)))
 
 export const senderName = (envelope) => envelope.owner?.full_name || envelope.owner?.email || 'A teammate'
@@ -423,4 +426,34 @@ export const RECIPIENT_STATUS = {
   viewed: { label: 'Viewed', icon: '👁' },
   signed: { label: 'Signed', icon: '✓' },
   declined: { label: 'Declined', icon: '✕' }
+}
+
+// ---------------------------------------------------------------------------
+// Collaboration: who can see an envelope, and comments
+// ---------------------------------------------------------------------------
+
+export const displayName = (person) => person?.full_name || person?.email || 'A teammate'
+
+/**
+ * Ids of the teammates who can see an envelope, as the database decides: its owner, admins,
+ * teammates it is shared with and, once sent, teammates who are its recipients.
+ */
+export function peopleWithAccess(envelope, team) {
+  const ids = new Set([envelope.owner_id, ...(envelope.envelope_shares ?? []).map(s => s.user_id)])
+  for (const person of team) {
+    if (person.role === 'admin') ids.add(person.id)
+    if (envelope.status !== 'draft' && (envelope.recipients ?? []).some(r => sameEmail(r.email, person.email))) ids.add(person.id)
+  }
+  return ids
+}
+
+/** Top-level comments, oldest first, each with its replies (oldest first). */
+export function commentThreads(comments) {
+  const byTime = [...comments].sort((a, b) => a.created_at.localeCompare(b.created_at))
+  return byTime.filter(c => !c.parent_id).map(c => ({ ...c, replies: byTime.filter(r => r.parent_id === c.id) }))
+}
+
+/** The people whose "@Name" is still in the text (a mention can be typed and then deleted). */
+export function mentionsIn(body, people) {
+  return people.filter(p => body.includes(`@${displayName(p)}`)).map(p => p.id)
 }

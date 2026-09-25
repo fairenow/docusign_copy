@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   draftFromEnvelope, fieldToRow, newField, groupEnvelopes, canEdit, canDelete, canVoid, recipientToRow, newRecipient, moveRecipient, addSelfAsSigner, recipientByEmail,
-  validateForSave, validateForSend, envelopeGroup, currentSigners, isMine, matchesSearch, signsAlone, RECIPIENT_COLORS
+  validateForSave, validateForSend, envelopeGroup, currentSigners, isMine, matchesSearch, signsAlone, isSharedWith, peopleWithAccess, commentThreads, mentionsIn, RECIPIENT_COLORS
 } from './envelopeModel'
 
 const signer = (over = {}) => ({ id: 'r1', name: 'Bob', email: 'bob@flmlnk.com', role: 'signer', routingOrder: 1, color: '#2563eb', ...over })
@@ -209,5 +209,41 @@ describe('signsAlone', () => {
     expect(signsAlone(draft({ role: 'signer', email: 'alice@flmlnk.com' }, { role: 'signer', email: 'bob@flmlnk.com' }), me)).toBe(false)
     expect(signsAlone(draft({ role: 'cc', email: 'alice@flmlnk.com' }), me)).toBe(false)
     expect(signsAlone(draft({ role: 'signer', email: 'alice@flmlnk.com' }), null)).toBe(false)
+  })
+})
+
+describe('collaboration', () => {
+  const team = [
+    { id: 'a', email: 'alice@flmlnk.com', full_name: 'Alice Owner', role: 'member' },
+    { id: 'b', email: 'bob@flmlnk.com', full_name: 'Bob Mate', role: 'member' },
+    { id: 's', email: 'sara@flmlnk.com', full_name: 'Sara Admin', role: 'admin' },
+    { id: 'c', email: 'carol@flmlnk.com', full_name: 'Carol Signer', role: 'member' }
+  ]
+  const envelope = (status, extra = {}) => ({ owner_id: 'a', status, recipients: [{ email: 'Carol@flmlnk.com' }], envelope_shares: [], ...extra })
+
+  it('shared envelopes are the teammate\'s too', () => {
+    const shared = envelope('draft', { envelope_shares: [{ user_id: 'b' }] })
+    expect(isSharedWith(shared, { id: 'b' })).toBe(true)
+    expect(isSharedWith(shared, { id: 'c' })).toBe(false)
+    expect(isMine(shared, { id: 'b', email: 'bob@flmlnk.com' })).toBe(true)
+  })
+
+  it('access: owner, admins and shares always; team recipients once sent', () => {
+    expect([...peopleWithAccess(envelope('draft', { envelope_shares: [{ user_id: 'b' }] }), team)].sort()).toEqual(['a', 'b', 's'])
+    expect([...peopleWithAccess(envelope('sent'), team)].sort()).toEqual(['a', 'c', 's'])
+  })
+
+  it('threads comments with their replies, oldest first', () => {
+    const threads = commentThreads([
+      { id: 'r1', parent_id: 't1', created_at: '2026-09-25T10:05:00Z' },
+      { id: 't2', parent_id: null, created_at: '2026-09-25T10:10:00Z' },
+      { id: 't1', parent_id: null, created_at: '2026-09-25T10:00:00Z' }
+    ])
+    expect(threads.map(t => [t.id, t.replies.map(r => r.id)])).toEqual([['t1', ['r1']], ['t2', []]])
+  })
+
+  it('keeps only the mentions still in the text', () => {
+    expect(mentionsIn('Can @Bob Mate check this?', team)).toEqual(['b'])
+    expect(mentionsIn('No mentions left', team)).toEqual([])
   })
 })

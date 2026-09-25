@@ -6,7 +6,7 @@ import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, 
 import { formatDateTime } from '../lib/format'
 import { ACCEPTED_FILE_TYPES, isConvertible } from '../lib/documents'
 import {
-  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, envelopeProgress, groupEnvelopes, isMine, isOwner,
+  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, envelopeProgress, groupEnvelopes, isMine, isOwner, isSharedWith,
   matchesSearch, remindTargets, senderName
 } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
@@ -312,7 +312,10 @@ function EnvelopeRow({ envelope, user, isAdmin, now, reminding, onRemind, onDele
       >
         <p className="text-gray-900 font-semibold tracking-[-0.005em] truncate group-hover:text-blue-700 transition-colors">{envelope.title}</p>
         {!isOwner(envelope, user) && (
-          <p className="text-xs text-gray-600 truncate">Sent by {senderName(envelope)}</p>
+          <p className="text-xs text-gray-600 truncate">
+            {isSharedWith(envelope, user) && <span className="font-medium text-violet-700">Shared with you · </span>}
+            {envelope.status === 'draft' ? 'Draft by' : 'Sent by'} {senderName(envelope)}
+          </p>
         )}
         {progress.text && (
           <p className={`text-xs truncate ${PROGRESS_STYLES[progress.tone]}`} data-testid="envelope-progress">{progress.text}</p>

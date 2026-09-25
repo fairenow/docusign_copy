@@ -154,3 +154,43 @@ export function declinedEmail({ ownerName, recipientName, title, reason, link, l
     text: `Hi ${ownerName},\n\n${recipientName} declined to sign "${title}".${reason ? `\n\nReason: ${reason}` : ''}\n\nView envelope: ${link}`
   }
 }
+
+/** To a teammate mentioned in (or replied to in) an internal comment. */
+export function commentEmail({ recipientName, authorName, title, body, mentioned, link, logoUrl }) {
+  const action = mentioned ? 'mentioned you in a comment on' : 'replied to your comment on'
+  const paragraphs = [
+    `Hi ${escapeHtml(recipientName)},`,
+    `${escapeHtml(authorName)} ${action} <strong>${escapeHtml(title)}</strong>:`,
+    quote(body)
+  ]
+  return {
+    subject: mentioned ? `${authorName} mentioned you: ${title}` : `${authorName} replied: ${title}`,
+    html: layout({
+      heading: mentioned ? 'You were mentioned' : 'New reply',
+      paragraphs,
+      logoUrl,
+      button: { href: link, label: 'Open the comment' },
+      footer: 'Comments are only visible to your team, never to the people signing.'
+    }),
+    text: `Hi ${recipientName},\n\n${authorName} ${action} "${title}":\n\n${body}\n\nOpen the comment: ${link}`
+  }
+}
+
+/** To a teammate an envelope was just shared with. */
+export function sharedEmail({ recipientName, sharerName, title, link, logoUrl }) {
+  const paragraphs = [
+    `Hi ${escapeHtml(recipientName)},`,
+    `${escapeHtml(sharerName)} shared <strong>${escapeHtml(title)}</strong> with you. You can view it and leave comments for the team.`
+  ]
+  return {
+    subject: `${sharerName} shared: ${title}`,
+    html: layout({
+      heading: 'An envelope was shared with you',
+      paragraphs,
+      logoUrl,
+      button: { href: link, label: 'Open envelope' },
+      footer: 'You can view and comment on it; only the sender can change or send it.'
+    }),
+    text: `Hi ${recipientName},\n\n${sharerName} shared "${title}" with you. You can view it and leave comments for the team.\n\nOpen envelope: ${link}`
+  }
+}

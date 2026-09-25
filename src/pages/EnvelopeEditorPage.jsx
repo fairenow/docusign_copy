@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import {
   cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
-  getSigningSession, originalPath, retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, submitSigning, subscribeToEnvelopeChanges
+  getSigningSession, listTeam, originalPath, retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, shareEnvelope, submitSigning,
+  subscribeToEnvelopeChanges, unshareEnvelope
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
-  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, signsAlone, RECIPIENT_COLORS
+  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, signsAlone, peopleWithAccess, commentThreads, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
-import { FIELD_LABELS, DEFAULT_FONT_SIZE, canHover, nextFieldY, placementRect } from '../lib/fields'
+import { FIELD_LABELS, DEFAULT_FONT_SIZE, canHover, clamp, nextFieldY, placementRect } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
@@ -17,6 +18,10 @@ import { usePdf } from '../hooks/usePdf'
 import { useUndoable } from '../hooks/useUndoable'
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts'
 import { useSelfSigning } from '../hooks/useSelfSigning'
+import { useEnvelopeComments } from '../hooks/useEnvelopeComments'
+import CommentsPanel from '../components/collab/CommentsPanel'
+import SharePanel from '../components/collab/SharePanel'
+import CommentPin from '../components/collab/CommentPin'
 import { initialsOf } from '../../supabase/functions/_shared/signing.js'
 import { useFeedback } from '../components/feedback/useFeedback'
 import { preloadPdfViewer } from '../lib/documents'
@@ -51,6 +56,14 @@ const AUTOSAVE_DELAY_MS = 1500
 // saving: a save is running; problems / error: shown in a banner; waiting: why autosave is holding off
 const SAVE_IDLE = { saving: false, problems: [], error: null, waiting: null }
 
+// A comment pin is an 18 pt bubble whose bottom-left corner is the spot it was pinned to
+const PIN_SIZE_PT = 18
+function pinRect(pageSize, x, y) {
+  const w = PIN_SIZE_PT / pageSize.width
+  const h = PIN_SIZE_PT / pageSize.height
+  return { x: clamp(x, 0, 1 - w), y: clamp(y - h, 0, 1 - h), w, h }
+}
+
 // Undo steps: a burst of changes to one field or one recipient box is one step
 const fieldStep = (id) => `field:${id}`
 const recipientStep = (id, patch) => `recipient:${id}:${Object.keys(patch).join()}`
@@ -62,6 +75,7 @@ const recipientStep = (id, patch) => `recipient:${id}:${Object.keys(patch).join(
  */
 export default function EnvelopeEditorPage() {
   const { envelopeId } = useParams()
+  const [searchParams] = useSearchParams()
   const { user, profile, isAdmin } = useAuth()
 
   const [envelope, setEnvelope] = useState(null)
@@ -76,11 +90,14 @@ export default function EnvelopeEditorPage() {
   const [saveState, setSaveState] = useState(SAVE_IDLE)
   const [activeRecipientId, setActiveRecipientId] = useState(null)
   const [selectedFieldId, setSelectedFieldId] = useState(null)
-  const [tab, setTab] = useState('recipients') // right panel: 'recipients' | 'field'
+  // Right panel: 'recipients' | 'field' | 'comments' (a sent envelope: 'activity' | 'comments').
+  // A link to a comment (from its email) opens on it.
+  const [tab, setTab] = useState(() => (searchParams.get('comment') ? 'comments' : 'recipients'))
   const [currentPage, setCurrentPage] = useState(1)
   const [zoom, setZoom] = useState(1)
   // Phones show the document or the side panel, one at a time
-  const [mobileView, setMobileView] = useState('document') // 'document' | 'panel'
+  // A link to a comment opens the comments, on phones too
+  const [mobileView, setMobileView] = useState(() => (searchParams.get('comment') ? 'panel' : 'document')) // 'document' | 'panel'
   const [events, setEvents] = useState([])
   const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
   const [templateDialog, setTemplateDialog] = useState(null) // Save as template: null | 'open' | 'saved'
@@ -317,8 +334,9 @@ export default function EnvelopeEditorPage() {
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
   const selectField = useCallback((id) => {
+    if (id?.startsWith('pin:')) return // comment pins open their comment instead (activateField)
     setSelectedFieldId(id)
-    setTab(id ? 'field' : 'recipients')
+    setTab(current => (id ? 'field' : current === 'field' ? 'recipients' : current))
   }, [])
 
   // Dragging, resizing or typing into one field is one undo step
@@ -536,6 +554,7 @@ export default function EnvelopeEditorPage() {
   )
   const renderField = (field, ctx) => {
     const { scale } = ctx
+    if (field.pin) return <CommentPin number={field.number} active={focusCommentId === field.commentId} />
     if (isMine(field)) {
       return <FillField {...ctx} element={signedLook(field)} onUpdate={(patch) => { if ('text' in patch && field.type === 'text') selfSigning.setValue(field.id, patch.text) }} />
     }
@@ -554,18 +573,74 @@ export default function EnvelopeEditorPage() {
     return <PlaceholderField field={field} color={r?.color ?? RECIPIENT_COLORS[0]} assignee={r?.name || r?.email || 'Unassigned'} />
   }
 
-  // Your own fields: a click ticks a checkbox, or asks for the signature they need
+  // Collaboration -------------------------------------------------------------
+  const [team, setTeam] = useState([])
+  useEffect(() => { listTeam().then(setTeam).catch(err => console.error('Could not load the team:', err)) }, [])
+  const { comments, post: postComment, resolve: resolveComment, remove: removeComment } = useEnvelopeComments(envelopeId, Boolean(envelope))
+  const [focusCommentId, setFocusCommentId] = useState(() => searchParams.get('comment'))
+  // Picking a spot on the page for a new comment, and the spot picked
+  const [pinning, setPinning] = useState(false)
+  const [pendingPin, setPendingPin] = useState(null)
+  const canShare = Boolean(envelope) && !editingTemplate && (ownsEnvelope || isAdmin)
+  const access = useMemo(() => (envelope ? peopleWithAccess(envelope, team) : new Set()), [envelope, team])
+  // Open, pinned threads are numbered on the page in the order they were written
+  const pins = useMemo(() => {
+    const numbers = new Map()
+    commentThreads(comments).filter(t => t.page && !t.resolved_at).forEach((t, i) => numbers.set(t.id, i + 1))
+    return numbers
+  }, [comments])
+
+  const handleShare = async (userId) => {
+    await shareEnvelope(envelopeId, userId)
+    setEnvelope(e => ({ ...e, envelope_shares: [...(e.envelope_shares ?? []), { user_id: userId, shared_by: user.id, created_at: new Date().toISOString() }] }))
+    notify(`Shared with ${team.find(p => p.id === userId)?.full_name || 'your teammate'}. They were emailed a link.`)
+  }
+  const handleUnshare = async (userId) => {
+    await unshareEnvelope(envelopeId, userId)
+    if (userId === user.id) return navigate('/')
+    setEnvelope(e => ({ ...e, envelope_shares: (e.envelope_shares ?? []).filter(s => s.user_id !== userId) }))
+  }
+  // Mentioning a teammate who cannot see the envelope shares it with them first (owner/admin only)
+  const handlePostComment = async (comment) => {
+    for (const id of comment.mentions) if (!access.has(id) && canShare) await handleShare(id)
+    const saved = await postComment(comment)
+    if (!comment.parentId) setFocusCommentId(saved.id)
+  }
+  const showComment = (thread) => {
+    setFocusCommentId(thread.id)
+    if (thread.page) setCurrentPage(thread.page)
+  }
+
+  useEffect(() => {
+    if (!pinning) return
+    const onKeyDown = (e) => { if (e.key === 'Escape') setPinning(false) }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [pinning])
+
+  // Your own fields: a click ticks a checkbox, or asks for the signature they need. A pin opens its comment.
   const activateField = (field) => {
+    if (field.pin) {
+      setTab('comments')
+      setFocusCommentId(field.commentId)
+      setMobileView('panel')
+      return
+    }
     if (!isMine(field)) return
     if (field.type === 'checkbox') selfSigning.setValue(field.id, selfSigning.valueOf(field) === 'true' ? 'false' : 'true')
     if ((field.type === 'signature' || field.type === 'initials') && !selfSigning.images[field.type]) setCreating({ kind: field.type, place: false })
   }
 
-  // Suggestions show on the page as outlines until they are added
+  // Suggestions show on the page as outlines until they are added; open comments as pins
   const viewerElements = useMemo(() => {
     const fields = draft?.fields ?? []
-    return suggestions ? [...fields, ...suggestions.map(s => ({ ...s, suggestion: true, fixed: true }))] : fields
-  }, [draft?.fields, suggestions])
+    const suggested = suggestions ? suggestions.map(s => ({ ...s, suggestion: true, fixed: true })) : []
+    const pinned = comments.filter(c => pins.has(c.id) && pageSizes[c.page - 1]).map(c => ({
+      id: `pin:${c.id}`, commentId: c.id, number: pins.get(c.id), pin: true, fixed: true, type: 'comment', page: c.page,
+      ...pinRect(pageSizes[c.page - 1], c.x, c.y)
+    }))
+    return [...fields, ...suggested, ...pinned]
+  }, [draft?.fields, suggestions, comments, pins, pageSizes])
 
   if (loadError) {
     return (
@@ -580,7 +655,15 @@ export default function EnvelopeEditorPage() {
   const firstSigner = draft.recipients.find(r => r.role === 'signer')
   // A picked-up field shows where it would go, in its signer's color, until clicked into place
   const placingFor = activeRecipient ?? firstSigner
-  const placing = placingType && editable ? {
+  const placing = pinning ? {
+    rectAt: (pageNumber, x, y) => pinRect(pageSizes[pageNumber - 1], x, y),
+    render: () => <CommentPin number="+" preview />,
+    onPlace: (pageNumber, rect) => {
+      setPendingPin({ page: pageNumber, x: rect.x, y: rect.y + rect.h })
+      setPinning(false)
+      setMobileView('panel') // phones: back to the comment being written
+    }
+  } : placingType && editable ? {
     rectAt: (pageNumber, x, y) => placementRect(placingType, pageSizes[pageNumber - 1], x, y),
     render: (rect, ctx) => selfSign && placingType !== 'prefill' ? (
       <FillField {...ctx} element={signedLook({ id: 'placing', type: placingType, ...rect })} onUpdate={() => {}} />
@@ -602,7 +685,45 @@ export default function EnvelopeEditorPage() {
     : !dirty ? 'All changes saved'
       : saveState.waiting ? `Not saved yet: ${saveState.waiting}`
         : saveState.error ? 'Could not save' : 'Unsaved changes'
-  const panelTab = selectedField ? tab : 'recipients'
+  const panelTab = editable
+    ? (tab === 'comments' ? 'comments' : selectedField ? tab : 'recipients')
+    : (tab === 'comments' ? 'comments' : 'activity')
+  const openComments = comments.filter(c => !c.parent_id && !c.resolved_at).length
+  const commentsPanel = (
+    <>
+      <SharePanel envelope={envelope} team={team} me={user} canShare={canShare} onShare={handleShare} onUnshare={handleUnshare} />
+      <CommentsPanel
+        comments={comments}
+        team={team}
+        me={user}
+        canShare={canShare}
+        hasAccess={(id) => access.has(id)}
+        onPost={handlePostComment}
+        onResolve={resolveComment}
+        onDelete={removeComment}
+        pins={pins}
+        focusId={focusCommentId}
+        onFocus={showComment}
+        pinning={pinning}
+        pendingPin={pendingPin}
+        onPinStart={() => { setPinning(true); setMobileView('document') }}
+        onPinClear={() => setPendingPin(null)}
+        notify={notify}
+      />
+    </>
+  )
+  const tabButton = ([id, label]) => (
+    <button
+      key={id}
+      role="tab"
+      aria-selected={panelTab === id}
+      onClick={() => setTab(id)}
+      className={`py-3 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${panelTab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+    >
+      {label}
+      {id === 'comments' && openComments > 0 && <span className="min-w-[1.125rem] px-1 rounded-full bg-blue-600 text-white text-[10px] leading-[1.125rem] text-center">{openComments}</span>}
+    </button>
+  )
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -636,7 +757,12 @@ export default function EnvelopeEditorPage() {
         suggest={{ run: suggest, ready: Boolean(pdfDoc), busy: suggesting }}
       />
 
-      {placing && <PlacementHint what={selfSign && placingType === 'date' ? "today's date" : `${FIELD_LABELS[placingType].toLowerCase()}${selfSign ? '' : ' field'}`} />}
+      {pinning && (
+        <p role="status" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none max-w-[90vw] rounded-full bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg">
+          Click the spot on the page this comment is about. Press Esc to cancel.
+        </p>
+      )}
+      {placing && !pinning && <PlacementHint what={selfSign && placingType === 'date' ? "today's date" : `${FIELD_LABELS[placingType].toLowerCase()}${selfSign ? '' : ' field'}`} />}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
       {templateDialog === 'saved' && (
         <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
@@ -701,20 +827,10 @@ export default function EnvelopeEditorPage() {
           {editable ? (
             <>
               <div role="tablist" className="flex gap-6 px-4 border-b border-gray-200 flex-shrink-0">
-                {[['recipients', 'Recipients'], ['field', 'Field']].map(([id, label]) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={panelTab === id}
-                    onClick={() => setTab(id)}
-                    className={`py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${panelTab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                {[['recipients', 'Recipients'], ['field', 'Field'], ...(editingTemplate ? [] : [['comments', 'Comments']])].map(tabButton)}
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                {panelTab === 'field' && selectedField ? (
+                {panelTab === 'comments' ? commentsPanel : panelTab === 'field' && selectedField ? (
                   <FieldProperties
                     field={selectedField}
                     recipients={draft.recipients}
@@ -795,6 +911,13 @@ export default function EnvelopeEditorPage() {
               )}
             </>
           ) : (
+            <>
+            <div role="tablist" className="flex gap-6 px-4 border-b border-gray-200 flex-shrink-0">
+              {[['activity', 'Activity'], ['comments', 'Comments']].map(tabButton)}
+            </div>
+            {panelTab === 'comments' ? (
+              <div className="flex-1 overflow-y-auto p-4 space-y-6">{commentsPanel}</div>
+            ) : (
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
               <ActivityPanel
                 recipients={draft.recipients}
@@ -811,6 +934,8 @@ export default function EnvelopeEditorPage() {
               <ReminderSettings readOnly remindEveryDays={draft.remindEveryDays} expiresAt={envelope.expires_at} />
               <SignerAdjustmentSetting readOnly checked={draft.allowSignerAdjustments} />
             </div>
+            )}
+            </>
           )}
         </aside>
       </div>
@@ -820,7 +945,7 @@ export default function EnvelopeEditorPage() {
         <div className="segmented w-full">
         {[
           ['document', 'Document'],
-          ['panel', editable ? (selectedField ? 'Field' : 'Recipients') : 'Activity']
+          ['panel', panelTab === 'comments' ? 'Comments' : editable ? (selectedField ? 'Field' : 'Recipients') : 'Activity']
         ].map(([view, label]) => (
           <button
             key={view}
@@ -829,7 +954,7 @@ export default function EnvelopeEditorPage() {
             className="segmented-item flex-1 py-2 flex items-center justify-center gap-2"
           >
             {label}
-            {view === 'panel' && editable && !editingTemplate && sendProblems.length > 0 && (
+            {view === 'panel' && panelTab !== 'comments' && editable && !editingTemplate && sendProblems.length > 0 && (
               <span className="min-w-[1.25rem] px-1 rounded-full bg-amber-100 text-amber-800 text-xs">{sendProblems.length}</span>
             )}
           </button>

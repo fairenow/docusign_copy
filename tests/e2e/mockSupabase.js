@@ -28,13 +28,17 @@ export function fakeSession(user = ALICE) {
 }
 
 export const BOB = { id: '22222222-2222-4222-8222-222222222222', email: 'bob@flmlnk.com', name: 'Bob Teammate' }
+export const CARA = { id: '33333333-3333-4333-8333-333333333333', email: 'cara@flmlnk.com', name: 'Cara Colleague' }
 
 export function createMockDb() {
   return {
     profiles: [
       { id: ALICE.id, email: ALICE.email, full_name: ALICE.name, role: 'admin' },
-      { id: BOB.id, email: BOB.email, full_name: BOB.name, role: 'member' }
+      { id: BOB.id, email: BOB.email, full_name: BOB.name, role: 'member' },
+      { id: CARA.id, email: CARA.email, full_name: CARA.name, role: 'member' }
     ],
+    shares: [],
+    comments: [],
     envelopes: [],
     recipients: [],
     fields: [],
@@ -76,8 +80,18 @@ function withChildren(db, envelope) {
     ...envelope,
     owner: personOf(db, envelope.owner_id),
     recipients: db.recipients.filter(r => r.envelope_id === envelope.id),
-    fields: db.fields.filter(f => f.envelope_id === envelope.id)
+    fields: db.fields.filter(f => f.envelope_id === envelope.id),
+    envelope_shares: db.shares.filter(s => s.envelope_id === envelope.id)
   }
+}
+
+// Like private.user_can_view_envelope: owner, admins, shared teammates, and recipients once sent
+function canView(db, user, env) {
+  if (!user || !env) return false
+  const isAdmin = db.profiles.find(p => p.id === user.id)?.role === 'admin'
+  const email = user.email ?? db.profiles.find(p => p.id === user.id)?.email
+  return env.owner_id === user.id || isAdmin || db.shares.some(s => s.envelope_id === env.id && s.user_id === user.id) ||
+    (env.status !== 'draft' && db.recipients.some(r => r.envelope_id === env.id && r.email?.toLowerCase() === email?.toLowerCase()))
 }
 
 // Supports the `col=eq.value` and `col=is.null` filters the app sends
@@ -269,6 +283,59 @@ export async function installMockSupabase(page, db) {
 
     if (table === 'profiles' && method === 'GET') return respond(applyFilters(db.profiles, params))
 
+    // Sharing: owners and admins share; a teammate can leave
+    if (table === 'envelope_shares') {
+      const me = requestUser(request)
+      const isAdmin = db.profiles.find(p => p.id === me?.id)?.role === 'admin'
+      if (method === 'POST') {
+        const env = db.envelopes.find(e => e.id === body.envelope_id)
+        if (!env || !(env.owner_id === me?.id || isAdmin) || body.user_id === env.owner_id) {
+          return json(route, 403, { code: '42501', message: 'new row violates row-level security policy' })
+        }
+        if (db.shares.some(s => s.envelope_id === env.id && s.user_id === body.user_id)) return json(route, 409, { code: '23505', message: 'duplicate key' })
+        db.shares.push({ envelope_id: env.id, user_id: body.user_id, shared_by: me.id, created_at: now() })
+        return route.fulfill({ status: 201, headers: { 'access-control-allow-origin': '*' } })
+      }
+      if (method === 'DELETE') {
+        const doomed = applyFilters(db.shares, params).filter(sh => {
+          const env = db.envelopes.find(e => e.id === sh.envelope_id)
+          return sh.user_id === me?.id || env?.owner_id === me?.id || isAdmin
+        })
+        db.shares = db.shares.filter(sh => !doomed.includes(sh))
+        return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+      }
+    }
+
+    // Comments: anyone who can see the envelope reads, writes and resolves; only authors delete
+    if (table === 'envelope_comments') {
+      const me = requestUser(request)
+      const visible = (c) => canView(db, me, db.envelopes.find(e => e.id === c.envelope_id))
+      if (method === 'GET') return respond(applyFilters(db.comments.filter(visible), params).sort((a, b) => a.created_at.localeCompare(b.created_at)))
+      if (method === 'POST') {
+        const parent = body.parent_id && db.comments.find(c => c.id === body.parent_id)
+        if (!visible(body) || (body.parent_id && (!parent || parent.envelope_id !== body.envelope_id || parent.parent_id))) {
+          return json(route, 403, { code: '42501', message: 'new row violates row-level security policy' })
+        }
+        const row = {
+          id: randomUUID(), parent_id: null, page: null, x: null, y: null, mentions: [], ...body, body: body.body.trim(),
+          ...(body.parent_id && { page: null, x: null, y: null }),
+          author_id: me.id, resolved_at: null, resolved_by: null, notified: false, created_at: now()
+        }
+        db.comments.push(row)
+        return respond([row])
+      }
+      if (method === 'PATCH') {
+        const rows = applyFilters(db.comments.filter(visible), params)
+        for (const c of rows) Object.assign(c, { resolved_at: body.resolved_at ? now() : null, resolved_by: body.resolved_at ? me.id : null })
+        return respond(rows)
+      }
+      if (method === 'DELETE') {
+        const doomed = new Set(applyFilters(db.comments, params).filter(c => c.author_id === me?.id).map(c => c.id))
+        db.comments = db.comments.filter(c => !doomed.has(c.id) && !doomed.has(c.parent_id))
+        return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*' } })
+      }
+    }
+
     if (table === 'saved_signatures') {
       if (method === 'GET') return respond([...db.savedSignatures].sort((a, b) => b.created_at.localeCompare(a.created_at)))
       if (method === 'POST') {
@@ -308,9 +375,7 @@ export async function installMockSupabase(page, db) {
       if (method === 'GET') {
         // Like RLS: admins see everything; others their own envelopes and sent ones addressed to them
         const me = requestUser(request)
-        const isAdmin = db.profiles.find(p => p.id === me?.id)?.role === 'admin'
-        const visible = db.envelopes.filter(e => isAdmin || e.owner_id === me?.id || (e.status !== 'draft' &&
-          db.recipients.some(r => r.envelope_id === e.id && r.email?.toLowerCase() === me?.email?.toLowerCase())))
+        const visible = db.envelopes.filter(e => canView(db, me, e))
         const rows = applyFilters(visible, params)
           .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
           .map(e => withChildren(db, e))
@@ -437,6 +502,26 @@ async function installMockSigningApi(page, db) {
     const user = requestUser(request)
     db.calls.push({ type: 'function', action, body })
     const fail = (status, error) => json(route, status, { error })
+
+    // Collaboration emails (like svc_comment_notifications / svc_share_notification): once each,
+    // only to teammates who can see the envelope, never to the author
+    if (action === 'mention') {
+      const c = db.comments.find(x => x.id === body.commentId && x.author_id === user?.id && !x.notified)
+      if (!c) return json(route, 200, { notified: 0 })
+      c.notified = true
+      const env = db.envelopes.find(e => e.id === c.envelope_id)
+      const parentAuthor = db.comments.find(x => x.id === c.parent_id)?.author_id
+      const people = db.profiles.filter(p => (c.mentions.includes(p.id) || p.id === parentAuthor) && p.id !== c.author_id && canView(db, p, env))
+      for (const p of people) db.emails.push({ to: p.email, kind: c.mentions.includes(p.id) ? 'mention' : 'reply', link: `/envelopes/${env.id}?comment=${c.id}` })
+      return json(route, 200, { notified: people.length })
+    }
+    if (action === 'share') {
+      const share = db.shares.find(s => s.envelope_id === body.envelopeId && s.user_id === body.userId && s.shared_by === user?.id && !s.notified)
+      if (!share) return json(route, 200, { notified: false })
+      share.notified = true
+      db.emails.push({ to: db.profiles.find(p => p.id === share.user_id).email, kind: 'shared', link: `/envelopes/${share.envelope_id}` })
+      return json(route, 200, { notified: true })
+    }
 
     // Owner actions (resend and finalize also for admins)
     if (action === 'send' || action === 'resend' || action === 'finalize') {

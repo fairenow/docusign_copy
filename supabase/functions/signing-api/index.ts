@@ -6,6 +6,8 @@
 //   POST /signing-api/session   { token } | { envelopeId }              signer (link or team member)
 //   POST /signing-api/submit    { token | envelopeId, values, consent } signer
 //   POST /signing-api/decline   { token | envelopeId, reason }          signer
+//   POST /signing-api/mention   { commentId }                           comment author (emails mentions)
+//   POST /signing-api/share     { envelopeId, userId }                  whoever shared (emails the teammate)
 //   POST /signing-api/reminders (x-reminders-secret header)             hourly pg_cron job
 //
 // JWT verification is done in code (getUser), because signers with a link have no session.
@@ -17,6 +19,8 @@ import { signingSession } from '../_shared/handlers/signing-session.ts'
 import { submitSigning } from '../_shared/handlers/submit-signing.ts'
 import { declineSigning } from '../_shared/handlers/decline-signing.ts'
 import { runReminders } from '../_shared/handlers/run-reminders.ts'
+import { notifyComment } from '../_shared/handlers/notify-comment.ts'
+import { notifyShare } from '../_shared/handlers/notify-share.ts'
 
 const routes: Record<string, (req: Request) => Promise<Response>> = {
   send: sendEnvelope,
@@ -25,7 +29,9 @@ const routes: Record<string, (req: Request) => Promise<Response>> = {
   session: signingSession,
   submit: submitSigning,
   decline: declineSigning,
-  reminders: runReminders
+  reminders: runReminders,
+  mention: notifyComment,
+  share: notifyShare
 }
 
 serve((req) => {
