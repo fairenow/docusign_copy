@@ -78,50 +78,50 @@ test('Suggest fields finds the blank lines and who fills each one in', async ({ 
   await expect(page.getByText('Everything is in place.')).toBeVisible()
 })
 
-test('a field dropped near a line snaps onto it; Alt places it freely', async ({ page }) => {
+test('a dragged field lands exactly where it is dropped, and arrow keys nudge it by a point', async ({ page }) => {
   await openSignaturePage(page)
   await addField(page, 'Date signed')
   const field = page.locator('[data-field-type="date"]')
   const documentPage = page.getByTestId('document-page').first()
-  const { its, date } = SIGNATURE_PAGE_LINES
-  // The field's bottom edge in points from the top of the page (measured fresh: the view scrolls)
-  const bottomOnPage = async () => {
+  const { date } = SIGNATURE_PAGE_LINES
+  // The field's left and bottom edges in points from the page's top-left (measured fresh: the view scrolls)
+  const edges = async () => {
     const [pageBox, box] = [await documentPage.boundingBox(), await field.boundingBox()]
-    return (box.y + box.height - pageBox.y) / (pageBox.width / 612)
-  }
-
-  // Drag it by its grip to just above Carol's date line, a few points off
-  const dropAt = async (lineY, options = {}) => {
-    const grip = field.getByTitle('Drag to move')
-    await field.scrollIntoViewIfNeeded()
-    await field.hover()
-    const g = await grip.boundingBox()
-    const box = await field.boundingBox()
-    const pageBox = await documentPage.boundingBox()
     const scale = pageBox.width / 612
-    const targetX = pageBox.x + 400 * scale
-    const targetBottom = pageBox.y + (lineY - 7) * scale
-    const dx = targetX - box.x
-    const dy = targetBottom - (box.y + box.height)
-    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2)
-    if (options.alt) await page.keyboard.down('Alt')
-    await page.mouse.down()
-    await page.mouse.move(g.x + g.width / 2 + dx, g.y + g.height / 2 + dy, { steps: 8 })
-    await page.mouse.up()
-    if (options.alt) await page.keyboard.up('Alt')
+    return { left: (box.x - pageBox.x) / scale, bottom: (box.y + box.height - pageBox.y) / scale }
   }
 
-  await dropAt(date)
-  await expect.poll(async () => Math.round(await bottomOnPage())).toBe(date - 1)
+  // Drag it by its grip so its bottom-left corner is at (400, 7 pt above Carol's date line)
+  const grip = field.getByTitle(/Drag to move/)
+  await field.scrollIntoViewIfNeeded()
+  await field.hover()
+  const g = await grip.boundingBox()
+  const box = await field.boundingBox()
+  const pageBox = await documentPage.boundingBox()
+  const scale = pageBox.width / 612
+  const dx = pageBox.x + 400 * scale - box.x
+  const dy = pageBox.y + (date - 7) * scale - (box.y + box.height)
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(g.x + g.width / 2 + dx, g.y + g.height / 2 + dy, { steps: 12 })
+  await page.mouse.up()
 
-  await dropAt(its, { alt: true })
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  // No snapping onto the line below: it stays exactly where it was dropped
+  const dropped = await edges()
+  expect(Math.abs(dropped.left - 400)).toBeLessThan(0.75)
+  expect(Math.abs(dropped.bottom - (date - 7))).toBeLessThan(0.75)
+
+  // Arrow keys: 1 pt, with Shift 10 pt
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect.poll(async () => Math.round((await edges()).bottom * 10) / 10).toBeCloseTo(dropped.bottom + 1, 0)
+  expect((await edges()).left).toBeCloseTo(dropped.left + 10, 0)
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
   const saved = lastSave().p_fields.find(f => f.type === 'date')
-  expect(Math.abs(bottomPt(saved) - (its - 7))).toBeLessThan(1.5)
+  expect(Math.abs(bottomPt(saved) - (date - 6))).toBeLessThan(0.75)
 })
 
-test('a picked-up field follows the pointer, sits on the line under it and is placed with a click', async ({ page }) => {
+test('a picked-up field follows the pointer exactly and is placed with a click', async ({ page }) => {
   await openSignaturePage(page)
   const documentPage = page.getByTestId('document-page').first()
   const { date } = SIGNATURE_PAGE_LINES
@@ -130,30 +130,30 @@ test('a picked-up field follows the pointer, sits on the line under it and is pl
     const scale = (await documentPage.boundingBox()).width / 612
     return { position: { x: x * scale, y: y * scale } }
   }
+  const inPoints = async (locator) => {
+    const [p, b] = [await locator.boundingBox(), await documentPage.boundingBox()]
+    const scale = b.width / 612
+    return { left: Math.round((p.x - b.x) / scale), bottom: Math.round((p.y + p.height - b.y) / scale) }
+  }
 
   // Esc puts it back
   await page.getByRole('button', { name: 'Date signed', exact: true }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'Click on the page to place the date signed field' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Click where the date signed field should start' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('placement-layer')).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Date signed', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Date signed', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  // Hover a few points above Carol's date line: the preview sits on the line
+  // The preview's bottom-left corner is at the pointer, a few points above the line: nothing snaps
   await layer.hover(await pointAt(400, date - 30))
   await layer.hover(await pointAt(400, date - 6))
   const preview = page.getByTestId('placement-preview')
   await expect(preview).toBeVisible()
-  await expect.poll(async () => {
-    const [p, b] = [await preview.boundingBox(), await documentPage.boundingBox()]
-    return Math.round((p.y + p.height - b.y) / (b.width / 612))
-  }).toBe(date - 1)
+  await expect.poll(() => inPoints(preview)).toEqual({ left: 400, bottom: date - 6 })
 
   await layer.click(await pointAt(400, date - 6))
   await expect(page.getByTestId('placement-layer')).toHaveCount(0)
   const field = page.locator('[data-field-type="date"]')
   await expect(field).toHaveCount(1)
-  const [f, b] = [await field.boundingBox(), await documentPage.boundingBox()]
-  expect(Math.round((f.y + f.height - b.y) / (b.width / 612))).toBe(date - 1)
-  expect(Math.round((f.x - b.x) / (b.width / 612))).toBe(400)
+  expect(await inPoints(field)).toEqual({ left: 400, bottom: date - 6 })
 })

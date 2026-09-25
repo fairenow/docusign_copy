@@ -367,7 +367,7 @@ test('a signer cannot drag a field far away or stretch it over the page', async 
   await page.mouse.down()
   await page.mouse.move(2, 2, { steps: 10 })
   await page.mouse.up()
-  const handle = await field.getByTitle('Drag to resize').boundingBox()
+  const handle = await field.locator('[data-handle=se]').boundingBox()
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
   await page.mouse.down()
   const view = page.viewportSize()

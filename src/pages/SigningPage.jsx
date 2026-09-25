@@ -160,6 +160,12 @@ export default function SigningPage() {
     })
   }, [fields, adjustable])
 
+  // While dragging, a field already stops at the limits it will be held to
+  const constrainField = useCallback((element, rect) => {
+    const field = fields.find(f => f.id === element.id)
+    return field ? limitAdjustment(field, rect) : rect
+  }, [fields])
+
   const clearValue = useCallback((id) => setValues(v => {
     const next = { ...v }
     delete next[id]
@@ -358,6 +364,7 @@ export default function SigningPage() {
           onPageChange={setCurrentPage}
           zoom={zoom}
           onUpdateElement={moveField}
+          constrainElement={constrainField}
           renderField={renderField}
           selectedId={selectedId}
           onSelectedIdChange={setSelectedId}

@@ -148,8 +148,9 @@ export default function DashboardPage() {
     setReminding(envelope.id)
     const results = await Promise.allSettled(recipients.map(r => resendSigningLink(envelope.id, r.id)))
     setReminding(null)
-    setNow(Date.now())
+    // The page's clock and the reminder time agree, so the wait reads exactly 10 minutes
     const at = new Date().toISOString()
+    setNow(Date.parse(at))
     const done = recipients.filter((_, i) => results[i].status === 'fulfilled')
     setEnvelopes(list => list.map(e => (e.id !== envelope.id ? e : {
       ...e,

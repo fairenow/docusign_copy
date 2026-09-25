@@ -9,6 +9,14 @@ const BORDER_COLORS = {
   prefill: 'border-transparent'
 }
 
+// Text starts 2 pt in from the field's left edge, as in the signed PDF (pdfStamp.js)
+const TEXT_INSET_PT = 2
+const textStyle = (element, scale) => ({
+  fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px`,
+  paddingLeft: `${TEXT_INSET_PT * scale}px`,
+  paddingRight: 0
+})
+
 /** A field as filled in on the page (Quick sign): signature image, text input, checkbox. */
 export default function FillField({ element, isSelected, scale, containerSize, onUpdate }) {
   const bordered = element.type !== 'checkbox' || isSelected
@@ -40,8 +48,8 @@ function FillContent({ element, scale, containerSize, onUpdate }) {
           onChange={(e) => onUpdate({ text: e.target.value })}
           readOnly={element.locked}
           placeholder={element.type === 'text' ? 'Enter text…' : ''}
-          className="overlay-text-input w-full h-full bg-white/80 px-0.5"
-          style={{ fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px`, color: element.color || '#000' }}
+          className="overlay-text-input pdf-text w-full h-full bg-white/80"
+          style={{ ...textStyle(element, scale), color: element.color || '#000' }}
         />
       )
 
@@ -49,8 +57,8 @@ function FillContent({ element, scale, containerSize, onUpdate }) {
     case 'prefill':
       return (
         <div
-          className="w-full h-full bg-white px-0.5 flex items-center whitespace-nowrap overflow-hidden text-gray-900 cursor-default"
-          style={{ fontSize: `${(element.fontSize || DEFAULT_FONT_SIZE) * scale}px` }}
+          className="pdf-text w-full h-full bg-white flex items-center whitespace-nowrap overflow-hidden text-gray-900 cursor-default"
+          style={textStyle(element, scale)}
         >
           {element.text}
         </div>

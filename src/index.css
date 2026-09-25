@@ -59,6 +59,11 @@ body {
   pointer-events: none;
 }
 
+/* Text in fields uses the font the signed PDF is printed with (Helvetica), so it lines up the same */
+.pdf-text {
+  font-family: Helvetica, Arial, "Liberation Sans", sans-serif;
+}
+
 /* Text input in overlay */
 .overlay-text-input {
   border: none;

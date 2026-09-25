@@ -1,13 +1,13 @@
 /**
  * Read what a page looks like from its PDF content: words with their positions and
  * horizontal lines (drawn lines, thin filled rectangles such as underlined tabs, and runs
- * of underscores). Used to snap fields onto lines and to suggest fields.
+ * of underscores). Used to suggest fields for blank lines.
  *
  * Everything is in "display points": the page as shown (after /Rotate), origin top-left,
  * y growing downwards. Words: { text, x1, x2, baseline, size }. Lines: { x1, x2, y }.
  */
 
-// Shortest line worth snapping to or suggesting a field on, and the thickest "line"
+// Shortest line worth suggesting a field on, and the thickest "line"
 const MIN_LINE_LENGTH = 36
 const MAX_LINE_THICKNESS = 2.5
 

@@ -259,6 +259,40 @@ test.describe('envelopes', () => {
     await expect(page.getByTestId('field')).toHaveCount(1)
   })
 
+  test('fields resize from any corner, and a guide shows when a dragged field lines up with another', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
+    await addField(page, 'Signature')
+    await addField(page, 'Text')
+    const [first, second] = [page.getByTestId('field').nth(0), page.getByTestId('field').nth(1)]
+
+    // Top-left corner: the bottom-right corner stays put
+    await first.click()
+    const before = await first.boundingBox()
+    const corner = await first.locator('[data-handle=nw]').boundingBox()
+    await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(corner.x + corner.width / 2 - 20, corner.y + corner.height / 2 - 10, { steps: 5 })
+    await page.mouse.up()
+    const after = await first.boundingBox()
+    expect(after.x + after.width).toBeCloseTo(before.x + before.width, 0)
+    expect(after.y + after.height).toBeCloseTo(before.y + before.height, 0)
+    expect(after.width).toBeCloseTo(before.width + 20, 0)
+
+    // Drag the second field until its left edge meets the first field's: a guide appears (and goes on release)
+    await second.hover()
+    const grip = await second.getByTitle(/Drag to move/).boundingBox()
+    const box = await second.boundingBox()
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(grip.x + grip.width / 2 + (after.x - box.x), grip.y + grip.height / 2 + 40, { steps: 8 })
+    await expect(page.getByTestId('guide-vertical')).toBeVisible()
+    await page.mouse.up()
+    await expect(page.getByTestId('guide-vertical')).toHaveCount(0)
+    expect((await second.boundingBox()).x).toBeCloseTo(after.x, 0)
+  })
+
   test('a first-time guide ticks off the steps and can be hidden for good', async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
