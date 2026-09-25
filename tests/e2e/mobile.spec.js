@@ -47,11 +47,16 @@ test('on a phone the envelope screen switches between the document and its setti
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
   const documentPage = page.getByTestId('document-page').first()
   await expect(documentPage).toBeVisible()
-  // The page is fitted to the screen beside the field toolbar
-  expect((await documentPage.boundingBox()).width).toBeLessThanOrEqual(390 - 76)
+  // The page is fitted to the screen, with the field tools in a bar below it
+  // (the widest page, here the landscape second one, fills the width)
+  const widths = await page.getByTestId('document-page').evaluateAll(pages => pages.map(p => p.getBoundingClientRect().width))
+  expect(Math.max(...widths)).toBeGreaterThan(390 * 0.85)
+  expect(Math.max(...widths)).toBeLessThanOrEqual(390)
+  const tools = await page.getByRole('navigation', { name: 'Add fields' }).boundingBox()
+  expect(tools.width).toBeGreaterThan(380)
   await noSidewaysScroll(page)
 
-  await page.getByRole('button', { name: 'Recipients & settings' }).click()
+  await page.getByRole('button', { name: /^Recipients/ }).click()
   await expect(documentPage).toBeHidden()
   await page.getByRole('button', { name: 'Add recipient' }).click()
   await page.getByLabel('Recipient name').fill('Carol Client')

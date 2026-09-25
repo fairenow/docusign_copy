@@ -26,16 +26,16 @@ export default function FileDropzone({ onFile }) {
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
-      className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all max-w-md w-full cursor-pointer ${
-        isDragOver ? 'border-blue-500 bg-blue-500/10' : 'border-gray-300 hover:border-blue-500 hover:bg-blue-500/5'
+      className={`group bg-white border-2 border-dashed rounded-2xl px-6 py-10 sm:p-12 text-center transition-all max-w-md w-full cursor-pointer shadow-card ${
+        isDragOver ? 'border-blue-500 bg-blue-50/60' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50/30'
       }`}
     >
-      <div className="w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full flex items-center justify-center">
-        <Upload size={32} className="text-gray-500" />
+      <div className="w-14 h-14 mx-auto mb-5 bg-gray-900 rounded-2xl flex items-center justify-center shadow-button transition-transform group-hover:-translate-y-0.5">
+        <Upload size={24} className="text-white" />
       </div>
-      <h3 className="text-xl text-gray-800 mb-2">Upload Document</h3>
-      <p className="text-gray-500 mb-4">Drop your file here or click to browse</p>
-      <p className="text-sm text-gray-500">PDF or Word document (.docx, .doc, .odt, .rtf)</p>
+      <h3 className="page-title text-3xl mb-2">Upload a document</h3>
+      <p className="text-gray-600 mb-4">Drop your file here, or <span className="font-medium text-blue-700">browse</span></p>
+      <p className="text-xs text-gray-400">PDF or Word document (.docx, .doc, .odt, .rtf)</p>
       <input ref={inputRef} type="file" accept={ACCEPTED_FILE_TYPES} onChange={handleSelect} className="hidden" data-testid="file-input" />
     </div>
   )

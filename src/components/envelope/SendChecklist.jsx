@@ -5,7 +5,7 @@ export default function SendChecklist({ problems }) {
     <section>
       <h2 className="section-heading mb-2">Ready to send?</h2>
       {problems.length === 0 ? (
-        <p className="text-sm text-green-700 flex items-center gap-2"><CheckCircle2 size={14} /> Everything is in place.</p>
+        <p className="text-sm font-medium text-emerald-700 flex items-center gap-2"><CheckCircle2 size={14} /> Everything is in place.</p>
       ) : (
         <ul className="space-y-1" data-testid="send-problems">
           {problems.map(p => (

@@ -29,7 +29,12 @@ export default function SelfSignMenu({ saved, current, onPick, onCreate, onClose
   }
 
   return (
-    <div ref={ref} role="menu" aria-label="Sign" className="absolute left-full top-2 ml-2 z-30 w-64 rounded-lg border border-gray-200 bg-white shadow-lg p-3 space-y-3">
+    <div
+      ref={ref}
+      role="menu"
+      aria-label="Sign"
+      className="fixed md:absolute inset-x-2 bottom-2 md:inset-x-auto md:bottom-auto md:left-full md:top-2 md:ml-2 z-40 md:w-64 max-h-[70dvh] overflow-y-auto rounded-2xl md:rounded-xl bg-white shadow-xl ring-1 ring-gray-950/5 p-4 md:p-3 space-y-3 animate-pop-in"
+    >
       <section>
         <h3 className="section-heading mb-1.5">Date stamp</h3>
         <button

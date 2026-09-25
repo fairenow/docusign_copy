@@ -5,7 +5,7 @@ const bar = 'bg-gray-200 rounded animate-pulse'
 /** Rows of a list (envelopes, templates). */
 export function SkeletonRows({ count = 4 }) {
   return (
-    <ul className="divide-y divide-gray-200 bg-white border border-gray-200 rounded-xl overflow-hidden" aria-busy="true" aria-label="Loading">
+    <ul className="card divide-y divide-gray-100 overflow-hidden" aria-busy="true" aria-label="Loading">
       {Array.from({ length: count }, (_, i) => (
         <li key={i} className="flex items-center gap-4 px-4 py-4" data-testid="skeleton-row">
           <div className="flex-1 space-y-2">

@@ -8,7 +8,7 @@ export default function EditorToolbar({ pages, editing, history, suggest }) {
     { label: 'Redo', title: 'Redo (Ctrl+Shift+Z)', icon: Redo2, onClick: history.redo, enabled: history.canRedo }
   ]
   return (
-    <div className="h-11 px-2 sm:px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0 overflow-x-auto">
+    <div className="h-12 px-2 sm:px-4 bg-white/90 backdrop-blur border-b border-gray-200/80 flex items-center gap-3 flex-shrink-0 overflow-x-auto [scrollbar-width:none]">
       <PageControls {...pages} />
       {editing && (
         <>
@@ -18,7 +18,7 @@ export default function EditorToolbar({ pages, editing, history, suggest }) {
                 key={label}
                 onClick={onClick}
                 disabled={!enabled}
-                className="p-1.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="icon-btn w-8 h-8"
                 title={title}
                 aria-label={label}
               >
@@ -30,7 +30,7 @@ export default function EditorToolbar({ pages, editing, history, suggest }) {
             onClick={suggest.run}
             disabled={!suggest.ready || suggest.busy}
             title="Find the blank lines and placeholders and suggest fields for them"
-            className="ml-auto btn-secondary px-3 py-1.5 rounded-md text-sm flex items-center gap-2 whitespace-nowrap flex-shrink-0"
+            className="ml-auto btn-secondary px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 whitespace-nowrap flex-shrink-0"
           >
             <Sparkles size={15} className="text-violet-600" />
             <span className="hidden sm:inline">{suggest.busy ? 'Reading the document…' : 'Suggest fields'}</span>

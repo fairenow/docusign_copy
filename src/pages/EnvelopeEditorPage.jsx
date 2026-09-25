@@ -159,8 +159,9 @@ export default function EnvelopeEditorPage() {
   useEffect(() => {
     if (fittedRef.current || !pageSizes.length || window.innerWidth >= 768) return
     fittedRef.current = true
-    setZoom(fitWidthZoom(pageSizes, window.innerWidth - (editable ? 76 : 0)))
-  }, [pageSizes, editable])
+    // On phones the field tools sit below the page, so the page gets the full width
+    setZoom(fitWidthZoom(pageSizes, window.innerWidth))
+  }, [pageSizes])
   const ownsEnvelope = isOwner(envelope, user)
   const dirty = useMemo(
     () => canEditNow && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
@@ -649,9 +650,9 @@ export default function EnvelopeEditorPage() {
       )}
 
       <div className="flex-1 flex min-h-0">
-        <div className={`flex-1 min-w-0 min-h-0 ${mobileView === 'panel' ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`flex-1 min-w-0 min-h-0 flex-col md:flex-row ${mobileView === 'panel' ? 'hidden md:flex' : 'flex'}`}>
         {editable && (
-          <div className="relative flex">
+          <div className="relative flex order-last md:order-none flex-shrink-0">
             <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} activeType={signMenuOpen ? 'signature' : placingType} />
             {signMenuOpen && (
               <SelfSignMenu
@@ -706,7 +707,7 @@ export default function EnvelopeEditorPage() {
                     role="tab"
                     aria-selected={panelTab === id}
                     onClick={() => setTab(id)}
-                    className={`py-3 text-sm border-b-2 -mb-px ${panelTab === id ? 'border-blue-600 text-gray-900 font-medium' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+                    className={`py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${panelTab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
                   >
                     {label}
                   </button>
@@ -815,16 +816,17 @@ export default function EnvelopeEditorPage() {
       </div>
 
       {/* Phones: switch between the document and the panel */}
-      <nav className="md:hidden flex border-t border-gray-200 bg-white flex-shrink-0 pb-[env(safe-area-inset-bottom)]" aria-label="View">
+      <nav className="md:hidden px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t border-gray-200/80 bg-white flex-shrink-0" aria-label="View">
+        <div className="segmented w-full">
         {[
           ['document', 'Document'],
-          ['panel', editable ? (selectedField ? 'Field settings' : 'Recipients & settings') : 'Status & activity']
+          ['panel', editable ? (selectedField ? 'Field' : 'Recipients') : 'Activity']
         ].map(([view, label]) => (
           <button
             key={view}
             onClick={() => setMobileView(view)}
             aria-pressed={mobileView === view}
-            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${mobileView === view ? 'text-blue-600 border-t-2 border-blue-600 -mt-px' : 'text-gray-500'}`}
+            className="segmented-item flex-1 py-2 flex items-center justify-center gap-2"
           >
             {label}
             {view === 'panel' && editable && !editingTemplate && sendProblems.length > 0 && (
@@ -832,6 +834,7 @@ export default function EnvelopeEditorPage() {
             )}
           </button>
         ))}
+        </div>
       </nav>
 
       {creating && (

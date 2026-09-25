@@ -26,16 +26,16 @@ export default function SigningDone({ kind, complete, session, onDownload, backT
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 sm:p-8">
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 text-center shadow-sm">
+      <div className="w-full max-w-md card p-6 sm:p-8 text-center animate-pop-in">
         {signed
-          ? <CheckCircle2 size={48} className="mx-auto text-green-600" aria-hidden="true" />
-          : <XCircle size={48} className="mx-auto text-gray-400" aria-hidden="true" />}
-        <h1 className="text-xl text-gray-900 font-semibold mt-4 mb-1">
+          ? <span className="mx-auto w-16 h-16 rounded-full bg-emerald-50 ring-8 ring-emerald-50/50 flex items-center justify-center"><CheckCircle2 size={34} className="text-emerald-600" aria-hidden="true" /></span>
+          : <span className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center"><XCircle size={34} className="text-gray-400" aria-hidden="true" /></span>}
+        <h1 className="page-title text-4xl mt-5 mb-2">
           {signed ? `You're done, ${firstName}` : 'You declined to sign'}
         </h1>
         <p className="text-sm text-gray-500 mb-5">{envelope.title}</p>
 
-        <div className="text-sm text-gray-700 leading-relaxed space-y-2 text-left bg-gray-50 rounded-lg p-4">
+        <div className="text-sm text-gray-700 leading-relaxed space-y-2 text-left bg-gray-50 ring-1 ring-inset ring-gray-200/80 rounded-xl p-4">
           {signed ? (
             complete ? (
               <p>Everyone has now signed. The completed document, with a certificate of completion, is on its way to <strong>{recipient.email}</strong>.</p>
@@ -67,7 +67,7 @@ export default function SigningDone({ kind, complete, session, onDownload, backT
         )}
 
         {backToApp && (
-          <p className="mt-6 text-sm"><Link to="/" className="text-blue-600 hover:underline">Back to envelopes</Link></p>
+          <p className="mt-6 text-sm"><Link to="/" className="font-medium text-blue-700 hover:underline">Back to envelopes</Link></p>
         )}
         <p className="mt-6 text-xs text-gray-400">You can close this page.</p>
       </div>

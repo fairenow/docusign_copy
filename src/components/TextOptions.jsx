@@ -34,7 +34,7 @@ export default function TextOptions({ onApply }) {
       </div>
       <button
         onClick={handleApply}
-        className="w-full py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all"
+        className="btn-primary w-full py-2.5 px-3 rounded-lg text-sm"
       >
         Add Text Field
       </button>

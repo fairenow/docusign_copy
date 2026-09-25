@@ -25,7 +25,7 @@ export default function GettingStarted({ draft, selfSign = false }) {
   const steps = [
     { done: named, title: 'Add who signs', hint: 'Name and email for each signer, or tick "I need to sign this document".' },
     selfSign
-      ? { done: placed, title: 'Sign and date it', hint: 'Signature on the left: pick your signature or today\'s date, click it onto the line, drag to fine-tune.' }
+      ? { done: placed, title: 'Sign and date it', hint: 'Open Signature to pick your signature or today\'s date, place it on the line, then drag to fine-tune.' }
       : { done: placed, title: 'Place their fields', hint: 'Pick a field on the left and click it onto the page, or use Suggest fields.' },
     selfSign
       ? { done: false, title: 'Finish', hint: 'Press Sign and finish at the top. The signed PDF is emailed to you and anyone you add below.' }
@@ -42,17 +42,17 @@ export default function GettingStarted({ draft, selfSign = false }) {
   }
 
   return (
-    <section className="rounded-lg border border-blue-200 bg-blue-50/60 p-3" aria-label="Getting started" data-testid="getting-started">
+    <section className="rounded-xl bg-gradient-to-b from-blue-50/80 to-white ring-1 ring-inset ring-blue-200/70 p-3.5" aria-label="Getting started" data-testid="getting-started">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-gray-900">Getting started</h2>
-        <button onClick={hide} className="text-xs text-blue-700 hover:underline">Hide guide</button>
+        <button onClick={hide} className="text-xs font-medium text-blue-700 hover:underline">Hide guide</button>
       </div>
       <ol className="space-y-2">
         {steps.map((step, i) => (
           <li key={step.title} className="flex gap-2.5" data-done={step.done}>
             <span
               className={`mt-0.5 w-5 h-5 flex-shrink-0 rounded-full text-[11px] font-semibold flex items-center justify-center ${
-                step.done ? 'bg-green-600 text-white' : 'bg-white border border-blue-300 text-blue-700'
+                step.done ? 'bg-emerald-500 text-white shadow-sm' : 'bg-white ring-1 ring-blue-300 text-blue-700'
               }`}
               aria-hidden="true"
             >

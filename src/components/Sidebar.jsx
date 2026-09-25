@@ -7,6 +7,11 @@ import TextOptions from './TextOptions'
 import DetectedFieldsPanel from './DetectedFieldsPanel'
 import { useFeedback } from './feedback/useFeedback'
 
+// One field tool: a quiet row that lifts on hover; the open one is outlined in the accent
+const toolClass = (active) => `w-full px-3 py-2.5 rounded-lg border text-sm font-medium flex items-center gap-3 mb-2 transition-[background-color,border-color,box-shadow,color] duration-150 ${
+  active ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-focus' : 'bg-white border-gray-200 text-gray-800 shadow-xs hover:border-gray-300 hover:bg-gray-50'
+}`
+
 export default function Sidebar({
   hasDocument,
   activePanel,
@@ -50,10 +55,10 @@ export default function Sidebar({
   const handleAddCheckbox = requireDocument(onAddCheckbox)
 
   return (
-    <aside className={`w-full md:w-72 flex-1 md:flex-none bg-white border-r border-gray-200 flex-col flex-shrink-0 min-h-0 ${className || 'flex'}`}>
+    <aside className={`w-full md:w-72 flex-1 md:flex-none bg-white border-r border-gray-200/80 flex-col flex-shrink-0 min-h-0 ${className || 'flex'}`}>
       <div className="p-5 border-b border-gray-200">
         <h1><Brand className="text-2xl" /></h1>
-        <Link to="/" className="text-xs text-gray-500 hover:text-gray-900">← Envelopes</Link>
+        <Link to="/" className="mt-1 inline-block text-xs font-medium text-gray-500 hover:text-gray-900">← Envelopes</Link>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
@@ -89,7 +94,7 @@ export default function Sidebar({
               setShowDetectedFields(true)
               onRedetect?.()
             }}
-            className="w-full p-3 mb-4 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3"
+            className={`${toolClass(false)} mb-4`}
           >
             <Sparkles size={20} />
             <span className="text-sm">Detect Form Fields</span>
@@ -103,13 +108,9 @@ export default function Sidebar({
         {/* Signature Button */}
         <button
           onClick={() => togglePanel('signature')}
-          className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
-            activePanel === 'signature'
-              ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-gray-50 border-gray-300 text-gray-800 hover:bg-blue-600 hover:border-blue-600'
-          }`}
+          className={toolClass(activePanel === 'signature')}
         >
-          <Pen size={20} />
+          <Pen size={18} className="text-gray-500" aria-hidden="true" />
           <span>Signature</span>
         </button>
 
@@ -140,13 +141,9 @@ export default function Sidebar({
         {/* Text Button */}
         <button
           onClick={() => togglePanel('text')}
-          className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 mb-2 ${
-            activePanel === 'text'
-              ? 'bg-blue-600 border-blue-600 text-white'
-              : 'bg-gray-50 border-gray-300 text-gray-800 hover:bg-blue-600 hover:border-blue-600'
-          }`}
+          className={toolClass(activePanel === 'text')}
         >
-          <Type size={20} />
+          <Type size={18} className="text-gray-500" aria-hidden="true" />
           <span>Text Field</span>
         </button>
 
@@ -157,27 +154,27 @@ export default function Sidebar({
         {/* Date Button */}
         <button
           onClick={handleAddDate}
-          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <Calendar size={20} />
+          <Calendar size={18} className="text-gray-500" aria-hidden="true" />
           <span>Today&apos;s date</span>
         </button>
 
         {/* Initials Button */}
         <button
           onClick={handleAddInitials}
-          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <Hash size={20} />
+          <Hash size={18} className="text-gray-500" aria-hidden="true" />
           <span>Initials</span>
         </button>
 
         {/* Checkbox Button */}
         <button
           onClick={handleAddCheckbox}
-          className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-800 hover:bg-blue-600 hover:border-blue-600 transition-all flex items-center gap-3 mb-2"
+          className={toolClass(false)}
         >
-          <CheckSquare size={20} />
+          <CheckSquare size={18} className="text-gray-500" aria-hidden="true" />
           <span>Checkbox</span>
         </button>
       </div>

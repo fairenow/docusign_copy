@@ -298,7 +298,7 @@ export default function SigningPage() {
     <button
       onClick={handleFinish}
       disabled={busy || remaining.length > 0}
-      className={`px-5 py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50 ${className}`}
+      className={`px-5 py-2.5 sm:py-2 btn-primary rounded-lg text-sm ${className}`}
     >
       {busy ? 'Finishing…' : 'Finish'}
     </button>
@@ -306,32 +306,32 @@ export default function SigningPage() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-gray-100">
-      <header className="px-3 sm:px-5 py-3 bg-white border-b border-gray-200 flex items-center gap-3 sm:gap-4">
-        <Brand className="hidden sm:inline-flex text-lg" />
+      <header className="px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-gray-200/80 flex items-center gap-3 sm:gap-4">
+        <Brand className="hidden sm:inline-flex text-lg pr-4 border-r border-gray-200" />
         <div className="flex-1 min-w-0">
-          <p className="text-gray-900 font-medium truncate">{session.envelope.title}</p>
+          <p className="text-gray-900 font-semibold tracking-[-0.01em] truncate">{session.envelope.title}</p>
           <p className="text-xs text-gray-500 truncate">From {session.envelope.sender} · signing as {session.recipient.name}</p>
         </div>
-        <button onClick={handleDecline} disabled={busy} className="px-2 sm:px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-red-700 disabled:opacity-50">
+        <button onClick={handleDecline} disabled={busy} className="px-2 sm:px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">
           Decline
         </button>
         {finishButton('hidden sm:block')}
       </header>
 
       {/* Progress: under the header on larger screens, a bottom bar within thumb reach on phones */}
-      <div className="order-last sm:order-none px-3 sm:px-5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-2 bg-white border-t sm:border-t-0 sm:border-b border-gray-200 flex items-center justify-between gap-3">
+      <div className="order-last sm:order-none px-3 sm:px-5 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:py-2 bg-white/95 backdrop-blur border-t sm:border-t-0 sm:border-b border-gray-200/80 shadow-[0_-4px_16px_-8px_rgba(15,21,35,0.12)] sm:shadow-none flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {remaining.length > 0 ? (
             <>
-              <span className="text-sm text-amber-700" data-testid="remaining">
+              <span className="text-sm font-medium text-amber-700" data-testid="remaining">
                 {remaining.length} required field{remaining.length > 1 ? 's' : ''} left
               </span>
-              <button onClick={goToNext} className="px-3 py-2 sm:py-1.5 rounded-lg bg-amber-400 text-gray-900 text-sm font-medium flex items-center gap-1">
+              <button onClick={goToNext} className="px-3.5 py-2 sm:py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-gray-900 text-sm font-semibold shadow-sm flex items-center gap-1 transition-colors">
                 Next <ChevronRight size={14} />
               </button>
             </>
           ) : (
-            <span className="text-sm text-green-700 flex items-center gap-2">
+            <span className="text-sm font-medium text-emerald-700 flex items-center gap-2">
               <CheckCircle2 size={14} className="flex-shrink-0" />
               <span>All required fields are complete<span className="hidden sm:inline">. Click Finish</span>.</span>
             </span>
@@ -339,7 +339,7 @@ export default function SigningPage() {
         </div>
         <div className="flex items-center gap-4">
           {signAction && (
-            <button onClick={() => handleActivate(selected)} className="sm:hidden px-4 py-2 rounded-lg btn-primary text-white text-sm font-medium flex items-center gap-1.5">
+            <button onClick={() => handleActivate(selected)} className="sm:hidden px-4 py-2.5 rounded-lg btn-primary text-sm flex items-center gap-1.5">
               <PenLine size={14} /> {signAction}
             </button>
           )}
@@ -392,7 +392,7 @@ export default function SigningPage() {
           {adopting.changing && (
             <button
               onClick={() => { clearValue(adopting.fieldId); setAdopting(null) }}
-              className="mt-4 w-full py-2 rounded-md border border-gray-300 text-sm text-red-700 hover:bg-red-50"
+              className="mt-4 w-full py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-red-700 hover:bg-red-50"
             >
               Remove from this field
             </button>
@@ -406,16 +406,17 @@ export default function SigningPage() {
 function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
   const [agreed, setAgreed] = useState(false)
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-gray-100 p-3 sm:p-6">
-      <div className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl p-5 sm:p-8">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-gray-100 px-3 py-6 sm:p-6">
+      <div className="w-full max-w-lg card p-5 sm:p-8 animate-pop-in">
         <Brand className="text-xl" />
-        <h1 className="text-xl text-gray-900 font-semibold mt-6 mb-1">{session.envelope.title}</h1>
-        <p className="text-sm text-gray-500 mb-4">{session.envelope.sender} has asked you, {session.recipient.name}, to review and sign this document.</p>
+        <p className="section-heading mt-7 mb-2">Signature requested</p>
+        <h1 className="page-title text-[2rem] sm:text-4xl mb-2">{session.envelope.title}</h1>
+        <p className="text-sm text-gray-500 mb-5">{session.envelope.sender} has asked you, {session.recipient.name}, to review and sign this document.</p>
         {session.envelope.message && (
-          <p className="text-sm text-gray-800 whitespace-pre-wrap border-l-2 border-gray-300 pl-3 mb-6">{session.envelope.message}</p>
+          <p className="text-sm text-gray-800 whitespace-pre-wrap border-l-2 border-blue-300 pl-3 mb-6">{session.envelope.message}</p>
         )}
 
-        <div className="bg-gray-50 rounded-lg p-4 text-xs text-gray-500 leading-relaxed mb-4">
+        <div className="bg-gray-50 ring-1 ring-inset ring-gray-200/80 rounded-xl p-4 text-xs text-gray-500 leading-relaxed mb-5">
           <p className="font-semibold text-gray-800 mb-1">Electronic record and signature disclosure</p>
           By continuing you agree to receive this document electronically and to sign it with an electronic signature,
           which has the same legal effect as a handwritten signature. You can decline to sign instead, or ask the sender
@@ -423,16 +424,16 @@ function ConsentScreen({ session, onContinue, onDecline, busy, error }) {
           of completion attached to the final document.
         </div>
 
-        <label className="flex items-start gap-2 text-sm text-gray-800 mb-6 cursor-pointer">
-          <input type="checkbox" className="mt-1" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+        <label className="flex items-start gap-2.5 text-sm text-gray-800 mb-6 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 flex-shrink-0" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
           I agree to use electronic records and signatures.
         </label>
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
 
-        <div className="flex justify-between gap-3">
-          <button onClick={onDecline} disabled={busy} className="px-3 py-2 text-sm text-gray-500 hover:text-red-700">Decline to sign</button>
-          <button onClick={onContinue} disabled={!agreed} className="px-6 py-2.5 sm:py-2 btn-primary rounded-lg text-white text-sm font-medium disabled:opacity-50">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 sm:gap-3">
+          <button onClick={onDecline} disabled={busy} className="px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:text-red-700 hover:bg-red-50 transition-colors">Decline to sign</button>
+          <button onClick={onContinue} disabled={!agreed} className="px-6 py-3 sm:py-2.5 btn-primary rounded-lg text-sm">
             Continue
           </button>
         </div>

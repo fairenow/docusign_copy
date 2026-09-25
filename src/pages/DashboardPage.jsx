@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BellRing, FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } from 'lucide-react'
+import { BellRing, FilePlus, FileText, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, resendSigningLink, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -28,12 +28,22 @@ const PROGRESS_STYLES = {
 }
 
 const STATUS_STYLES = {
-  draft: 'bg-gray-200 text-gray-800',
-  sent: 'bg-blue-500/15 text-blue-700',
-  completed: 'bg-green-500/15 text-green-700',
-  declined: 'bg-red-500/15 text-red-700',
-  voided: 'bg-gray-200 text-gray-500 line-through',
-  expired: 'bg-amber-500/15 text-amber-800'
+  draft: 'bg-gray-50 text-gray-600 ring-gray-500/20',
+  sent: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+  completed: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  declined: 'bg-red-50 text-red-700 ring-red-600/20',
+  voided: 'bg-gray-50 text-gray-500 ring-gray-500/20 line-through',
+  expired: 'bg-amber-50 text-amber-800 ring-amber-600/20'
+}
+
+// The document icon beside each envelope, tinted by status
+const ICON_STYLES = {
+  draft: 'bg-gray-100 text-gray-500',
+  sent: 'bg-blue-50 text-blue-600',
+  completed: 'bg-emerald-50 text-emerald-600',
+  declined: 'bg-red-50 text-red-600',
+  voided: 'bg-gray-100 text-gray-400',
+  expired: 'bg-amber-50 text-amber-600'
 }
 
 export default function DashboardPage() {
@@ -180,22 +190,25 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl text-gray-900 font-semibold">Envelopes</h1>
-          <button onClick={refresh} className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Refresh">
-            <RefreshCw size={18} />
-          </button>
+    <div className="flex-1 px-4 pt-6 pb-8 sm:px-8 sm:pt-10 max-w-6xl w-full mx-auto">
+      <div className="flex flex-wrap items-end justify-between gap-4 mb-6 sm:mb-8">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="page-title text-[2.5rem] sm:text-5xl">Envelopes</h1>
+            <button onClick={refresh} className="icon-btn w-9 h-9 text-gray-400" title="Refresh">
+              <RefreshCw size={17} />
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-gray-500">Send, sign and track every agreement in one place.</p>
         </div>
         <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
-          <Link to="/templates" className="btn-secondary px-4 py-2.5 sm:py-2 rounded-lg text-sm flex items-center justify-center gap-2 whitespace-nowrap">
+          <Link to="/templates" className="btn-secondary px-4 py-2.5 rounded-lg text-sm flex items-center justify-center gap-2 whitespace-nowrap">
             <LayoutTemplate size={16} />
             Use a template
           </Link>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2.5 sm:py-2 btn-primary rounded-lg text-white text-sm flex items-center justify-center gap-2 whitespace-nowrap"
+            className="px-4 py-2.5 btn-primary rounded-lg text-sm flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <FilePlus size={16} />
             New envelope
@@ -204,26 +217,26 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <label className="relative flex-1 min-w-[12rem] max-w-md">
-          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={isAdmin && scope === 'everyone' ? 'Search by title, sender or recipient' : 'Search by title or recipient'}
             aria-label="Search envelopes"
-            className="w-full pl-8 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+            className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 shadow-xs rounded-lg text-sm placeholder:text-gray-400"
           />
         </label>
         {isAdmin && (
-          <div className="flex rounded-lg border border-gray-300 bg-white p-0.5 text-sm" role="group" aria-label="Whose envelopes">
+          <div className="segmented" role="group" aria-label="Whose envelopes">
             {[['mine', 'Mine'], ['everyone', 'Everyone']].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setScope(id)}
                 aria-pressed={scope === id}
-                className={`px-3 py-1.5 rounded-md ${scope === id ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                className="segmented-item"
               >
                 {label}
               </button>
@@ -232,19 +245,19 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="flex gap-1 mb-4 border-b border-gray-200 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0" role="tablist">
+      <div className="flex gap-1.5 mb-5 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 [scrollbar-width:none]" role="tablist">
         {ENVELOPE_GROUPS.map(g => (
           <button
             key={g.id}
             role="tab"
             aria-selected={group === g.id}
             onClick={() => setGroup(g.id)}
-            className={`px-3 sm:px-4 py-2 text-sm -mb-px border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${
-              group === g.id ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
+            className={`px-3.5 py-1.5 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors ring-1 ring-inset ${
+              group === g.id ? 'bg-gray-900 text-white ring-gray-900' : 'bg-white text-gray-600 ring-gray-200 hover:text-gray-900 hover:ring-gray-300'
             }`}
           >
             {g.label}
-            {groups[g.id].length ? <span className="ml-2 text-xs text-gray-500">{groups[g.id].length}</span> : null}
+            {groups[g.id].length ? <span className={`ml-1.5 text-xs tabular-nums ${group === g.id ? 'text-white/70' : 'text-gray-400'}`}>{groups[g.id].length}</span> : null}
           </button>
         ))}
       </div>
@@ -258,7 +271,7 @@ export default function DashboardPage() {
           ? <p className="py-16 text-center text-gray-500">No envelopes match “{query.trim()}”.</p>
           : <EmptyState group={group} onNew={() => fileInputRef.current?.click()} />
       ) : (
-        <ul className="divide-y divide-gray-200 bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <ul className="card divide-y divide-gray-100 overflow-hidden">
           {visible.map(envelope => (
             <EnvelopeRow
               key={envelope.id}
@@ -289,33 +302,36 @@ function EnvelopeRow({ envelope, user, isAdmin, now, reminding, onRemind, onDele
   const remindWait = remind.availableAt ? Math.ceil((remind.availableAt - now) / 60_000) : 0
 
   return (
-    <li className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1.5 px-4 py-3 hover:bg-gray-50" data-testid="envelope-row">
+    <li className="group relative flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-2 px-4 sm:px-5 py-3.5 transition-colors hover:bg-gray-50/80" data-testid="envelope-row">
+      <span className={`hidden sm:flex w-10 h-10 flex-shrink-0 rounded-lg items-center justify-center ${ICON_STYLES[envelope.status]}`} aria-hidden="true">
+        <FileText size={18} />
+      </span>
       <Link
         to={envelopeGroup(envelope, user) === 'action' ? `/envelopes/${envelope.id}/sign` : `/envelopes/${envelope.id}`}
         className="basis-full sm:basis-auto sm:flex-1 min-w-0"
       >
-        <p className="text-gray-900 font-medium truncate">{envelope.title}</p>
+        <p className="text-gray-900 font-semibold tracking-[-0.005em] truncate group-hover:text-blue-700 transition-colors">{envelope.title}</p>
         {!isOwner(envelope, user) && (
           <p className="text-xs text-gray-600 truncate">Sent by {senderName(envelope)}</p>
         )}
         {progress.text && (
           <p className={`text-xs truncate ${PROGRESS_STYLES[progress.tone]}`} data-testid="envelope-progress">{progress.text}</p>
         )}
-        <p className="text-xs text-gray-500 truncate">
+        <p className="text-xs text-gray-400 truncate mt-0.5">
           {recipients.length
             ? recipients.map(r => `${RECIPIENT_STATUS[r.status]?.icon ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
             : 'No recipients yet'}
         </p>
       </Link>
-      <span className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${STATUS_STYLES[envelope.status]}`}>
+      <span className={`pill ${STATUS_STYLES[envelope.status]}`}>
         {STATUS_LABELS[envelope.status]}
       </span>
-      <span className="flex-1 sm:flex-none text-xs text-gray-500 sm:w-40 sm:text-right whitespace-nowrap">{updated}</span>
+      <span className="flex-1 sm:flex-none text-xs text-gray-400 sm:w-40 sm:text-right whitespace-nowrap tabular-nums">{updated}</span>
       {remind.recipients.length > 0 && (
         <button
           onClick={onRemind}
           disabled={reminding || remindWait > 0}
-          className="btn-secondary px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 whitespace-nowrap"
+          className="btn-secondary px-2.5 py-1.5 rounded-md text-xs flex items-center gap-1.5 whitespace-nowrap"
           title={remindWait > 0
             ? `Reminded a few minutes ago. You can remind again in ${remindWait} min.`
             : `Email ${remind.recipients.map(r => r.name).join(' and ')} a new signing link`}
@@ -325,17 +341,17 @@ function EnvelopeRow({ envelope, user, isAdmin, now, reminding, onRemind, onDele
       )}
       <div className="w-8 flex justify-end">
         {envelope.status === 'completed' && envelope.final_path && (
-          <button onClick={onDownload} className="p-1.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Download signed PDF">
+          <button onClick={onDownload} className="icon-btn w-8 h-8" title="Download signed PDF">
             <Download size={16} />
           </button>
         )}
         {canDelete(envelope, user, isAdmin) && (
-          <button onClick={onDelete} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Delete draft">
+          <button onClick={onDelete} className="icon-btn w-8 h-8 hover:text-red-600 hover:bg-red-50" title="Delete draft">
             <Trash2 size={16} />
           </button>
         )}
         {canVoid(envelope, user, isAdmin) && (
-          <button onClick={onVoid} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Void envelope">
+          <button onClick={onVoid} className="icon-btn w-8 h-8 hover:text-red-600 hover:bg-red-50" title="Void envelope">
             <Ban size={16} />
           </button>
         )}
@@ -354,10 +370,11 @@ const EMPTY_MESSAGES = {
 
 function EmptyState({ group, onNew }) {
   return (
-    <div className="py-16 text-center">
-      <p className="text-gray-500 mb-4">{EMPTY_MESSAGES[group]}</p>
+    <div className="card py-16 px-6 text-center">
+      <span className="mx-auto mb-4 w-12 h-12 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center" aria-hidden="true"><FileText size={22} /></span>
+      <p className="text-gray-600 mb-4">{EMPTY_MESSAGES[group]}</p>
       {group === 'all' || group === 'draft' ? (
-        <button onClick={onNew} className="text-blue-600 hover:underline text-sm">Upload a document to start an envelope</button>
+        <button onClick={onNew} className="btn-primary px-4 py-2.5 rounded-lg text-sm">Upload a document to start an envelope</button>
       ) : null}
     </div>
   )

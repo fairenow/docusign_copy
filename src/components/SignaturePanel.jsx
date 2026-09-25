@@ -77,18 +77,15 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
     if (result) onApply(result)
   }
 
-  const tabClass = (active) =>
-    `flex-1 py-2 px-3 rounded-lg text-sm transition-all ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-500'}`
-
   return (
-    <div className="bg-gray-50 rounded-xl p-4 mb-2">
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setMode('draw')} className={tabClass(mode === 'draw')}>Draw</button>
-        <button onClick={() => setMode('type')} className={tabClass(mode === 'type')}>Type</button>
+    <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-3 sm:p-4 mb-2">
+      <div className="segmented w-full mb-3">
+        <button type="button" onClick={() => setMode('draw')} aria-pressed={mode === 'draw'} className="segmented-item flex-1">Draw</button>
+        <button type="button" onClick={() => setMode('type')} aria-pressed={mode === 'type'} className="segmented-item flex-1">Type</button>
       </div>
 
       {mode === 'draw' ? (
-        <div className="bg-white rounded-lg overflow-hidden mb-3 relative">
+        <div className="bg-white rounded-lg overflow-hidden mb-3 relative border border-gray-200 shadow-xs">
           <canvas
             ref={canvasRef}
             className="signature-canvas block w-full touch-none"
@@ -99,7 +96,7 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
             onPointerCancel={stopDrawing}
           />
           {!hasInk && (
-            <span className="absolute inset-x-0 bottom-3 text-center text-xs text-gray-500 pointer-events-none">
+            <span className="absolute inset-x-6 bottom-5 border-t border-dashed border-gray-300 pt-1 text-center text-xs text-gray-400 pointer-events-none">
               Sign here
             </span>
           )}
@@ -110,20 +107,20 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
           value={typedName}
           onChange={(e) => setTypedName(e.target.value)}
           placeholder="Your Name"
-          className="w-full p-3 bg-white rounded-lg text-3xl text-center mb-3 text-gray-900"
+          className="w-full p-3 bg-white border border-gray-200 shadow-xs rounded-lg text-3xl text-center mb-3 text-gray-900"
           style={{ fontFamily: SIGNATURE_FONT, fontWeight: 600 }}
         />
       )}
 
       <div className="flex gap-2">
-        <button onClick={clear} className="flex-1 py-2 px-3 bg-gray-200 text-gray-800 rounded-lg text-sm hover:bg-gray-300 transition-all">
+        <button type="button" onClick={clear} className="btn-secondary flex-1 py-2.5 px-3 rounded-lg text-sm">
           Clear
         </button>
         <button
           onClick={handleApply}
           disabled={!ready}
           title={ready ? undefined : mode === 'draw' ? 'Draw your signature first' : 'Type your name first'}
-          className="flex-1 py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary flex-1 py-2.5 px-3 rounded-lg text-sm"
         >
           {applyLabel}
         </button>

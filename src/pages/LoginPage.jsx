@@ -54,51 +54,84 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 p-8">
-      <div className="w-full max-w-sm bg-white border border-gray-200 rounded-2xl p-8 text-center">
-        <h1 className="mb-2"><Brand className="text-2xl" /></h1>
-        <p className="text-gray-500 text-sm mb-8">Send documents for signature and track them in one place.</p>
+    <div className="min-h-screen flex bg-gray-100">
+      {/* Large screens: the brand story beside the form */}
+      <aside className="hidden lg:flex w-[46%] max-w-2xl relative overflow-hidden bg-gray-950 text-white p-12 flex-col justify-between">
+        <div className="absolute inset-0 opacity-60 bg-[radial-gradient(60rem_40rem_at_-10%_-10%,theme(colors.blue.700/45%),transparent_60%),radial-gradient(40rem_30rem_at_110%_110%,theme(colors.blue.500/25%),transparent_60%)]" aria-hidden="true" />
+        <div className="absolute inset-0 opacity-[0.07] bg-[linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] bg-[size:48px_48px]" aria-hidden="true" />
+        <span className="relative inline-flex items-center gap-2 text-lg font-semibold">
+          <img src="/flmlnk-logo.png" alt="FLMLNK" className="h-6 w-auto brightness-0 invert" />
+          <span className="text-white/60 font-medium">Sign</span>
+        </span>
+        <div className="relative">
+          <h2 className="page-title text-white text-6xl leading-[1.02]">Agreements,<br />signed with ease.</h2>
+          <ul className="mt-10 space-y-4 text-white/75 text-[15px]">
+            {[
+              'Sign it yourself in seconds, or send it to anyone',
+              'A certificate and full audit trail with every signature',
+              'The signed PDF lands in everyone\u2019s inbox automatically'
+            ].map(line => (
+              <li key={line} className="flex items-start gap-3">
+                <span className="mt-2 w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" aria-hidden="true" />
+                {line}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="relative text-xs text-white/40">FLMLNK, Inc. · Internal e-signature</p>
+      </aside>
 
-        <ErrorBanner>{error}</ErrorBanner>
-
-        {sentTo ? (
-          <div role="status">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Check your email</h2>
-            <p className="text-sm text-gray-600">
-              We sent a sign-in link to <span className="text-gray-900">{sentTo}</span>. Open it in this browser to continue.
-            </p>
-            <button onClick={() => setSentTo(null)} className="mt-6 text-sm text-blue-600 hover:underline">
-              Use a different email
-            </button>
+      <main className="flex-1 flex items-center justify-center px-5 py-10 sm:p-10">
+        <div className="w-full max-w-[400px] animate-pop-in">
+          <div className="lg:hidden mb-8 text-center">
+            <Brand className="text-2xl" />
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="text-left">
-            <label htmlFor="email" className="block text-sm text-gray-600 mb-1">Work email</label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              autoFocus
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder={`you@${ALLOWED_EMAIL_DOMAIN}`}
-              className="w-full px-3 py-2.5 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
-            />
-            <button
-              type="submit"
-              disabled={busy || !isSupabaseConfigured}
-              className="mt-4 w-full py-3 px-4 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-500 disabled:opacity-60"
-            >
-              {busy ? 'Sending…' : 'Email me a sign-in link'}
-            </button>
-          </form>
-        )}
+          <div className="card p-6 sm:p-8">
+            <h1 className="page-title text-3xl sm:text-4xl mb-2">Welcome back</h1>
+            <p className="text-gray-500 text-sm mb-7">Send documents for signature and track them in one place.</p>
 
-        <p className="mt-8 text-xs text-gray-500">
-          Just need to sign something yourself? <Link to="/quick-sign" className="text-blue-600 hover:underline">Quick sign</Link> works without an account.
-        </p>
-      </div>
+            <ErrorBanner>{error}</ErrorBanner>
+
+            {sentTo ? (
+              <div role="status">
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">Check your email</h2>
+                <p className="text-sm text-gray-600">
+                  We sent a sign-in link to <span className="text-gray-900 font-medium">{sentTo}</span>. Open it in this browser to continue.
+                </p>
+                <button onClick={() => setSentTo(null)} className="mt-6 text-sm font-medium text-blue-700 hover:underline">
+                  Use a different email
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="text-left">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">Work email</label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  autoFocus
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder={`you@${ALLOWED_EMAIL_DOMAIN}`}
+                  className="w-full px-3.5 py-3 rounded-lg bg-white border border-gray-200 shadow-xs text-gray-900 placeholder-gray-400"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !isSupabaseConfigured}
+                  className="btn-primary mt-4 w-full py-3 px-4 rounded-lg"
+                >
+                  {busy ? 'Sending…' : 'Email me a sign-in link'}
+                </button>
+              </form>
+            )}
+          </div>
+
+          <p className="mt-6 text-center text-xs text-gray-500">
+            Just need to sign something yourself? <Link to="/quick-sign" className="font-medium text-blue-700 hover:underline">Quick sign</Link> works without an account.
+          </p>
+        </div>
+      </main>
     </div>
   )
 }

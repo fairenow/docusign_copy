@@ -81,20 +81,20 @@ function FeedbackDialog({ dialog, onClose }) {
               onChange={(e) => setText(e.target.value)}
               maxLength={dialog.maxLength ?? 1000}
               placeholder={dialog.placeholder}
-              className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm resize-y focus:outline-none focus:border-blue-500"
+              className="w-full bg-white border border-gray-200 shadow-xs rounded-lg px-3 py-2.5 text-sm resize-y"
             />
           </label>
         )}
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           {/* Risky actions start on Cancel, so Enter does not delete by accident */}
-          <button type="button" onClick={cancel} autoFocus={kind === 'confirm' && danger} className="btn-secondary px-4 py-2.5 sm:py-2 rounded-md text-sm">
+          <button type="button" onClick={cancel} autoFocus={kind === 'confirm' && danger} className="btn-secondary px-4 py-2.5 rounded-lg text-sm">
             {cancelLabel}
           </button>
           <button
             type="submit"
             autoFocus={kind === 'confirm' && !danger}
             disabled={kind === 'ask' && dialog.required && !text.trim()}
-            className={`${danger ? 'btn-danger' : 'btn-primary'} px-4 py-2.5 sm:py-2 rounded-md text-sm`}
+            className={`${danger ? 'btn-danger' : 'btn-primary'} px-4 py-2.5 rounded-lg text-sm`}
           >
             {confirmLabel}
           </button>
@@ -105,9 +105,9 @@ function FeedbackDialog({ dialog, onClose }) {
 }
 
 const TONES = {
-  success: { icon: CheckCircle2, className: 'text-green-600' },
-  info: { icon: Info, className: 'text-blue-600' },
-  error: { icon: AlertCircle, className: 'text-red-600' }
+  success: { icon: CheckCircle2, className: 'text-emerald-400' },
+  info: { icon: Info, className: 'text-blue-300' },
+  error: { icon: AlertCircle, className: 'text-red-400' }
 }
 
 function Toasts({ toasts, onDismiss }) {
@@ -120,7 +120,7 @@ function Toasts({ toasts, onDismiss }) {
             key={t.id}
             role={t.tone === 'error' ? 'alert' : 'status'}
             data-testid="toast"
-            className="pointer-events-auto w-full max-w-md flex items-start gap-3 bg-gray-900 text-white text-sm rounded-xl shadow-lg px-4 py-3"
+            className="pointer-events-auto w-full max-w-md flex items-start gap-3 bg-gray-900/95 backdrop-blur text-white text-sm rounded-xl shadow-xl ring-1 ring-white/10 px-4 py-3 animate-toast-in"
           >
             <Icon size={18} className={`${className} flex-shrink-0 mt-px`} aria-hidden="true" />
             <p className="flex-1 min-w-0">{t.message}</p>

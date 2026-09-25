@@ -7,6 +7,8 @@ import RequireAuth from './auth/RequireAuth'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import '@fontsource-variable/inter'
+import '@fontsource/instrument-serif/latin-400.css'
 import './index.css'
 
 // PDF-heavy pages are loaded on demand so /login and the dashboard stay small
