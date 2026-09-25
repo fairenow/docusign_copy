@@ -33,6 +33,9 @@ import SaveTemplateDialog from '../components/templates/SaveTemplateDialog'
 import SignerAdjustmentSetting from '../components/envelope/SignerAdjustmentSetting'
 import ErrorBanner from '../components/ErrorBanner'
 
+// Drafts save themselves this long after the last change
+const AUTOSAVE_DELAY_MS = 1500
+
 /**
  * Prepare a draft envelope: recipients, signing order, message, and fields
  * assigned to each signer. Envelopes that are not editable open read-only.
@@ -138,7 +141,7 @@ export default function EnvelopeEditorPage() {
 
   // Editing clears the previous save's error banner
   useEffect(() => {
-    setSaveState(s => (s.problems.length || s.error ? { ...s, problems: [], error: null } : s))
+    setSaveState(s => (s.problems.length || s.error || s.waiting ? { ...s, problems: [], error: null, waiting: null } : s))
   }, [draft])
 
   // Recipients ---------------------------------------------------------------
@@ -306,11 +309,13 @@ export default function EnvelopeEditorPage() {
 
   // Saving -------------------------------------------------------------------
   // Returns true once the current draft is stored
-  const save = useCallback(async () => {
+  // Returns true once the current draft is stored. Autosave is quiet: something that cannot be
+  // saved yet (e.g. an email still being typed) is shown in the status line, not as an error.
+  const save = useCallback(async ({ quiet = false } = {}) => {
     if (!editable || saveState.saving) return false
     const problems = validateForSave(draft)
     if (problems.length) {
-      setSaveState({ saving: false, problems, error: null })
+      setSaveState(quiet ? { saving: false, problems: [], error: null, waiting: problems[0] } : { saving: false, problems, error: null })
       return false
     }
     setSaveState({ saving: true, problems: [], error: null })
@@ -324,6 +329,15 @@ export default function EnvelopeEditorPage() {
       return false
     }
   }, [editable, saveState.saving, draft, envelopeId])
+
+  // Autosave: shortly after the last change (and again if more changes came in while saving)
+  const saveRef = useRef(save)
+  useEffect(() => { saveRef.current = save }, [save])
+  useEffect(() => {
+    if (!dirty) return
+    const timer = setTimeout(() => saveRef.current({ quiet: true }), AUTOSAVE_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [dirty, draft, savedDraft])
 
   // Sending ------------------------------------------------------------------
   const runAction = async (busy, fn) => {
@@ -433,7 +447,10 @@ export default function EnvelopeEditorPage() {
     }
   } : null
   const selectedField = editable ? draft.fields.find(f => f.id === selectedFieldId) : null
-  const saveStatus = saveState.saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved'
+  const saveStatus = saveState.saving ? 'Saving…'
+    : !dirty ? 'All changes saved'
+      : saveState.waiting ? `Not saved yet: ${saveState.waiting}`
+        : saveState.error ? 'Could not save' : 'Unsaved changes'
   const panelTab = selectedField ? tab : 'recipients'
 
   return (
@@ -476,7 +493,7 @@ export default function EnvelopeEditorPage() {
         {editable ? (
           <>
             <button
-              onClick={save}
+              onClick={() => save()}
               aria-label="Save"
               disabled={!dirty || saveState.saving}
               className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"

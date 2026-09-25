@@ -201,6 +201,28 @@ test.describe('envelopes', () => {
     await expect(page.getByText('Everything is in place.')).toBeVisible()
   })
 
+  test('drafts save themselves shortly after each change', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
+    const saves = () => db.calls.filter(c => c.table === 'rpc/save_envelope_draft').length
+
+    await page.getByLabel('Envelope title').fill('NDA for Acme')
+    await expect(page.getByTestId('save-status')).toHaveText('Unsaved changes')
+    await expect(page.getByTestId('save-status')).toHaveText('All changes saved', { timeout: 5000 })
+    expect(saves()).toBe(1)
+    expect(db.envelopes[0].title).toBe('NDA for Acme')
+
+    // Something that cannot be saved yet is explained, not shown as an error
+    await page.getByRole('button', { name: 'Add recipient' }).click()
+    await page.getByLabel('Recipient email').fill('bob@')
+    await expect(page.getByTestId('save-status')).toHaveText('Recipient 1: "bob@" is not an email address.'.replace(/^/, 'Not saved yet: '), { timeout: 5000 })
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
+    await expect(page.getByTestId('save-status')).toHaveText('All changes saved', { timeout: 5000 })
+    expect(db.recipients.map(r => r.email)).toEqual(['bob@flmlnk.com'])
+  })
+
   test('warns before leaving with unsaved changes', async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
