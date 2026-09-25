@@ -55,7 +55,9 @@ const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filen
   'recipients (id, name, email, role, routing_order, status, signed_at)'
 
 export async function listEnvelopes() {
-  return unwrap(await client().from('envelopes').select(LIST_COLUMNS).order('updated_at', { ascending: false }).limit(500))
+  // Working copies used to edit a template are not envelopes to the user
+  return unwrap(await client().from('envelopes').select(LIST_COLUMNS).is('editing_template_id', null)
+    .order('updated_at', { ascending: false }).limit(500))
 }
 
 export async function fetchEnvelope(id) {
@@ -196,16 +198,39 @@ export async function createEnvelopeFromTemplate(template, title, people) {
     p_title: title.trim(),
     p_people: peopleToRows(people)
   }))
-  let bytes
-  try {
-    bytes = await downloadDocument(originalPath(template.id), TEMPLATE_BUCKET)
-  } catch (err) {
-    await db.from('envelopes').delete().eq('id', id)
-    throw err
-  }
-  await attachDocument(id, bytes)
+  await attachTemplateDocument(id, template.id)
   return id
 }
+
+/** Give a new draft a copy of the template's document. The draft is removed if that fails. */
+async function attachTemplateDocument(envelopeId, templateId) {
+  let bytes
+  try {
+    bytes = await downloadDocument(originalPath(templateId), TEMPLATE_BUCKET)
+  } catch (err) {
+    await client().from('envelopes').delete().eq('id', envelopeId)
+    throw err
+  }
+  await attachDocument(envelopeId, bytes)
+}
+
+/**
+ * Open a template in the editor: a private working copy (a draft envelope whose recipients
+ * are the roles). Reopens your unfinished copy if there is one; returns the envelope id.
+ */
+export async function startTemplateEdit(template) {
+  const { envelope_id: id, resumed } = unwrap(await client().rpc('start_template_edit', { p_template_id: template.id }))
+  if (!resumed) await attachTemplateDocument(id, template.id)
+  return id
+}
+
+/** Write the (saved) working copy back to its template, then discard the copy. */
+export async function finishTemplateEdit(envelope) {
+  unwrap(await client().rpc('finish_template_edit', { p_envelope_id: envelope.id }))
+  await deleteDraft(envelope)
+}
+
+export const cancelTemplateEdit = deleteDraft
 
 /** Delete a template and its document. Storage goes first: its policy needs the template row. */
 export async function deleteTemplate(template) {

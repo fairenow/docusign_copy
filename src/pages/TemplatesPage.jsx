@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { LayoutTemplate, Lock, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { LayoutTemplate, Lock, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
-import { deleteTemplate, listTemplates } from '../lib/api'
+import { deleteTemplate, listTemplates, startTemplateEdit } from '../lib/api'
 import { sortedRoles } from '../lib/templateModel'
 import { formatDateTime } from '../lib/format'
 import UseTemplateDialog from '../components/templates/UseTemplateDialog'
@@ -14,12 +14,26 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState(null)
   const [error, setError] = useState(null)
   const [using, setUsing] = useState(null)
+  const [opening, setOpening] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     listTemplates().then(setTemplates, err => setError(err.message))
   }, [])
 
-  const canDelete = (t) => t.owner_id === user?.id || profile?.role === 'admin'
+  // The owner or an admin may change or delete a template
+  const canManage = (t) => t.owner_id === user?.id || profile?.role === 'admin'
+
+  const handleEdit = async (template) => {
+    setError(null)
+    setOpening(template.id)
+    try {
+      navigate(`/envelopes/${await startTemplateEdit(template)}`)
+    } catch (err) {
+      setError(err.message)
+      setOpening(null)
+    }
+  }
 
   const handleDelete = async (template) => {
     if (!window.confirm(`Delete the template "${template.name}"? Envelopes already created from it are not affected.`)) return
@@ -67,10 +81,21 @@ export default function TemplatesPage() {
                 </p>
               </div>
               <button onClick={() => setUsing(t)} className="btn-primary px-4 py-1.5 rounded-md text-sm">Use</button>
-              {canDelete(t) && (
-                <button onClick={() => handleDelete(t)} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Delete template">
-                  <Trash2 size={16} />
-                </button>
+              {canManage(t) && (
+                <>
+                  <button
+                    onClick={() => handleEdit(t)}
+                    disabled={opening !== null}
+                    className="p-1.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+                    title="Edit template"
+                    aria-label={`Edit ${t.name}`}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button onClick={() => handleDelete(t)} className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-gray-100" title="Delete template">
+                    <Trash2 size={16} />
+                  </button>
+                </>
               )}
             </li>
           ))}

@@ -74,11 +74,12 @@ function withChildren(db, envelope) {
   }
 }
 
-// Supports the `col=eq.value` filters the app sends
+// Supports the `col=eq.value` and `col=is.null` filters the app sends
 function applyFilters(rows, params) {
   return rows.filter(row => {
     for (const [key, value] of params) {
       if (['select', 'order', 'limit', 'offset'].includes(key)) continue
+      if (value === 'is.null' && row[key] != null) return false
       const match = /^eq\.(.*)$/.exec(value)
       if (match && String(row[key]) !== match[1]) return false
     }
@@ -203,6 +204,54 @@ export async function installMockSupabase(page, db) {
         db.fields.push({ ...pickFieldLayout(f), id: randomUUID(), envelope_id: id, recipient_id: null, prefill: f.prefill })
       }
       return json(route, 200, id)
+    }
+
+    // Editing a template: a draft copy whose recipients are the roles (same ids), then written back
+    if (table === 'rpc/start_template_edit') {
+      const t = db.templates.find(x => x.id === body.p_template_id)
+      if (!t) return json(route, 400, { code: 'P0002', message: 'Template not found, or you cannot edit it' })
+      const open = db.envelopes.find(e => e.editing_template_id === t.id)
+      if (open) return json(route, 200, { envelope_id: open.id, resumed: true })
+      const id = randomUUID()
+      db.envelopes.push({
+        id, owner_id: ALICE.id, title: t.name, message: t.message, status: 'draft', signing_order: t.signing_order,
+        original_filename: t.original_filename, original_path: null, page_count: t.page_count,
+        remind_every_days: t.remind_every_days, expire_after_days: t.expire_after_days,
+        allow_signer_adjustments: t.allow_signer_adjustments, editing_template_id: t.id, created_at: now(), updated_at: now()
+      })
+      for (const role of db.templateRoles.filter(r => r.template_id === t.id)) {
+        db.recipients.push({
+          id: role.id, envelope_id: id, name: role.name, email: role.default_email, role: role.role,
+          routing_order: role.routing_order, color: role.color, status: 'pending', signed_at: null
+        })
+      }
+      for (const f of db.templateFields.filter(x => x.template_id === t.id)) {
+        db.fields.push({ ...pickFieldLayout(f), id: randomUUID(), envelope_id: id, recipient_id: f.role_id, prefill: f.prefill ?? null })
+      }
+      return json(route, 200, { envelope_id: id, resumed: false })
+    }
+
+    if (table === 'rpc/finish_template_edit') {
+      const env = db.envelopes.find(e => e.id === body.p_envelope_id && e.editing_template_id)
+      const t = env && db.templates.find(x => x.id === env.editing_template_id)
+      if (!t) return json(route, 400, { code: 'P0002', message: 'Template copy not found' })
+      Object.assign(t, {
+        name: env.title || t.name, message: env.message, signing_order: env.signing_order, remind_every_days: env.remind_every_days,
+        expire_after_days: env.expire_after_days, allow_signer_adjustments: env.allow_signer_adjustments
+      })
+      db.templateRoles = db.templateRoles.filter(r => r.template_id !== t.id)
+      db.templateFields = db.templateFields.filter(f => f.template_id !== t.id)
+      db.recipients.filter(r => r.envelope_id === env.id).forEach((r, i) => {
+        const name = r.name || `${r.role === 'cc' ? 'Copy' : 'Signer'} ${i + 1}`
+        db.templateRoles.push({
+          id: r.id, template_id: t.id, name, role: r.role, routing_order: r.routing_order, color: r.color,
+          default_name: r.email ? name : null, default_email: r.email
+        })
+      })
+      for (const f of db.fields.filter(x => x.envelope_id === env.id)) {
+        db.templateFields.push({ ...pickFieldLayout(f), template_id: t.id, role_id: f.recipient_id, prefill: f.prefill ?? null })
+      }
+      return json(route, 200, t.id)
     }
 
     if (table === 'rpc/void_envelope') {

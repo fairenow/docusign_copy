@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, LayoutTemplate, PenLine, RotateCw, Save, Send, Sparkles } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Check, Download, LayoutTemplate, PenLine, RotateCw, Save, Send, Sparkles } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
-  downloadDocument, downloadSignedPdf, fetchEnvelope, listAuditEvents, resendSigningLink, retryFinalize, saveAsTemplate, saveDraft,
-  sendEnvelope, subscribeToEnvelopeChanges
+  cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
+  retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
@@ -39,6 +39,7 @@ const AUTOSAVE_DELAY_MS = 1500
 /**
  * Prepare a draft envelope: recipients, signing order, message, and fields
  * assigned to each signer. Envelopes that are not editable open read-only.
+ * A template opens here too, as a working copy whose recipients are its roles.
  */
 export default function EnvelopeEditorPage() {
   const { envelopeId } = useParams()
@@ -70,6 +71,9 @@ export default function EnvelopeEditorPage() {
   // Field type picked up from the toolbar, waiting to be clicked onto the page
   const [placingType, setPlacingType] = useState(null)
   const [layouts, setLayouts] = useState([])
+  // Set while a template copy is being saved back or discarded: nothing more is edited or saved
+  const [leaving, setLeaving] = useState(false)
+  const navigate = useNavigate()
 
   // (Re)load the envelope and, once sent, its activity. The document itself is loaded once.
   const reload = useCallback(async () => {
@@ -116,6 +120,7 @@ export default function EnvelopeEditorPage() {
   }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
+  const editingTemplate = Boolean(envelope?.editing_template_id)
 
   // Phones and narrow windows: fit the page to the screen (beside the field toolbar)
   const fittedRef = useRef(false)
@@ -126,8 +131,8 @@ export default function EnvelopeEditorPage() {
   }, [pageSizes, editable])
   const isOwner = Boolean(envelope && user) && envelope.owner_id === user.id
   const dirty = useMemo(
-    () => editable && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
-    [editable, draft, savedDraft]
+    () => editable && !leaving && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
+    [editable, leaving, draft, savedDraft]
   )
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
   const mySigningTurn = Boolean(envelope && user) && envelopeGroup(envelope, user) === 'action'
@@ -312,7 +317,7 @@ export default function EnvelopeEditorPage() {
   // Returns true once the current draft is stored. Autosave is quiet: something that cannot be
   // saved yet (e.g. an email still being typed) is shown in the status line, not as an error.
   const save = useCallback(async ({ quiet = false } = {}) => {
-    if (!editable || saveState.saving) return false
+    if (!editable || leaving || saveState.saving) return false
     const problems = validateForSave(draft)
     if (problems.length) {
       setSaveState(quiet ? { saving: false, problems: [], error: null, waiting: problems[0] } : { saving: false, problems, error: null })
@@ -328,7 +333,7 @@ export default function EnvelopeEditorPage() {
       setSaveState({ saving: false, problems: [], error: err.message })
       return false
     }
-  }, [editable, saveState.saving, draft, envelopeId])
+  }, [editable, leaving, saveState.saving, draft, envelopeId])
 
   // Autosave: shortly after the last change (and again if more changes came in while saving)
   const saveRef = useRef(save)
@@ -384,6 +389,35 @@ export default function EnvelopeEditorPage() {
     await saveAsTemplate(envelope, name, roles)
     setSavingTemplate(false)
     setTemplateSaved(true)
+  }
+
+  // Template copies: save back to the template, or discard the copy
+  const handleFinishTemplate = () => runAction('template', async () => {
+    if (!draft.recipients.some(r => r.role === 'signer')) throw new Error('Add at least one signer before saving the template.')
+    if (saveState.saving) throw new Error('Still saving your last change. Try again in a moment.')
+    if (dirty && !(await save())) throw new Error('Fix the problems shown above the document first.')
+    setLeaving(true)
+    try {
+      await finishTemplateEdit(envelope)
+    } catch (err) {
+      setLeaving(false)
+      throw err
+    }
+    navigate('/templates')
+  })
+
+  const handleCancelTemplate = () => {
+    if (!window.confirm('Discard your changes to this template?')) return
+    runAction('template', async () => {
+      setLeaving(true)
+      try {
+        await cancelTemplateEdit(envelope)
+      } catch (err) {
+        setLeaving(false)
+        throw err
+      }
+      navigate('/templates')
+    })
   }
 
   // Ctrl/Cmd+S saves
@@ -457,7 +491,11 @@ export default function EnvelopeEditorPage() {
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Title bar */}
       <header className="h-16 px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
-        <Link to="/" className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Back to envelopes">
+        <Link
+          to={editingTemplate ? '/templates' : '/'}
+          className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+          title={editingTemplate ? 'Back to templates (your changes are kept until you save or cancel)' : 'Back to envelopes'}
+        >
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
@@ -467,19 +505,20 @@ export default function EnvelopeEditorPage() {
               onChange={(e) => update({ title: e.target.value })}
               maxLength={200}
               className="w-full max-w-xl bg-transparent text-base text-gray-900 font-semibold outline-none rounded px-1 -mx-1 hover:bg-gray-50 focus:bg-gray-50"
-              aria-label="Envelope title"
+              aria-label={editingTemplate ? 'Template name' : 'Envelope title'}
             />
           ) : (
             <h1 className="text-base text-gray-900 font-semibold truncate">{draft.title}</h1>
           )}
           <p className="text-xs text-gray-500 truncate">
+            {editingTemplate && <span className="font-medium text-violet-700">Editing template · </span>}
             {editable
               ? <span className={dirty ? 'text-amber-700' : undefined} data-testid="save-status">{saveStatus}</span>
               : <span data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>}
             {envelope.original_filename && <> · {envelope.original_filename}</>}
           </p>
         </div>
-        {isOwner && (
+        {isOwner && !editingTemplate && (
           <button
             onClick={() => { setTemplateSaved(false); setSavingTemplate(true) }}
             disabled={!draft.recipients.length}
@@ -490,7 +529,25 @@ export default function EnvelopeEditorPage() {
             <LayoutTemplate size={16} /> <span className="hidden lg:inline">Save as template</span>
           </button>
         )}
-        {editable ? (
+        {editingTemplate ? (
+          <>
+            <button
+              onClick={handleCancelTemplate}
+              disabled={action.busy === 'template'}
+              className="btn-secondary px-4 py-2 rounded-md text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleFinishTemplate}
+              disabled={action.busy === 'template'}
+              title="Update the template. Envelopes already created from it do not change."
+              className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2"
+            >
+              <Check size={16} /> {action.busy === 'template' ? 'Saving…' : 'Save template'}
+            </button>
+          </>
+        ) : editable ? (
           <>
             <button
               onClick={() => save()}
@@ -649,6 +706,12 @@ export default function EnvelopeEditorPage() {
                         onDismiss={() => setSuggestions(null)}
                       />
                     )}
+                    {editingTemplate && (
+                      <p className="text-xs text-gray-600 bg-violet-50 border border-violet-200 rounded-md p-2">
+                        Each recipient is a role, such as Client. Leave the email empty to enter the person each time the
+                        template is used; add one for someone who signs every time.
+                      </p>
+                    )}
                     <RecipientsPanel
                       recipients={draft.recipients}
                       signingOrder={draft.signingOrder}
@@ -681,9 +744,11 @@ export default function EnvelopeEditorPage() {
                   </>
                 )}
               </div>
-              <div className="border-t border-gray-200 p-4 flex-shrink-0">
-                <SendChecklist problems={sendProblems} />
-              </div>
+              {!editingTemplate && (
+                <div className="border-t border-gray-200 p-4 flex-shrink-0">
+                  <SendChecklist problems={sendProblems} />
+                </div>
+              )}
             </>
           ) : (
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -718,7 +783,7 @@ export default function EnvelopeEditorPage() {
             className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${mobileView === view ? 'text-blue-600 border-t-2 border-blue-600 -mt-px' : 'text-gray-500'}`}
           >
             {label}
-            {view === 'panel' && editable && sendProblems.length > 0 && (
+            {view === 'panel' && editable && !editingTemplate && sendProblems.length > 0 && (
               <span className="min-w-[1.25rem] px-1 rounded-full bg-amber-100 text-amber-800 text-xs">{sendProblems.length}</span>
             )}
           </button>

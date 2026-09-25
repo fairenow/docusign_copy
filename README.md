@@ -152,6 +152,13 @@ always countersigns). **Templates → Use** asks for each role's name and email 
 draft to review and send. `create_template_from_envelope` and `create_envelope_from_template`
 run as the caller, so row level security decides what can be saved and used.
 
+**Templates → Edit** (owner or admin) opens the template in the editor as a private working copy:
+a draft envelope marked `editing_template_id`, whose recipients are the roles (an email makes a
+role a fixed person). **Save template** writes it back with `finish_template_edit`; **Cancel**
+discards it. Working copies are hidden from the dashboard and can never be sent, and envelopes
+already created from the template do not change. Leaving without either keeps the copy for next
+time.
+
 Edge Function secrets (Supabase dashboard → Edge Functions → Secrets):
 
 | Secret | Example |
