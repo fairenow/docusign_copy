@@ -64,6 +64,13 @@ describe('recipients', () => {
     expect(promoted).toHaveLength(2)
     expect(promoted[1]).toMatchObject({ id: 'r2', role: 'signer', routingOrder: 2 })
   })
+
+  it('takes over a signer nobody was named for yet, keeping their fields', () => {
+    const list = [signer(), signer({ id: 'r2', name: '', email: '', routingOrder: 2 })]
+    const taken = addSelfAsSigner(list, { name: 'Alice', email: 'alice@flmlnk.com' })
+    expect(taken).toHaveLength(2)
+    expect(taken[1]).toMatchObject({ id: 'r2', name: 'Alice', email: 'alice@flmlnk.com', routingOrder: 2 })
+  })
 })
 
 describe('validation', () => {

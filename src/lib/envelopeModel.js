@@ -155,13 +155,19 @@ export function recipientByEmail(recipients, email) {
   return target ? recipients.find(r => r.email.trim().toLowerCase() === target) : undefined
 }
 
+/** A signer nobody has been named for yet (e.g. created by placing a field first). */
+export const isBlankSigner = (r) => r.role === 'signer' && !r.name.trim() && !r.email.trim()
+
 /**
  * "I need to sign this document": add the sender as the first signer (they can reorder).
- * If they are already a recipient, they become a signer instead of being added twice.
+ * If they are already a recipient, they become a signer instead of being added twice; if
+ * fields were placed for a signer not named yet, the sender becomes that signer.
  */
 export function addSelfAsSigner(recipients, { name, email }) {
   const existing = recipientByEmail(recipients, email)
   if (existing) return recipients.map(r => (r === existing ? { ...r, role: 'signer' } : r))
+  const blank = recipients.find(isBlankSigner)
+  if (blank) return recipients.map(r => (r === blank ? { ...r, name, email } : r))
   const me = { ...newRecipient(recipients), name, email }
   return renumberRecipients([me, ...recipients])
 }

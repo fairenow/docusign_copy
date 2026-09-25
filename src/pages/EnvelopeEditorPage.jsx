@@ -193,17 +193,33 @@ export default function EnvelopeEditorPage() {
     else setSelectedFieldId(field.id)
   }
 
+  // Who a new field is for: the selected signer, else the first signer, else a new signer to
+  // be named later (fields can be placed before the people are known)
+  const signerForNewField = (type) => {
+    if (type === 'prefill') return null
+    const signer = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer') ??
+      draft.recipients.find(r => r.role === 'signer')
+    if (signer) {
+      setActiveRecipientId(signer.id)
+      return signer.id
+    }
+    const recipient = newRecipient(draft.recipients)
+    update({ recipients: [...draft.recipients, recipient] })
+    setActiveRecipientId(recipient.id)
+    return recipient.id
+  }
+
   // With a mouse, a field type is picked up and follows the pointer until it is clicked onto
   // the page (sitting on the line below it). Touch screens have no hover: it is added at once.
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
-    if (!pageSize || (!activeRecipientId && type !== 'prefill')) return
+    if (!pageSize) return
     if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
       setPlacingType(current => (current === type ? null : type))
       getAllLayouts().then(setLayouts)
       return
     }
-    insertField(newField(type, { page: currentPage, pageSize }, activeRecipientId, { y: nextFieldY(draft.fields, currentPage) }))
+    insertField(newField(type, { page: currentPage, pageSize }, signerForNewField(type), { y: nextFieldY(draft.fields, currentPage) }))
   }
 
   // The rectangle a field being placed would take with the pointer at (x, y): its left edge at
@@ -400,18 +416,19 @@ export default function EnvelopeEditorPage() {
   if (!draft) return <FullPageMessage title="Loading…" />
 
   const activeRecipient = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer')
+  const firstSigner = draft.recipients.find(r => r.role === 'signer')
   // A picked-up field shows where it would go, in its signer's color, until clicked into place
   const placing = placingType && editable ? {
     rectAt: (pageNumber, x, y) => placementRect(placingType, pageNumber, x, y),
     render: () => (
       <PlaceholderField
         field={{ type: placingType, required: placingType !== 'checkbox' }}
-        color={placingType === 'prefill' ? '#475569' : activeRecipient?.color ?? RECIPIENT_COLORS[0]}
-        assignee={placingType === 'prefill' ? 'you, now' : activeRecipient?.name || 'this signer'}
+        color={placingType === 'prefill' ? '#475569' : (activeRecipient ?? firstSigner)?.color ?? newRecipient(draft.recipients).color}
+        assignee={placingType === 'prefill' ? 'you, now' : (activeRecipient ?? firstSigner)?.name || 'a signer'}
       />
     ),
     onPlace: (pageNumber, rect) => {
-      insertField(newField(placingType, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] }, activeRecipientId, rect))
+      insertField(newField(placingType, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] }, signerForNewField(placingType), rect))
       setPlacingType(null)
     }
   } : null
@@ -631,7 +648,7 @@ export default function EnvelopeEditorPage() {
                     <p className="text-xs text-gray-500">
                       {activeRecipient
                         ? <>Adding to the current page for <span className="font-medium" style={{ color: activeRecipient.color }}>{activeRecipient.name || 'this signer'}</span>. Pick a field on the left.</>
-                        : 'Add a signer, then pick fields on the left to place them.'}
+                        : 'Pick a field on the left and click it onto the page. Say who signs here, now or after placing fields.'}
                       {' '}Fields snap onto the line you drop them on; hold Alt to place one freely.
                     </p>
                     <MessageField value={draft.message} onChange={(message) => update({ message })} />

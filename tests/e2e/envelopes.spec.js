@@ -77,11 +77,20 @@ test.describe('envelopes', () => {
     expect(db.files.has(`documents/${envelopeId}/original.pdf`)).toBe(true)
 
     await expect(page.getByTestId('document-page').first()).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Signature', exact: true })).toBeDisabled() // no signer yet
     await expect(page.getByTestId('send-problems')).toContainText('Add at least one signer.')
 
-    // Add a signer and place their fields
-    await page.getByRole('button', { name: 'Add recipient' }).click()
+    // Fields can be placed before anyone is named: the first adds a signer to name next
+    await expect(page.getByRole('button', { name: 'Signature', exact: true })).toBeEnabled()
+    await expect(page.getByTestId('recipient')).toHaveCount(0)
+    await addField(page, 'Text')
+    await expect(page.getByTestId('recipient')).toHaveCount(1)
+    await expect(page.getByTestId('send-problems')).toContainText('Recipient 1 needs a name.')
+    await page.getByTestId('field').first().click()
+    await page.getByTestId('field-properties').getByRole('button', { name: 'Remove field' }).click()
+    await expect(page.getByTestId('field')).toHaveCount(0)
+
+    // Name the signer and place their fields
+    await page.getByRole('tab', { name: 'Recipients' }).click()
     await page.getByLabel('Recipient name').fill('Bob Signer')
     await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
     await expect(page.getByText('Adding to the current page for')).toContainText('Bob Signer')
@@ -176,6 +185,20 @@ test.describe('envelopes', () => {
     await page.getByLabel('Recipient email').nth(1).fill('BOB@flmlnk.com')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByRole('alert')).toContainText('Robert has the same email as Bob.')
+  })
+
+  test('fields placed before anyone is named become yours with "I need to sign"', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
+    await addField(page, 'Signature')
+    await addField(page, 'Date signed')
+    await page.getByLabel('I need to sign this document').check()
+
+    await expect(page.getByTestId('recipient')).toHaveCount(1)
+    await expect(page.getByLabel('Recipient email')).toHaveValue('alice@flmlnk.com')
+    await expect(page.getByTestId('field').first()).toContainText('Alice Owner')
+    await expect(page.getByText('Everything is in place.')).toBeVisible()
   })
 
   test('warns before leaving with unsaved changes', async ({ page }) => {
