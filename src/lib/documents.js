@@ -1,8 +1,12 @@
-export const MAX_FILE_SIZE = 50 * 1024 * 1024
+const MAX_FILE_SIZE = 50 * 1024 * 1024
 // Converted on our server with LibreOffice, so the layout matches the original exactly
 export const CONVERTIBLE_EXTENSIONS = ['docx', 'doc', 'odt', 'rtf']
-export const MAX_CONVERTIBLE_SIZE = 25 * 1024 * 1024
+const MAX_CONVERTIBLE_SIZE = 25 * 1024 * 1024
 export const ACCEPTED_FILE_TYPES = ['.pdf', ...CONVERTIBLE_EXTENSIONS.map(ext => `.${ext}`)].join(',')
+
+const extensionOf = (file) => file.name.split('.').pop().toLowerCase()
+/** Word and similar files, which are converted to PDF on the server. */
+export const isConvertible = (file) => CONVERTIBLE_EXTENSIONS.includes(extensionOf(file))
 
 /**
  * Validate an uploaded file and return it as PDF bytes (Word and similar files are
@@ -10,12 +14,11 @@ export const ACCEPTED_FILE_TYPES = ['.pdf', ...CONVERTIBLE_EXTENSIONS.map(ext =>
  * @returns {Promise<{ bytes: Uint8Array, sourceType: 'pdf' | 'converted' }>}
  */
 export async function fileToPdfBytes(file) {
-  const ext = file.name.split('.').pop().toLowerCase()
-  if (ext === 'pdf') {
+  if (extensionOf(file) === 'pdf') {
     if (file.size > MAX_FILE_SIZE) throw new Error('PDFs must be 50 MB or smaller.')
     return { bytes: new Uint8Array(await file.arrayBuffer()), sourceType: 'pdf' }
   }
-  if (!CONVERTIBLE_EXTENSIONS.includes(ext)) {
+  if (!isConvertible(file)) {
     throw new Error('Please upload a PDF or a Word document (.docx, .doc), .odt or .rtf file.')
   }
   if (file.size > MAX_CONVERTIBLE_SIZE) throw new Error('Word documents must be 25 MB or smaller.')

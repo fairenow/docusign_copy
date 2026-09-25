@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { answerDialog } from './dialogs'
-import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
+import { ALICE, createMockDb, installMockSupabase, signInAs } from './mockSupabase'
 import { pdfFile } from './fixtures'
 import { addField } from './placeField'
 
@@ -10,9 +10,7 @@ test.beforeEach(async ({ page }) => {
   db = createMockDb()
   await installMockSupabase(page, db)
   page.on('pageerror', err => { throw err })
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession(ALICE)])
+  await signInAs(page, ALICE)
 })
 
 test('the sender fills in the other company\'s name; signers see it but cannot change it', async ({ page }) => {

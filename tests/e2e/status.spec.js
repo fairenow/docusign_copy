@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
+import { ALICE, createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf } from './fixtures'
 
 let db
@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   db = createMockDb()
   await installMockSupabase(page, db)
   page.on('pageerror', err => { throw err })
-  await page.addInitScript(([key, session]) => window.localStorage.setItem(key, JSON.stringify(session)), [STORAGE_KEY, fakeSession()])
+  await signInAs(page)
 })
 
 test('each envelope says who it is waiting on, and the signer can be reminded from the list', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react'
-import { RECIPIENT_STATUS } from '../../lib/envelopeModel'
+import { RECIPIENT_STATUS, sameEmail } from '../../lib/envelopeModel'
 import { ACTION_LABELS } from '../../../supabase/functions/_shared/labels.js'
 import { formatDateTime } from '../../lib/format'
 
@@ -14,7 +14,7 @@ export default function ActivityPanel({ recipients, events, canResend, onResend,
   const byOther = (e) => {
     if (!e.actor_user_id || e.actor_user_id === ownerId || !e.actor) return null
     const signer = recipients.find(r => r.id === e.recipient_id)
-    if (signer?.email && signer.email.toLowerCase() === e.actor.email?.toLowerCase()) return null
+    if (sameEmail(signer?.email, e.actor.email)) return null
     return e.actor.full_name || e.actor.email
   }
   return (

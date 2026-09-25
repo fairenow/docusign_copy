@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
+import { createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 
 // A typical phone
@@ -11,9 +11,7 @@ test.beforeEach(async ({ page }) => {
   db = createMockDb()
   await installMockSupabase(page, db)
   page.on('pageerror', err => { throw err })
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession()])
+  await signInAs(page)
 })
 
 const noSidewaysScroll = (page) =>

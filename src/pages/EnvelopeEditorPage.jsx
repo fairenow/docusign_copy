@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Download, LayoutTemplate, PenLine, Redo2, RotateCw, Save, Send, Sparkles, Undo2 } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
   cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
@@ -8,7 +7,7 @@ import {
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
-  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, senderName, RECIPIENT_COLORS, STATUS_LABELS
+  validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
 import { FIELD_LABELS, nextFieldY, placeField } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
@@ -16,11 +15,11 @@ import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
 import { useUndoable } from '../hooks/useUndoable'
+import { useEditorShortcuts } from '../hooks/useEditorShortcuts'
 import { useFeedback } from '../components/feedback/useFeedback'
 import { preloadPdfViewer } from '../lib/documents'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
-import PageControls from '../components/PageControls'
 import PlaceholderField from '../components/envelope/PlaceholderField'
 import PrefillField from '../components/envelope/PrefillField'
 import SuggestedField from '../components/envelope/SuggestedField'
@@ -32,6 +31,8 @@ import FieldRail from '../components/envelope/FieldRail'
 import FieldProperties from '../components/envelope/FieldProperties'
 import SendChecklist from '../components/envelope/SendChecklist'
 import GettingStarted from '../components/envelope/GettingStarted'
+import EditorHeader from '../components/envelope/EditorHeader'
+import EditorToolbar from '../components/envelope/EditorToolbar'
 import ActivityPanel from '../components/envelope/ActivityPanel'
 import ReminderSettings from '../components/envelope/ReminderSettings'
 import SaveTemplateDialog from '../components/templates/SaveTemplateDialog'
@@ -40,6 +41,12 @@ import ErrorBanner from '../components/ErrorBanner'
 
 // Drafts save themselves this long after the last change
 const AUTOSAVE_DELAY_MS = 1500
+// saving: a save is running; problems / error: shown in a banner; waiting: why autosave is holding off
+const SAVE_IDLE = { saving: false, problems: [], error: null, waiting: null }
+
+// Undo steps: a burst of changes to one field or one recipient box is one step
+const fieldStep = (id) => `field:${id}`
+const recipientStep = (id, patch) => `recipient:${id}:${Object.keys(patch).join()}`
 
 /**
  * Prepare a draft envelope: recipients, signing order, message, and fields
@@ -48,7 +55,7 @@ const AUTOSAVE_DELAY_MS = 1500
  */
 export default function EnvelopeEditorPage() {
   const { envelopeId } = useParams()
-  const { user, profile } = useAuth()
+  const { user, profile, isAdmin } = useAuth()
 
   const [envelope, setEnvelope] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -59,7 +66,7 @@ export default function EnvelopeEditorPage() {
   const draftRef = useRef(draft)
   useEffect(() => { draftRef.current = draft }, [draft])
   const [savedDraft, setSavedDraft] = useState(null)
-  const [saveState, setSaveState] = useState({ saving: false, problems: [], error: null })
+  const [saveState, setSaveState] = useState(SAVE_IDLE)
   const [activeRecipientId, setActiveRecipientId] = useState(null)
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [tab, setTab] = useState('recipients') // right panel: 'recipients' | 'field'
@@ -69,8 +76,7 @@ export default function EnvelopeEditorPage() {
   const [mobileView, setMobileView] = useState('document') // 'document' | 'panel'
   const [events, setEvents] = useState([])
   const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
-  const [savingTemplate, setSavingTemplate] = useState(false)
-  const [templateSaved, setTemplateSaved] = useState(false)
+  const [templateDialog, setTemplateDialog] = useState(null) // Save as template: null | 'open' | 'saved'
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
   const { getLayout, getAllLayouts } = usePageLayouts(pdfDoc)
   // Fields found on the document, waiting to be reviewed and added
@@ -133,7 +139,8 @@ export default function EnvelopeEditorPage() {
   }, [isSent, reload, envelopeId])
 
   const editable = Boolean(envelope) && canEdit(envelope, user)
-  const isAdmin = profile?.role === 'admin'
+  // While a template copy is being saved back or discarded, nothing more is edited or saved
+  const canEditNow = editable && !leaving
   // Admins can resend or finish anyone's envelope
   const canManage = Boolean(envelope) && canVoid(envelope, user, isAdmin)
   const editingTemplate = Boolean(envelope?.editing_template_id)
@@ -145,10 +152,10 @@ export default function EnvelopeEditorPage() {
     fittedRef.current = true
     setZoom(fitWidthZoom(pageSizes, window.innerWidth - (editable ? 76 : 0)))
   }, [pageSizes, editable])
-  const isOwner = Boolean(envelope && user) && envelope.owner_id === user.id
+  const ownsEnvelope = isOwner(envelope, user)
   const dirty = useMemo(
-    () => editable && !leaving && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
-    [editable, leaving, draft, savedDraft]
+    () => canEditNow && draft !== savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft),
+    [canEditNow, draft, savedDraft]
   )
   const sendProblems = useMemo(() => (draft ? validateForSend(draft) : []), [draft])
   const mySigningTurn = Boolean(envelope && user) && envelopeGroup(envelope, user) === 'action'
@@ -163,7 +170,7 @@ export default function EnvelopeEditorPage() {
 
   // Editing clears the previous save's error banner
   useEffect(() => {
-    setSaveState(s => (s.problems.length || s.error || s.waiting ? { ...s, problems: [], error: null, waiting: null } : s))
+    setSaveState(s => (s.problems.length || s.error || s.waiting ? { ...SAVE_IDLE, saving: s.saving } : s))
   }, [draft])
 
   // Recipients ---------------------------------------------------------------
@@ -179,7 +186,7 @@ export default function EnvelopeEditorPage() {
       // CC recipients receive a copy only, so their fields are removed
       const fields = patch.role === 'cc' ? d.fields.filter(f => f.recipientId !== id) : d.fields
       return { ...d, recipients, fields }
-    }, { coalesce: patch.role ? undefined : `recipient:${id}:${Object.keys(patch).join()}` })
+    }, { coalesce: patch.role ? undefined : recipientStep(id, patch) })
     if (patch.role === 'cc' && activeRecipientId === id) setActiveRecipientId(null)
   }
 
@@ -274,7 +281,7 @@ export default function EnvelopeEditorPage() {
 
   // Dragging, resizing or typing into one field is one undo step
   const updateField = useCallback((id, patch) => {
-    setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }), { coalesce: `field:${id}` })
+    setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }), { coalesce: fieldStep(id) })
   }, [setDraft])
 
   // A field dropped near a line sits on it (hold Alt to place it freely)
@@ -286,16 +293,8 @@ export default function EnvelopeEditorPage() {
       const field = d.fields.find(f => f.id === element.id)
       const patch = field && snapToLine(field, layout)
       return patch ? { ...d, fields: d.fields.map(f => (f.id === field.id ? { ...f, ...patch } : f)) } : d
-    }, { coalesce: `field:${element.id}` }) // part of the move that ended here
+    }, { coalesce: fieldStep(element.id) }) // part of the move that ended here
   }, [getLayout, setDraft])
-
-  // Esc puts back a field type that was picked up
-  useEffect(() => {
-    if (!placingType) return
-    const onKeyDown = (e) => { if (e.key === 'Escape') setPlacingType(null) }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [placingType])
 
   // Suggest fields ------------------------------------------------------------
   const suggest = async () => {
@@ -339,27 +338,26 @@ export default function EnvelopeEditorPage() {
   }, [setDraft])
 
   // Saving -------------------------------------------------------------------
-  // Returns true once the current draft is stored
   // Returns true once the current draft is stored. Autosave is quiet: something that cannot be
   // saved yet (e.g. an email still being typed) is shown in the status line, not as an error.
   const save = useCallback(async ({ quiet = false } = {}) => {
-    if (!editable || leaving || saveState.saving) return false
+    if (!canEditNow || saveState.saving) return false
     const problems = validateForSave(draft)
     if (problems.length) {
-      setSaveState(quiet ? { saving: false, problems: [], error: null, waiting: problems[0] } : { saving: false, problems, error: null })
+      setSaveState(quiet ? { ...SAVE_IDLE, waiting: problems[0] } : { ...SAVE_IDLE, problems })
       return false
     }
-    setSaveState({ saving: true, problems: [], error: null })
+    setSaveState({ ...SAVE_IDLE, saving: true })
     try {
       await saveDraft(envelopeId, draft)
       setSavedDraft(draft)
-      setSaveState({ saving: false, problems: [], error: null })
+      setSaveState(SAVE_IDLE)
       return true
     } catch (err) {
-      setSaveState({ saving: false, problems: [], error: err.message })
+      setSaveState({ ...SAVE_IDLE, error: err.message })
       return false
     }
-  }, [editable, leaving, saveState.saving, draft, envelopeId])
+  }, [canEditNow, saveState.saving, draft, envelopeId])
 
   // Autosave: shortly after the last change (and again if more changes came in while saving)
   const saveRef = useRef(save)
@@ -420,23 +418,26 @@ export default function EnvelopeEditorPage() {
   const handleSaveTemplate = async (name, roles) => {
     if (dirty && !(await save())) throw new Error('Fix the problems shown above the document first.')
     await saveAsTemplate(envelope, name, roles)
-    setSavingTemplate(false)
-    setTemplateSaved(true)
+    setTemplateDialog('saved')
   }
 
-  // Template copies: save back to the template, or discard the copy
-  const handleFinishTemplate = () => runAction('template', async () => {
-    if (!draft.recipients.some(r => r.role === 'signer')) throw new Error('Add at least one signer before saving the template.')
-    if (saveState.saving) throw new Error('Still saving your last change. Try again in a moment.')
-    if (dirty && !(await save())) throw new Error('Fix the problems shown above the document first.')
+  // Template copies: save back to the template, or discard the copy. Editing stops meanwhile.
+  const leaveTemplateWith = async (finish) => {
     setLeaving(true)
     try {
-      await finishTemplateEdit(envelope)
+      await finish(envelope)
     } catch (err) {
       setLeaving(false)
       throw err
     }
     navigate('/templates')
+  }
+
+  const handleFinishTemplate = () => runAction('template', async () => {
+    if (!draft.recipients.some(r => r.role === 'signer')) throw new Error('Add at least one signer before saving the template.')
+    if (saveState.saving) throw new Error('Still saving your last change. Try again in a moment.')
+    if (dirty && !(await save())) throw new Error('Fix the problems shown above the document first.')
+    await leaveTemplateWith(finishTemplateEdit)
   })
 
   const handleCancelTemplate = async () => {
@@ -448,48 +449,17 @@ export default function EnvelopeEditorPage() {
       danger: true
     })
     if (!sure) return
-    runAction('template', async () => {
-      setLeaving(true)
-      try {
-        await cancelTemplateEdit(envelope)
-      } catch (err) {
-        setLeaving(false)
-        throw err
-      }
-      navigate('/templates')
-    })
+    runAction('template', () => leaveTemplateWith(cancelTemplateEdit))
   }
 
-  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes. In a text box the browser's own undo
-  // (of the typing) applies instead.
-  const canEditNow = editable && !leaving
-  useEffect(() => {
-    if (!canEditNow) return
-    const onKeyDown = (e) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
-      const key = e.key.toLowerCase()
-      if (key !== 'z' && key !== 'y') return
-      const target = e.target
-      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
-      e.preventDefault()
-      if (key === 'y' || e.shiftKey) redo()
-      else undo()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [canEditNow, undo, redo])
-
-  // Ctrl/Cmd+S saves
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        save()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [save])
+  useEditorShortcuts({
+    enabled: canEditNow,
+    onSave: save,
+    onUndo: undo,
+    onRedo: redo,
+    // Esc puts back a field type that was picked up
+    onEscape: placingType ? () => setPlacingType(null) : undefined
+  })
 
   const recipientsById = useMemo(
     () => new Map((draft?.recipients ?? []).map(r => [r.id, r])),
@@ -525,13 +495,15 @@ export default function EnvelopeEditorPage() {
   const activeRecipient = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer')
   const firstSigner = draft.recipients.find(r => r.role === 'signer')
   // A picked-up field shows where it would go, in its signer's color, until clicked into place
+  const placingFor = activeRecipient ?? firstSigner
   const placing = placingType && editable ? {
     rectAt: (pageNumber, x, y) => placementRect(placingType, pageNumber, x, y),
     render: () => (
       <PlaceholderField
         field={{ type: placingType, required: placingType !== 'checkbox' }}
-        color={placingType === 'prefill' ? '#475569' : (activeRecipient ?? firstSigner)?.color ?? newRecipient(draft.recipients).color}
-        assignee={placingType === 'prefill' ? 'you, now' : (activeRecipient ?? firstSigner)?.name || 'a signer'}
+        {...(placingType === 'prefill'
+          ? { color: '#475569', assignee: 'you, now' }
+          : { color: placingFor?.color ?? newRecipient(draft.recipients).color, assignee: placingFor?.name || 'a signer' })}
       />
     ),
     onPlace: (pageNumber, rect) => {
@@ -548,154 +520,34 @@ export default function EnvelopeEditorPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Title bar */}
-      <header className="h-16 px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0">
-        <Link
-          to={editingTemplate ? '/templates' : '/'}
-          className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-          title={editingTemplate ? 'Back to templates (your changes are kept until you save or cancel)' : 'Back to envelopes'}
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1 min-w-0">
-          {editable ? (
-            <input
-              value={draft.title}
-              onChange={(e) => update({ title: e.target.value }, 'title')}
-              maxLength={200}
-              className="w-full max-w-xl bg-transparent text-base text-gray-900 font-semibold outline-none rounded px-1 -mx-1 hover:bg-gray-50 focus:bg-gray-50"
-              aria-label={editingTemplate ? 'Template name' : 'Envelope title'}
-            />
-          ) : (
-            <h1 className="text-base text-gray-900 font-semibold truncate">{draft.title}</h1>
-          )}
-          <p className="text-xs text-gray-500 truncate">
-            {editingTemplate && <span className="font-medium text-violet-700">Editing template · </span>}
-            {editable
-              ? <span className={dirty ? 'text-amber-700' : undefined} data-testid="save-status">{saveStatus}</span>
-              : <span data-testid="envelope-status">{STATUS_LABELS[envelope.status]}</span>}
-            {!isOwner && <> · Sent by {senderName(envelope)}</>}
-            {envelope.original_filename && <> · {envelope.original_filename}</>}
-          </p>
-        </div>
-        {isOwner && !editingTemplate && (
-          <button
-            onClick={() => { setTemplateSaved(false); setSavingTemplate(true) }}
-            disabled={!draft.recipients.length}
-            title={draft.recipients.length ? 'Reuse this document and its fields' : 'Add recipients and fields first'}
-            aria-label="Save as template"
-            className="btn-secondary px-3 py-2 rounded-md text-sm flex items-center gap-2"
-          >
-            <LayoutTemplate size={16} /> <span className="hidden lg:inline">Save as template</span>
-          </button>
-        )}
-        {editingTemplate ? (
-          <>
-            <button
-              onClick={handleCancelTemplate}
-              disabled={action.busy === 'template'}
-              className="btn-secondary px-4 py-2 rounded-md text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleFinishTemplate}
-              disabled={action.busy === 'template'}
-              title="Update the template. Envelopes already created from it do not change."
-              className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2"
-            >
-              <Check size={16} /> {action.busy === 'template' ? 'Saving…' : 'Save template'}
-            </button>
-          </>
-        ) : editable ? (
-          <>
-            <button
-              onClick={() => save()}
-              aria-label="Save"
-              disabled={!dirty || saveState.saving}
-              className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"
-            >
-              <Save size={16} /> <span className="hidden sm:inline">Save</span>
-            </button>
-            <button
-              onClick={handleSend}
-              disabled={sendProblems.length > 0 || action.busy === 'send'}
-              title={sendProblems.length ? 'Fix the items under "Ready to send?" first' : 'Email signing links'}
-              className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2"
-            >
-              <Send size={16} /> {action.busy === 'send' ? 'Sending…' : 'Send'}
-            </button>
-          </>
-        ) : (
-          <>
-            {mySigningTurn && (
-              <Link to={`/envelopes/${envelopeId}/sign`} className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2">
-                <PenLine size={16} /> Sign now
-              </Link>
-            )}
-            {awaitingFinalize && (
-              <button
-                onClick={handleRetryFinalize}
-                disabled={action.busy === 'finalize'}
-                className="btn-secondary px-4 py-2 rounded-md text-sm flex items-center gap-2"
-                title="Everyone has signed; build the final PDF and email copies"
-              >
-                <RotateCw size={16} className={action.busy === 'finalize' ? 'animate-spin' : ''} /> Finish document
-              </button>
-            )}
-            {envelope.status === 'completed' && envelope.final_path && (
-              <button onClick={handleDownloadSigned} className="btn-primary px-5 py-2 rounded-md text-sm flex items-center gap-2">
-                <Download size={16} /> Download signed PDF
-              </button>
-            )}
-          </>
-        )}
-      </header>
-
-      {/* Toolbar */}
-      <div className="h-11 px-2 sm:px-4 bg-white border-b border-gray-200 flex items-center gap-3 flex-shrink-0 overflow-x-auto">
-        <PageControls
-          currentPage={currentPage}
-          totalPages={pageSizes.length}
-          zoom={zoom}
-          onPageChange={setCurrentPage}
-          onZoomChange={setZoom}
-        />
-        {editable && (
-          <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label="History">
-            <button
-              onClick={undo}
-              disabled={!canUndo || leaving}
-              className="p-1.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
-              title="Undo (Ctrl+Z)"
-              aria-label="Undo"
-            >
-              <Undo2 size={17} />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo || leaving}
-              className="p-1.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
-              title="Redo (Ctrl+Shift+Z)"
-              aria-label="Redo"
-            >
-              <Redo2 size={17} />
-            </button>
-          </div>
-        )}
-        {editable && (
-          <button
-            onClick={suggest}
-            disabled={!pdfDoc || suggesting}
-            title="Find the blank lines and placeholders and suggest fields for them"
-            className="ml-auto btn-secondary px-3 py-1.5 rounded-md text-sm flex items-center gap-2 whitespace-nowrap flex-shrink-0"
-          >
-            <Sparkles size={15} className="text-violet-600" />
-            <span className="hidden sm:inline">{suggesting ? 'Reading the document…' : 'Suggest fields'}</span>
-            <span className="sm:hidden">{suggesting ? 'Reading…' : 'Suggest'}</span>
-          </button>
-        )}
-      </div>
+      <EditorHeader
+        envelope={envelope}
+        draft={draft}
+        editable={editable}
+        editingTemplate={editingTemplate}
+        ownsEnvelope={ownsEnvelope}
+        dirty={dirty}
+        saveStatus={saveStatus}
+        saving={saveState.saving}
+        busy={action.busy}
+        sendProblems={sendProblems}
+        mySigningTurn={mySigningTurn}
+        awaitingFinalize={awaitingFinalize}
+        onTitleChange={(title) => update({ title }, 'title')}
+        onSave={() => save()}
+        onSend={handleSend}
+        onSaveAsTemplate={() => setTemplateDialog('open')}
+        onFinishTemplate={handleFinishTemplate}
+        onCancelTemplate={handleCancelTemplate}
+        onRetryFinalize={handleRetryFinalize}
+        onDownloadSigned={handleDownloadSigned}
+      />
+      <EditorToolbar
+        pages={{ currentPage, totalPages: pageSizes.length, zoom, onPageChange: setCurrentPage, onZoomChange: setZoom }}
+        editing={canEditNow}
+        history={{ undo, redo, canUndo, canRedo }}
+        suggest={{ run: suggest, ready: Boolean(pdfDoc), busy: suggesting }}
+      />
 
       {placing && (
         <p role="status" className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-900">
@@ -703,7 +555,7 @@ export default function EnvelopeEditorPage() {
         </p>
       )}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
-      {templateSaved && (
+      {templateDialog === 'saved' && (
         <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
           Saved as a template. Use it from <Link to="/templates" className="underline">Templates</Link>.
         </p>
@@ -875,13 +727,13 @@ export default function EnvelopeEditorPage() {
         ))}
       </nav>
 
-      {savingTemplate && (
+      {templateDialog === 'open' && (
         <SaveTemplateDialog
           title={draft.title}
           recipients={draft.recipients}
           myEmail={user?.email}
           onSave={handleSaveTemplate}
-          onClose={() => setSavingTemplate(false)}
+          onClose={() => setTemplateDialog(null)}
         />
       )}
     </div>

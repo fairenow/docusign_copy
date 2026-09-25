@@ -14,7 +14,7 @@ export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 // Mapping between database rows and editor state
 // ---------------------------------------------------------------------------
 
-export function recipientFromRow(row) {
+function recipientFromRow(row) {
   return {
     id: row.id,
     name: row.name ?? '',
@@ -38,7 +38,7 @@ export function recipientToRow(recipient) {
   }
 }
 
-export function fieldFromRow(row) {
+function fieldFromRow(row) {
   return {
     id: row.id,
     type: row.type,
@@ -108,13 +108,13 @@ export function newField(type, placement, recipientId, props = {}) {
 }
 
 /** Name of a "Fill in now" field in messages: its label, or a generic one. */
-export const prefillName = (field) => field.label?.trim() || 'Fill in now'
+const prefillName = (field) => field.label?.trim() || 'Fill in now'
 
 // ---------------------------------------------------------------------------
 // Reminders and expiration
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_EXPIRE_DAYS = 30
+const DEFAULT_EXPIRE_DAYS = 30
 
 /** Reminder choices in days; null turns reminders off. */
 export const REMINDER_OPTIONS = [
@@ -150,14 +150,19 @@ export function renumberRecipients(recipients) {
   return recipients.map((r, i) => ({ ...r, routingOrder: i + 1 }))
 }
 
+/** Whether two email addresses are the same person (ignoring case and spaces); false if either is missing. */
+export function sameEmail(a, b) {
+  const x = a?.trim().toLowerCase()
+  return Boolean(x) && x === b?.trim().toLowerCase()
+}
+
 /** The recipient with this email (case-insensitive), if any. */
 export function recipientByEmail(recipients, email) {
-  const target = email?.toLowerCase()
-  return target ? recipients.find(r => r.email.trim().toLowerCase() === target) : undefined
+  return recipients.find(r => sameEmail(r.email, email))
 }
 
 /** A signer nobody has been named for yet (e.g. created by placing a field first). */
-export const isBlankSigner = (r) => r.role === 'signer' && !r.name.trim() && !r.email.trim()
+const isBlankSigner = (r) => r.role === 'signer' && !r.name.trim() && !r.email.trim()
 
 /**
  * "I need to sign this document": add the sender as the first signer (they can reorder).
@@ -278,8 +283,7 @@ export function envelopeGroup(envelope, user) {
     case 'completed':
       return 'completed'
     case 'sent': {
-      const email = user.email?.toLowerCase()
-      const myTurn = currentSigners(envelope).some(r => r.email?.toLowerCase() === email && r.status !== 'declined')
+      const myTurn = currentSigners(envelope).some(r => sameEmail(r.email, user.email) && r.status !== 'declined')
       return myTurn ? 'action' : 'waiting'
     }
     default:
@@ -290,7 +294,7 @@ export function envelopeGroup(envelope, user) {
 // An envelope this close to expiring says so
 const EXPIRY_WARNING_DAYS = 3
 // Signing links can be resent by hand this often (the database enforces it too)
-export const REMIND_INTERVAL_MS = 10 * 60_000
+const REMIND_INTERVAL_MS = 10 * 60_000
 
 const latest = (dates) => dates.filter(Boolean).sort().at(-1) ?? null
 const namesOf = (people) => (people.length > 2
@@ -319,9 +323,8 @@ export function envelopeProgress(envelope, user, now = Date.now()) {
       return { text: `Expired ${timeAgo(envelope.expires_at ?? envelope.updated_at, now)}`, tone: 'problem' }
     case 'sent': {
       const waiting = currentSigners(envelope).filter(r => r.status !== 'declined')
-      const email = user?.email?.toLowerCase()
-      const mine = waiting.some(r => r.email?.toLowerCase() === email)
-      const others = waiting.filter(r => r.email?.toLowerCase() !== email)
+      const mine = waiting.some(r => sameEmail(r.email, user?.email))
+      const others = waiting.filter(r => !sameEmail(r.email, user?.email))
       const parts = []
       const signed = signers.filter(r => r.status === 'signed').length
       if (signers.length > 1) parts.push(`${signed} of ${signers.length} signed`)
@@ -352,9 +355,8 @@ export function envelopeProgress(envelope, user, now = Date.now()) {
  */
 export function remindTargets(envelope, user, now = Date.now()) {
   if (envelope.status !== 'sent') return { recipients: [], availableAt: null }
-  const email = user?.email?.toLowerCase()
   const recipients = currentSigners(envelope)
-    .filter(r => (r.status === 'sent' || r.status === 'viewed') && r.email?.toLowerCase() !== email)
+    .filter(r => (r.status === 'sent' || r.status === 'viewed') && !sameEmail(r.email, user?.email))
   const last = latest(recipients.map(r => r.last_reminded_at))
   const next = last ? new Date(last).getTime() + REMIND_INTERVAL_MS : 0
   return { recipients, availableAt: next > now ? next : null }
@@ -375,15 +377,18 @@ export function groupEnvelopes(envelopes, user) {
 
 // Only the sender edits and sends a draft. Admins (a fixed list in the database) may also
 // delete any draft and void, resend or finish any sent envelope, but never act as the sender.
-const isOwner = (envelope, user) => Boolean(user) && envelope.owner_id === user.id
+/** Whether `user` created this envelope (or template). */
+export const isOwner = (envelope, user) => Boolean(user && envelope) && envelope.owner_id === user.id
 
 export const canEdit = (envelope, user) => isOwner(envelope, user) && envelope.status === 'draft'
 export const canDelete = (envelope, user, isAdmin = false) => (isOwner(envelope, user) || isAdmin) && envelope.status === 'draft'
 export const canVoid = (envelope, user, isAdmin = false) => (isOwner(envelope, user) || isAdmin) && envelope.status === 'sent'
+/** Templates are edited and deleted by whoever made them, or an admin. */
+export const canManageTemplate = (template, user, isAdmin = false) => isOwner(template, user) || isAdmin
 
 /** Sent by the user, or sent to them. What a member sees; an admin's "Mine" view. */
 export const isMine = (envelope, user) => isOwner(envelope, user) ||
-  (envelope.status !== 'draft' && (envelope.recipients ?? []).some(r => r.email && r.email.toLowerCase() === user?.email?.toLowerCase()))
+  (envelope.status !== 'draft' && (envelope.recipients ?? []).some(r => sameEmail(r.email, user?.email)))
 
 export const senderName = (envelope) => envelope.owner?.full_name || envelope.owner?.email || 'A teammate'
 

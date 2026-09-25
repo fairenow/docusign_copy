@@ -4,6 +4,7 @@ import { LayoutTemplate, Lock, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import { deleteTemplate, listTemplates, startTemplateEdit } from '../lib/api'
 import { sortedRoles } from '../lib/templateModel'
+import { canManageTemplate, isOwner, senderName } from '../lib/envelopeModel'
 import { formatDateTime } from '../lib/format'
 import UseTemplateDialog from '../components/templates/UseTemplateDialog'
 import ErrorBanner from '../components/ErrorBanner'
@@ -12,7 +13,7 @@ import { useFeedback } from '../components/feedback/useFeedback'
 
 /** Reusable documents: start an envelope with the fields already placed. */
 export default function TemplatesPage() {
-  const { user, profile } = useAuth()
+  const { user, profile, isAdmin } = useAuth()
   const [templates, setTemplates] = useState(null)
   const [error, setError] = useState(null)
   const [using, setUsing] = useState(null)
@@ -24,8 +25,7 @@ export default function TemplatesPage() {
     listTemplates().then(setTemplates, err => setError(err.message))
   }, [])
 
-  // The owner or an admin may change or delete a template
-  const canManage = (t) => t.owner_id === user?.id || profile?.role === 'admin'
+  const canManage = (t) => canManageTemplate(t, user, isAdmin)
 
   const handleEdit = async (template) => {
     setError(null)
@@ -87,7 +87,7 @@ export default function TemplatesPage() {
                 <p className="text-xs text-gray-500 truncate">
                   {sortedRoles(t).map(r => r.name).join(' · ')}
                   {t.page_count ? ` · ${t.page_count} page${t.page_count > 1 ? 's' : ''}` : ''}
-                  {` · ${t.owner_id === user?.id ? 'You' : t.owner?.full_name || t.owner?.email || 'A teammate'}, ${formatDateTime(t.created_at)}`}
+                  {` · ${isOwner(t, user) ? 'You' : senderName(t)}, ${formatDateTime(t.created_at)}`}
                 </p>
               </div>
               <button onClick={() => setUsing(t)} className="btn-primary px-4 py-1.5 rounded-md text-sm">Use</button>

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
+import { createMockDb, installMockSupabase, signInAs } from './mockSupabase'
 import { pdfFile } from './fixtures'
 
 // The preview server sends the production security headers (see vite.config.js)
@@ -7,7 +7,7 @@ test('security headers are sent and the app works under the content security pol
   const violations = []
   page.on('console', msg => { if (/Content Security Policy|Refused to/i.test(msg.text())) violations.push(msg.text()) })
   await installMockSupabase(page, createMockDb())
-  await page.addInitScript(([key, session]) => { window.localStorage.setItem(key, JSON.stringify(session)) }, [STORAGE_KEY, fakeSession()])
+  await signInAs(page)
 
   const response = await page.goto('/')
   const headers = response.headers()

@@ -556,6 +556,9 @@ async function installMockSigningApi(page, db) {
 }
 
 /** Sign in as another team member in the same browser context. */
-export function sessionFor(user) {
-  return fakeSession(user)
+/** Start the page signed in as `user` (the session the app keeps in localStorage). */
+export async function signInAs(page, user = ALICE) {
+  await page.addInitScript(([key, session]) => {
+    window.localStorage.setItem(key, JSON.stringify(session))
+  }, [STORAGE_KEY, fakeSession(user)])
 }

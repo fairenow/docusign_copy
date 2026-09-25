@@ -4,9 +4,9 @@ import { BellRing, FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, S
 import { useAuth } from '../auth/useAuth'
 import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, resendSigningLink, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
-import { ACCEPTED_FILE_TYPES, CONVERTIBLE_EXTENSIONS } from '../lib/documents'
+import { ACCEPTED_FILE_TYPES, isConvertible } from '../lib/documents'
 import {
-  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, envelopeProgress, groupEnvelopes, isMine,
+  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, envelopeProgress, groupEnvelopes, isMine, isOwner,
   matchesSearch, remindTargets, senderName
 } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
@@ -35,8 +35,7 @@ const STATUS_STYLES = {
 }
 
 export default function DashboardPage() {
-  const { user, profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
+  const { user, isAdmin } = useAuth()
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const [envelopes, setEnvelopes] = useState(null)
@@ -90,8 +89,7 @@ export default function DashboardPage() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    const isWord = CONVERTIBLE_EXTENSIONS.includes(file.name.split('.').pop().toLowerCase())
-    setBusy(isWord ? 'Converting your Word document…' : 'Preparing your document…')
+    setBusy(isConvertible(file) ? 'Converting your Word document…' : 'Preparing your document…')
     try {
       const id = await createEnvelopeFromFile(file)
       navigate(`/envelopes/${id}`)
@@ -111,7 +109,7 @@ export default function DashboardPage() {
   })
 
   const handleDelete = (envelope) => {
-    const whose = envelope.owner_id === user?.id ? '' : ` by ${senderName(envelope)}`
+    const whose = isOwner(envelope, user) ? '' : ` by ${senderName(envelope)}`
     setHidden(envelope.id, true)
     const timer = setTimeout(async () => {
       try {
@@ -295,7 +293,7 @@ function EnvelopeRow({ envelope, user, isAdmin, now, reminding, onRemind, onDele
         className="basis-full sm:basis-auto sm:flex-1 min-w-0"
       >
         <p className="text-gray-900 font-medium truncate">{envelope.title}</p>
-        {envelope.owner_id !== user?.id && (
+        {!isOwner(envelope, user) && (
           <p className="text-xs text-gray-600 truncate">Sent by {senderName(envelope)}</p>
         )}
         {progress.text && (

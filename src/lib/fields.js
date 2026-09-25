@@ -32,7 +32,7 @@ export function newId() {
   return crypto.randomUUID()
 }
 
-export function formatToday() {
+function formatToday() {
   return new Date().toLocaleDateString()
 }
 

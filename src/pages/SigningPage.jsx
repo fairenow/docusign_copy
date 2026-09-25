@@ -5,6 +5,7 @@ import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
 import { fitWidthZoom } from '../lib/viewer'
 import { preloadPdfViewer } from '../lib/documents'
+import { sameEmail } from '../lib/envelopeModel'
 import { useFeedback } from '../components/feedback/useFeedback'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
@@ -55,8 +56,7 @@ export default function SigningPage() {
   // Team members signing as themselves can reuse and save signatures
   const { user } = useAuth()
   const { ask } = useFeedback()
-  const canSaveSignatures = Boolean(user?.email && session?.recipient?.email &&
-    user.email.toLowerCase() === session.recipient.email.toLowerCase())
+  const canSaveSignatures = sameEmail(user?.email, session?.recipient?.email)
   const { saved: savedSignatures, save: saveSignature } = useSavedSignatures(canSaveSignatures)
 
   useEffect(() => {

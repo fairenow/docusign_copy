@@ -4,7 +4,7 @@
  * step of its own. `reset` starts a new history (e.g. after loading).
  */
 export const HISTORY_LIMIT = 100
-export const COALESCE_MS = 1000
+const COALESCE_MS = 1000
 
 export const initialHistory = (value) => ({ present: value, past: [], future: [], lastKey: null, lastAt: 0 })
 

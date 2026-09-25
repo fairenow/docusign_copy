@@ -123,7 +123,7 @@ function getFieldLabel(fieldName, detectedType, index) {
 /**
  * Extract AcroForm fields from a PDF document using PDF.js
  */
-export async function extractPDFFormFields(pdfDoc) {
+async function extractPDFFormFields(pdfDoc) {
   const fields = []
 
   try {
@@ -183,7 +183,7 @@ export async function extractPDFFormFields(pdfDoc) {
  * Analyze text content to detect potential form field locations
  * This is useful for scanned documents or PDFs without AcroForms
  */
-export async function detectFieldsFromContent(pdfDoc) {
+async function detectFieldsFromContent(pdfDoc) {
   const detectedFields = []
 
   try {

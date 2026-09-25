@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
+import { createMockDb, installMockSupabase, signInAs } from './mockSupabase'
 import { makeSignaturePagePdf, SIGNATURE_PAGE_LINES } from './fixtures'
 import { addField } from './placeField'
 
@@ -9,9 +9,7 @@ test.beforeEach(async ({ page }) => {
   db = createMockDb()
   await installMockSupabase(page, db)
   page.on('pageerror', err => { throw err })
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession()])
+  await signInAs(page)
 })
 
 async function openSignaturePage(page) {

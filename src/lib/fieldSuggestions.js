@@ -7,7 +7,7 @@
  */
 
 // How far (in points) a field's bottom edge may be from a line to snap onto it
-export const SNAP_DISTANCE = 12
+const SNAP_DISTANCE = 12
 // Gap between a field and the line it sits on
 const GAP = 1
 
@@ -168,7 +168,7 @@ function placeholders(layout) {
  * where side is 'sender' | 'other' | null (unknown) and block groups a signature block.
  * `company` is the sender's company as written in documents (e.g. "flmlnk").
  */
-export function suggestPageFields(layout, page, { company = '' } = {}) {
+function suggestPageFields(layout, page, { company = '' } = {}) {
   const W = layout.width
   const H = layout.height
   const token = company.trim().toLowerCase()

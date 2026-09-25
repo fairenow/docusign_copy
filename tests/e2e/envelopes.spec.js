@@ -1,17 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { answerDialog } from './dialogs'
 import { PDFDocument } from 'pdf-lib'
-import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
+import { ALICE, createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 import { addField } from './placeField'
 
 let db
 
-async function signIn(page) {
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession()])
-}
 
 test.beforeEach(async ({ page }) => {
   db = createMockDb()
@@ -53,7 +48,7 @@ test.describe('sign-in', () => {
 
   for (const next of ['//evil.example.com', '/%5Cevil.example.com', 'https://evil.example.com', '/%09/evil.example.com', '/%0A/evil.example.com', '/%20//evil.example.com']) {
     test(`ignores off-site next parameter ${next}`, async ({ page }) => {
-      await signIn(page)
+      await signInAs(page)
       await page.goto(`/login?next=${next}`)
       await expect(page).toHaveURL('http://localhost:4173/')
       await expect(page.getByRole('heading', { name: 'Envelopes' })).toBeVisible()
@@ -62,7 +57,7 @@ test.describe('sign-in', () => {
 })
 
 test.describe('envelopes', () => {
-  test.beforeEach(async ({ page }) => signIn(page))
+  test.beforeEach(async ({ page }) => signInAs(page))
 
   test('create, prepare, save and reload a draft', async ({ page }) => {
     await page.goto('/')
@@ -390,7 +385,7 @@ test('quick sign still fills and downloads a PDF without an account', async ({ p
 })
 
 test('Word documents are converted on the server, exactly as LibreOffice lays them out', async ({ page }) => {
-  await signIn(page)
+  await signInAs(page)
   await page.goto('/')
   await page.getByTestId('new-envelope-input').setInputFiles('tests/e2e/fixtures/consent.docx')
   await expect(page).toHaveURL(/\/envelopes\/[0-9a-f-]{36}$/)

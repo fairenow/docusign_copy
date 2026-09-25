@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { answerDialog } from './dialogs'
-import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
+import { createMockDb, fakeSession, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 import { addField } from './placeField'
 
@@ -10,9 +10,7 @@ test.beforeEach(async ({ page }) => {
   db = createMockDb()
   await installMockSupabase(page, db)
   page.on('pageerror', err => { throw err })
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession()])
+  await signInAs(page)
 })
 
 test('save a prepared envelope as a template, then start a new envelope from it', async ({ page }) => {

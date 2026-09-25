@@ -1,15 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { ALICE, BOB, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
+import { ALICE, BOB, createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf } from './fixtures'
 
 // Alice is an admin, Bob a member (see createMockDb)
 let db
 
-async function signInAs(page, user) {
-  await page.addInitScript(([key, session]) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
-  }, [STORAGE_KEY, fakeSession(user)])
-}
 
 test.beforeEach(async ({ page }) => {
   db = createMockDb()

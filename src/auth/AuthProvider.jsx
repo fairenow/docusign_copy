@@ -51,6 +51,8 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user: session?.user ?? null,
     profile,
+    // Admins are decided in the database (private.admin_emails); this only chooses what to show
+    isAdmin: profile?.role === 'admin',
     isLoading: session === undefined,
     sendSignInLink,
     signOut
