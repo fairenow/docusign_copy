@@ -10,6 +10,7 @@ import {
   matchesSearch, remindTargets, senderName
 } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
+import { SkeletonRows } from '../components/Skeleton'
 import { useFeedback } from '../components/feedback/useFeedback'
 import ErrorBanner from '../components/ErrorBanner'
 
@@ -251,7 +252,7 @@ export default function DashboardPage() {
       <ErrorBanner>{error}</ErrorBanner>
 
       {envelopes === null && !error ? (
-        <p className="text-gray-500 text-sm py-12 text-center">Loading…</p>
+        <SkeletonRows />
       ) : visible.length === 0 ? (
         query.trim()
           ? <p className="py-16 text-center text-gray-500">No envelopes match “{query.trim()}”.</p>

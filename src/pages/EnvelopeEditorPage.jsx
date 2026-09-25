@@ -26,10 +26,12 @@ import PrefillField from '../components/envelope/PrefillField'
 import SuggestedField from '../components/envelope/SuggestedField'
 import SuggestionsPanel from '../components/envelope/SuggestionsPanel'
 import FullPageMessage from '../components/FullPageMessage'
+import { DocumentScreenSkeleton } from '../components/Skeleton'
 import RecipientsPanel from '../components/envelope/RecipientsPanel'
 import FieldRail from '../components/envelope/FieldRail'
 import FieldProperties from '../components/envelope/FieldProperties'
 import SendChecklist from '../components/envelope/SendChecklist'
+import GettingStarted from '../components/envelope/GettingStarted'
 import ActivityPanel from '../components/envelope/ActivityPanel'
 import ReminderSettings from '../components/envelope/ReminderSettings'
 import SaveTemplateDialog from '../components/templates/SaveTemplateDialog'
@@ -518,7 +520,7 @@ export default function EnvelopeEditorPage() {
       </FullPageMessage>
     )
   }
-  if (!draft) return <FullPageMessage title="Loading…" />
+  if (!draft) return <DocumentScreenSkeleton />
 
   const activeRecipient = draft.recipients.find(r => r.id === activeRecipientId && r.role === 'signer')
   const firstSigner = draft.recipients.find(r => r.role === 'signer')
@@ -726,6 +728,7 @@ export default function EnvelopeEditorPage() {
           </div>
         ) : (
           <DocumentViewer
+            placeholderPages={envelope.page_count || 1}
             pdfDoc={pdfDoc}
             pageSizes={pageSizes}
             elements={viewerElements}
@@ -775,6 +778,7 @@ export default function EnvelopeEditorPage() {
                   <p className="text-sm text-gray-500">Select a field on the document to change who fills it in, its label, or whether it is required.</p>
                 ) : (
                   <>
+                    {!editingTemplate && <GettingStarted draft={draft} />}
                     {suggestNotice && <p role="status" className="text-sm text-gray-600">{suggestNotice}</p>}
                     {suggestions && (
                       <SuggestionsPanel

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import OverlayElement from './OverlayElement'
+import { PageSkeletons } from './Skeleton'
 import { BASE_SCALE } from '../lib/viewer'
 // Pages are drawn when they come within this distance of the visible area
 const RENDER_MARGIN = '1200px 0px'
@@ -34,7 +35,9 @@ export default function DocumentViewer({
   onElementGestureEnd, // (element, kind, event) after a field was moved or resized
   // Placing a new field: { rectAt(pageNumber, x, y) -> rect, render(rect), onPlace(pageNumber, rect) }.
   // The field follows the pointer as a preview and a click puts it there.
-  placing = null
+  placing = null,
+  // Pages to sketch while the document is still loading (e.g. the envelope's page count)
+  placeholderPages = 1
 }) {
   const scrollRef = useRef(null)
   const pageRefs = useRef([])
@@ -105,6 +108,7 @@ export default function DocumentViewer({
           </span>
         </div>
       )}
+      {!pageSizes.length && <PageSkeletons count={placeholderPages} width={612 * scale} height={792 * scale} />}
       {pageSizes.map((size, i) => {
         const pageNumber = i + 1
         const displaySize = { width: size.width * scale, height: size.height * scale }

@@ -100,7 +100,12 @@ test('signer uses the emailed link: consent, guided fields, adopt signature, fin
   await page.locator('[data-field-type="checkbox"]').click()
 
   await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
+  // What happens next, and a copy of what they signed to keep
+  await expect(page.getByText('When everyone has signed, the completed document is emailed to')).toBeVisible()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download a copy of what you signed' }).click()
+  expect((await download).suggestedFilename()).toMatch(/_signed\.pdf$/)
 
   const submit = db.calls.find(c => c.action === 'submit').body
   expect(submit.token).toBe(token)
@@ -153,7 +158,7 @@ test('team member signs from the dashboard without a link, then everyone gets th
   await page.getByRole('dialog').getByRole('button', { name: 'Adopt and sign' }).click()
   await page.locator('[data-field-type="text"] input').fill('Engineer')
   await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
 
   const submit = db.calls.find(c => c.action === 'submit').body
   expect(submit).toMatchObject({ envelopeId: id, consent: true })
@@ -299,7 +304,7 @@ test('fields stay where the sender put them unless the sender allowed adjusting'
   await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
   await page.locator('[data-field-type="text"] input').fill('Head of Sales')
   await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
   expect(db.calls.find(c => c.action === 'submit').body.positions).toEqual({})
   const sig = db.fields.find(f => f.recipient_id === recipients[0].id && f.type === 'signature')
   expect(sig).toMatchObject({ x: 0.1, y: 0.7 })
@@ -328,7 +333,7 @@ test('signers can move and resize their own fields, and the new positions are sa
   await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
   await page.locator('[data-field-type="text"] input').fill('Head of Sales')
   await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
 
   const sig = db.fields.find(f => f.recipient_id === recipients[0].id && f.type === 'signature')
   const submit = db.calls.find(c => c.action === 'submit').body
@@ -376,7 +381,7 @@ test('a signer cannot drag a field far away or stretch it over the page', async 
   await page.getByRole('dialog', { name: 'Adopt your signature' }).getByRole('button', { name: 'Adopt and sign' }).click()
   await page.locator('[data-field-type="text"] input').fill('Head of Sales')
   await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
 
   // Seeded at x 0.1, y 0.7, 0.3 x 0.06: it moved and grew, but at most 0.15 / 0.10 away and
   // to twice the size (the pointer went much further)
@@ -414,6 +419,6 @@ test.describe('on a phone', () => {
     await page.getByRole('button', { name: 'Next', exact: true }).tap()
     await page.locator('[data-field-type="text"] input').fill('Head of Sales')
     await page.getByRole('button', { name: 'Finish' }).tap()
-    await expect(page.getByRole('heading', { name: 'Thank you, you are done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
   })
 })

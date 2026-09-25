@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { ChevronRight, CheckCircle2, XCircle, Clock, PenLine } from 'lucide-react'
 import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
@@ -13,6 +13,8 @@ import DocumentViewer from '../components/DocumentViewer'
 import PageControls from '../components/PageControls'
 import FillField from '../components/FillField'
 import FullPageMessage from '../components/FullPageMessage'
+import SigningDone from '../components/signing/SigningDone'
+import { DocumentScreenSkeleton } from '../components/Skeleton'
 import ErrorBanner from '../components/ErrorBanner'
 import Modal from '../components/Modal'
 import AdoptSignature from '../components/AdoptSignature'
@@ -48,7 +50,7 @@ export default function SigningPage() {
   const [zoom, setZoom] = useState(1)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [done, setDone] = useState(null) // 'signed' | 'declined'
+  const [done, setDone] = useState(null) // { kind: 'signed' | 'declined', complete }
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
   // Team members signing as themselves can reuse and save signatures
   const { user } = useAuth()
@@ -206,12 +208,18 @@ export default function SigningPage() {
     setBusy(true)
     setError(null)
     try {
-      await submitSigning(identity, clean, true, positions)
-      setDone('signed')
+      const result = await submitSigning(identity, clean, true, positions)
+      setDone({ kind: 'signed', complete: Boolean(result?.complete) })
     } catch (err) {
       setError(err.message)
     }
     setBusy(false)
+  }
+
+  // The signer's own copy: the document with the fields they filled in (and the sender's text)
+  const downloadCopy = async () => {
+    const { buildSignedPdf, downloadPdf } = await import('../lib/exportPdf')
+    downloadPdf(await buildSignedPdf(pdfBytes, elements), `${session.envelope.title}.pdf`)
   }
 
   const handleDecline = async () => {
@@ -228,7 +236,7 @@ export default function SigningPage() {
     setError(null)
     try {
       await declineSigning(identity, reason)
-      setDone('declined')
+      setDone({ kind: 'declined' })
     } catch (err) {
       setError(err.message)
     }
@@ -243,16 +251,17 @@ export default function SigningPage() {
       </FullPageMessage>
     )
   }
-  if (!session) return <FullPageMessage title="Loading…" />
+  if (!session) return <DocumentScreenSkeleton panel={false} />
 
   if (done) {
     return (
-      <FullPageMessage title={done === 'signed' ? 'Thank you, you are done' : 'You declined to sign'}>
-        {done === 'signed'
-          ? 'Your signature has been recorded. Everyone will receive the completed document by email once all signers have finished.'
-          : 'The sender has been notified.'}
-        {envelopeId && <p className="mt-4"><Link to="/" className="text-blue-600 underline">Back to envelopes</Link></p>}
-      </FullPageMessage>
+      <SigningDone
+        kind={done.kind}
+        complete={done.complete}
+        session={session}
+        backToApp={Boolean(envelopeId)}
+        onDownload={downloadCopy}
+      />
     )
   }
 

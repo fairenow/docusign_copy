@@ -264,6 +264,24 @@ test.describe('envelopes', () => {
     await expect(page.getByTestId('field')).toHaveCount(1)
   })
 
+  test('a first-time guide ticks off the steps and can be hidden for good', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    const guide = page.getByTestId('getting-started')
+    await expect(guide.locator('li[data-done=true]')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Add recipient' }).click()
+    await page.getByLabel('Recipient name').fill('Bob')
+    await page.getByLabel('Recipient email').fill('bob@flmlnk.com')
+    await expect(guide.locator('li[data-done=true]')).toHaveCount(1)
+    await addField(page, 'Signature')
+    await expect(guide.locator('li[data-done=true]')).toHaveCount(2)
+    await guide.getByRole('button', { name: 'Hide guide' }).click()
+    await expect(guide).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
+    await expect(page.getByTestId('getting-started')).toHaveCount(0)
+  })
+
   test('undo and redo changes to the draft, from the toolbar or the keyboard', async ({ page }) => {
     await page.goto('/')
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())

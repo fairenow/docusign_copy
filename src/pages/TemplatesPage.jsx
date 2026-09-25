@@ -7,6 +7,7 @@ import { sortedRoles } from '../lib/templateModel'
 import { formatDateTime } from '../lib/format'
 import UseTemplateDialog from '../components/templates/UseTemplateDialog'
 import ErrorBanner from '../components/ErrorBanner'
+import { SkeletonRows } from '../components/Skeleton'
 import { useFeedback } from '../components/feedback/useFeedback'
 
 /** Reusable documents: start an envelope with the fields already placed. */
@@ -65,7 +66,7 @@ export default function TemplatesPage() {
       <ErrorBanner className="mb-4">{error}</ErrorBanner>
 
       {templates === null && !error ? (
-        <p className="text-gray-500 text-sm py-12 text-center">Loading…</p>
+        <SkeletonRows count={3} />
       ) : templates?.length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center">
           <LayoutTemplate className="mx-auto text-gray-400 mb-3" size={28} />
