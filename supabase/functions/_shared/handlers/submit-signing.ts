@@ -1,4 +1,5 @@
-// POST { token | envelopeId, values: { [fieldId]: value }, consent: true } — sign.
+// POST { token | envelopeId, values: { [fieldId]: value }, consent: true, timeZone? } — sign.
+// timeZone: the signer's IANA zone, so "Date signed" is their today (the database checks it).
 import { PDFDocument } from 'pdf-lib'
 import { json, readJson, clientIp, userAgent, runInBackground, HttpError } from '../http.ts'
 import { rpc } from '../supabase.ts'
@@ -27,6 +28,7 @@ export async function submitSigning(req: Request): Promise<Response> {
     // Moved/resized fields; the database checks they are the signer's own and on the page
     p_positions: positions(body.positions),
     p_consent: body.consent === true,
+    p_time_zone: typeof body.timeZone === 'string' ? body.timeZone.slice(0, 64) : null,
     p_ip: clientIp(req),
     p_user_agent: userAgent(req)
   })

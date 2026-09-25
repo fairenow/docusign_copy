@@ -51,7 +51,9 @@ function fieldFromRow(row) {
     required: row.required,
     label: row.label ?? '',
     fontSize: row.font_size,
-    ...(row.type === 'prefill' && { text: row.prefill ?? '' })
+    ...(row.type === 'prefill' && { text: row.prefill ?? '' }),
+    // What the signer filled in (once signed)
+    ...(row.value != null && { value: row.value })
   }
 }
 

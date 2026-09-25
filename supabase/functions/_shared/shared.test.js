@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument, StandardFonts, degrees } from 'pdf-lib'
 import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminderEmail, expiredEmail, signedEmail } from './emails.js'
-import { validateSigningValues, isFieldComplete, limitAdjustment } from './signing.js'
+import { validateSigningValues, isFieldComplete, limitAdjustment, signingDate } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
 import { readFileSync } from 'node:fs'
@@ -201,5 +201,17 @@ describe('limitAdjustment', () => {
     expect(r.h).toBeCloseTo(0.05)
     expect(r.x + r.w).toBeLessThanOrEqual(1)
     expect(Math.abs(r.x - edge.x)).toBeLessThanOrEqual(0.15 + 1e-9)
+  })
+})
+
+describe('signingDate', () => {
+  // 01:30 UTC on Sep 26 is still the evening of Sep 25 in Michigan
+  const lateEvening = new Date('2026-09-26T01:30:00Z')
+  it('is today in the signer\'s time zone, as MM/DD/YYYY', () => {
+    expect(signingDate(lateEvening, 'America/Detroit')).toBe('09/25/2026')
+    expect(signingDate(lateEvening, 'UTC')).toBe('09/26/2026')
+  })
+  it('falls back to UTC for an unknown zone, like the database', () => {
+    expect(signingDate(lateEvening, 'Not/AZone')).toBe('09/26/2026')
   })
 })

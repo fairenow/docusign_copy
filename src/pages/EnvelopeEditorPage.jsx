@@ -3,25 +3,31 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import {
   cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
-  originalPath, retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, subscribeToEnvelopeChanges
+  getSigningSession, originalPath, retryFinalize, saveAsTemplate, saveDraft, sendEnvelope, submitSigning, subscribeToEnvelopeChanges
 } from '../lib/api'
 import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, signsAlone, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
-import { FIELD_LABELS, canHover, nextFieldY, placementRect } from '../lib/fields'
+import { FIELD_LABELS, DEFAULT_FONT_SIZE, canHover, nextFieldY, placementRect } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
 import { useUndoable } from '../hooks/useUndoable'
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts'
+import { useSelfSigning } from '../hooks/useSelfSigning'
+import { initialsOf } from '../../supabase/functions/_shared/signing.js'
 import { useFeedback } from '../components/feedback/useFeedback'
 import { preloadPdfViewer } from '../lib/documents'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
 import PlacementHint from '../components/PlacementHint'
 import PlaceholderField from '../components/envelope/PlaceholderField'
+import FillField from '../components/FillField'
+import Modal from '../components/Modal'
+import AdoptSignature from '../components/AdoptSignature'
+import SelfSignMenu from '../components/envelope/SelfSignMenu'
 import PrefillField from '../components/envelope/PrefillField'
 import SuggestedField from '../components/envelope/SuggestedField'
 import SuggestionsPanel from '../components/envelope/SuggestionsPanel'
@@ -86,6 +92,9 @@ export default function EnvelopeEditorPage() {
   const [suggestNotice, setSuggestNotice] = useState(null)
   // Field type picked up from the toolbar, waiting to be clicked onto the page
   const [placingType, setPlacingType] = useState(null)
+  // Signing it yourself: the Sign menu, and the signature/initials pad (place: then pick it up)
+  const [signMenuOpen, setSignMenuOpen] = useState(false)
+  const [creating, setCreating] = useState(null) // null | { kind: 'signature' | 'initials', place: boolean }
   // Set while a template copy is being saved back or discarded: nothing more is edited or saved
   const [leaving, setLeaving] = useState(false)
   const navigate = useNavigate()
@@ -228,6 +237,36 @@ export default function EnvelopeEditorPage() {
     }
   }
 
+  // Signing it yourself: your fields show your signature, today's date and what you type
+  const myFields = selfSign && me ? draft.fields.filter(f => f.recipientId === me.id) : []
+  const selfSigning = useSelfSigning({ envelopeId, enabled: selfSign, myFields })
+  const isMine = (field) => selfSign && Boolean(me) && field.recipientId === me.id
+  // A field of yours as it will be signed, for FillField
+  const signedLook = (field) => {
+    const value = selfSigning.valueOf(field)
+    return {
+      ...field,
+      fontSize: field.fontSize ?? DEFAULT_FONT_SIZE,
+      data: field.type === 'signature' || field.type === 'initials' ? value : undefined,
+      text: field.type === 'date' || field.type === 'text' ? value : undefined,
+      checked: field.type === 'checkbox' ? value === 'true' : undefined,
+      locked: field.type === 'date'
+    }
+  }
+
+  // From the Sign menu: use this signature (or initials, or today's date) and pick it up
+  const pickFromSignMenu = (type, image) => {
+    if (image) selfSigning.adopt(type, image)
+    setSignMenuOpen(false)
+    setPlacingType(type)
+  }
+
+  const adoptCreated = (image, remember) => {
+    selfSigning.adopt(creating.kind, image, { remember })
+    if (creating.place) setPlacingType(creating.kind)
+    setCreating(null)
+  }
+
   // Fields -------------------------------------------------------------------
   const insertField = (field) => {
     update({ fields: [...draft.fields, field] })
@@ -258,6 +297,16 @@ export default function EnvelopeEditorPage() {
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize) return
+    // Signing it yourself: Signature opens the Sign menu; Initials need yours first
+    if (selfSign && type === 'signature') {
+      setPlacingType(null)
+      setSignMenuOpen(true)
+      return
+    }
+    if (selfSign && type === 'initials' && !selfSigning.images.initials) {
+      setCreating({ kind: 'initials', place: true })
+      return
+    }
     if (canHover()) {
       setPlacingType(current => (current === type ? null : type))
       return
@@ -359,21 +408,41 @@ export default function EnvelopeEditorPage() {
     }
   }
 
-  // Only you sign: no email to yourself; sign straight away. Copies go out when you finish.
+  // Only you sign, and you signed on the page: finish here. No email to yourself; the signed
+  // PDF goes to you and your copy recipients.
   const handleSignNow = async () => {
-    const copies = draft.recipients.filter(r => r.role === 'cc')
+    if (selfSigning.problems.length) {
+      const missing = myFields.find(f => !(f.id in selfSigning.submission) && f.type !== 'date') ?? myFields[0]
+      if (missing && (missing.type === 'signature' || missing.type === 'initials') && !selfSigning.images[missing.type]) {
+        setCreating({ kind: missing.type, place: false })
+      } else if (missing) {
+        setCurrentPage(missing.page)
+        selectField(missing.id)
+      }
+      setAction({ busy: null, error: selfSigning.problems[0] })
+      return
+    }
+    const copies = draft.recipients.filter(r => r.role === 'cc').map(r => r.name || r.email)
     const sure = await confirm({
-      title: `Sign "${draft.title}" now?`,
-      message: copies.length
-        ? `When you finish, the signed PDF is emailed to you and to ${copies.map(r => r.name || r.email).join(', ')}.`
-        : 'When you finish, the signed PDF is emailed to you. To email it to someone else too, add them under "Send the signed copy to".',
-      confirmLabel: 'Sign now'
+      title: `Sign and finish "${draft.title}"?`,
+      message: `You agree to use electronic records and signatures, and your signature is applied as shown. The signed PDF is emailed to you${copies.length ? ` and to ${copies.join(', ')}` : ''}.`,
+      confirmLabel: 'Sign and finish'
     })
     if (!sure) return
     runAction('send', async () => {
       if (dirty && !(await save())) throw new Error('Fix the problems above, then try again.')
       await sendEnvelope(envelopeId, { signNow: true })
-      navigate(`/envelopes/${envelopeId}/sign`)
+      const identity = { envelopeId }
+      try {
+        await getSigningSession(identity) // records that you viewed it, for the certificate
+        await submitSigning(identity, selfSigning.submission, true)
+      } catch (err) {
+        await reload()
+        throw new Error(`Sent, but your signature was not recorded: ${err.message} Press Sign now to finish.`)
+      }
+      selfSigning.clear()
+      await reload()
+      notify(`Signed. The signed PDF is on its way to you${copies.length ? ` and ${copies.join(', ')}` : ''}.`)
     })
   }
 
@@ -464,7 +533,15 @@ export default function EnvelopeEditorPage() {
     () => new Map((draft?.recipients ?? []).map(r => [r.id, r])),
     [draft?.recipients]
   )
-  const renderField = useCallback((field, { scale }) => {
+  const renderField = (field, ctx) => {
+    const { scale } = ctx
+    if (isMine(field)) {
+      return <FillField {...ctx} element={signedLook(field)} onUpdate={(patch) => { if ('text' in patch && field.type === 'text') selfSigning.setValue(field.id, patch.text) }} />
+    }
+    // Signed and sent: show what was filled in
+    if (!editable && field.value) {
+      return <FillField {...ctx} element={{ ...field, data: field.value, text: field.value, checked: field.value === 'true', locked: true }} onUpdate={() => {}} />
+    }
     if (field.suggestion) {
       const color = field.type === 'prefill' ? '#475569' : recipientsById.get(field.recipientId)?.color ?? '#7c3aed'
       return <SuggestedField suggestion={field} color={color} />
@@ -474,7 +551,14 @@ export default function EnvelopeEditorPage() {
     }
     const r = recipientsById.get(field.recipientId)
     return <PlaceholderField field={field} color={r?.color ?? RECIPIENT_COLORS[0]} assignee={r?.name || r?.email || 'Unassigned'} />
-  }, [recipientsById, editable, updateField])
+  }
+
+  // Your own fields: a click ticks a checkbox, or asks for the signature they need
+  const activateField = (field) => {
+    if (!isMine(field)) return
+    if (field.type === 'checkbox') selfSigning.setValue(field.id, selfSigning.valueOf(field) === 'true' ? 'false' : 'true')
+    if ((field.type === 'signature' || field.type === 'initials') && !selfSigning.images[field.type]) setCreating({ kind: field.type, place: false })
+  }
 
   // Suggestions show on the page as outlines until they are added
   const viewerElements = useMemo(() => {
@@ -497,7 +581,9 @@ export default function EnvelopeEditorPage() {
   const placingFor = activeRecipient ?? firstSigner
   const placing = placingType && editable ? {
     rectAt: (pageNumber, x, y) => placementRect(placingType, pageSizes[pageNumber - 1], x, y),
-    render: () => (
+    render: (rect, ctx) => selfSign && placingType !== 'prefill' ? (
+      <FillField {...ctx} element={signedLook({ id: 'placing', type: placingType, ...rect })} onUpdate={() => {}} />
+    ) : (
       <PlaceholderField
         field={{ type: placingType, required: placingType !== 'checkbox' }}
         {...(placingType === 'prefill'
@@ -549,7 +635,7 @@ export default function EnvelopeEditorPage() {
         suggest={{ run: suggest, ready: Boolean(pdfDoc), busy: suggesting }}
       />
 
-      {placing && <PlacementHint what={`${FIELD_LABELS[placingType].toLowerCase()} field`} />}
+      {placing && <PlacementHint what={selfSign && placingType === 'date' ? "today's date" : `${FIELD_LABELS[placingType].toLowerCase()}${selfSign ? '' : ' field'}`} />}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
       {templateDialog === 'saved' && (
         <p role="status" className="mx-4 mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-800 text-sm">
@@ -564,7 +650,20 @@ export default function EnvelopeEditorPage() {
 
       <div className="flex-1 flex min-h-0">
         <div className={`flex-1 min-w-0 min-h-0 ${mobileView === 'panel' ? 'hidden md:flex' : 'flex'}`}>
-        {editable && <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} activeType={placingType} />}
+        {editable && (
+          <div className="relative flex">
+            <FieldRail recipient={activeRecipient} documentReady={pageSizes.length > 0} onAdd={addField} activeType={signMenuOpen ? 'signature' : placingType} />
+            {signMenuOpen && (
+              <SelfSignMenu
+                saved={selfSigning.saved}
+                current={selfSigning.images}
+                onPick={pickFromSignMenu}
+                onCreate={(kind) => { setSignMenuOpen(false); setCreating({ kind, place: true }) }}
+                onClose={() => setSignMenuOpen(false)}
+              />
+            )}
+          </div>
+        )}
 
         {/* Document */}
         {pdfError ? (
@@ -589,6 +688,7 @@ export default function EnvelopeEditorPage() {
             onSelectedIdChange={selectField}
             onUpdateElement={updateField}
             onDeleteElement={deleteField}
+            onActivateElement={activateField}
             placing={placing}
           />
         )}
@@ -733,6 +833,18 @@ export default function EnvelopeEditorPage() {
           </button>
         ))}
       </nav>
+
+      {creating && (
+        <Modal title={creating.kind === 'signature' ? 'Your signature' : 'Your initials'} onClose={() => setCreating(null)}>
+          <AdoptSignature
+            kind={creating.kind}
+            saved={selfSigning.saved}
+            canSave
+            defaultTypedName={creating.kind === 'signature' ? me?.name : initialsOf(me?.name)}
+            onAdopt={adoptCreated}
+          />
+        </Modal>
+      )}
 
       {templateDialog === 'open' && (
         <SaveTemplateDialog

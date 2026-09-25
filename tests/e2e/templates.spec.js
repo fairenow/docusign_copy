@@ -103,7 +103,7 @@ test('the sender can stay a fixed person on the template', async ({ page }) => {
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
   await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByLabel('I need to sign this document').check()
-  await addField(page, 'Signature')
+  await addField(page, 'Text')
   await page.getByRole('button', { name: 'Save as template' }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Save as template' })

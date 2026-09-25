@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { answerDialog } from './dialogs'
 import { ALICE, BOB, createMockDb, installMockSupabase, seedEnvelope, signInAs } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
-import { addField } from './placeField'
+import { addField, placePickedField } from './placeField'
 
 let db
 
@@ -420,35 +420,90 @@ test.describe('on a phone', () => {
   })
 })
 
-test('signing alone: "Sign now" skips emailing yourself and emails the signed copy on finish', async ({ page }) => {
+test('signing alone: your real signature and today\'s date go on the page, and you finish right there', async ({ page }) => {
   await signInAs(page, ALICE)
   await page.goto('/')
   await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
   await expect(page.getByTestId('document-page').first()).toBeVisible()
   await page.getByLabel('I need to sign this document').check()
-  await addField(page, 'Signature')
-  await addField(page, 'Date signed')
 
-  await expect(page.getByRole('button', { name: 'Sign now' })).toBeVisible()
+  // Signature opens the Sign menu; with nothing saved yet, create one (it is saved for next time)
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  const menu = page.getByRole('menu', { name: 'Sign' })
+  await menu.getByRole('menuitem', { name: 'Create your signature…' }).click()
+  const pad = page.getByRole('dialog', { name: 'Your signature' })
+  await pad.getByRole('button', { name: 'Type', exact: true }).click()
+  await pad.getByPlaceholder('Your Name').fill('Alice Owner')
+  await pad.getByRole('button', { name: 'Adopt and sign' }).click()
+  await placePickedField(page)
+  const signature = page.locator('[data-field-type="signature"] img')
+  await expect(signature).toHaveAttribute('src', /^data:image\/png;base64,/)
+  await expect.poll(() => db.savedSignatures.length).toBe(1)
+
+  // Date stamp: today's date, as it will be printed
+  const today = await page.evaluate(() => new Intl.DateTimeFormat('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()))
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await expect(menu.getByRole('menuitem', { name: 'Place your signature' })).toBeVisible()
+  await menu.getByRole('menuitem', { name: today }).click()
+  await placePickedField(page)
+  await expect(page.locator('[data-field-type="date"] input')).toHaveValue(today)
+
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0)
   await page.getByTestId('send-copy').getByRole('button', { name: 'Add someone to email it to' }).click()
   await page.getByLabel('Recipient name').last().fill('Carol Client')
   await page.getByLabel('Recipient email').last().fill('carol@client.com')
 
-  await page.getByRole('button', { name: 'Sign now' }).click()
+  await page.getByRole('button', { name: 'Sign and finish' }).click()
   await answerDialog(page, { contains: 'emailed to you and to Carol Client' })
-  await expect(page).toHaveURL(/\/envelopes\/[^/]+\/sign$/)
-  expect(db.calls.find(c => c.action === 'send').body.signNow).toBe(true)
-  expect(db.emails).toEqual([])
-  expect(db.audit.filter(e => e.envelope_id === db.envelopes[0].id).map(e => e.action)).toContain('recipient_signing_in_app')
+  await expect(page.getByTestId('toast')).toContainText('Signed.')
+  await expect(page).toHaveURL(/\/envelopes\/[^/]+$/)
 
-  await page.getByLabel('I agree to use electronic records and signatures.').check()
-  await page.getByRole('button', { name: 'Continue' }).click()
-  await page.locator('[data-field-type="signature"]').click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Adopt and sign' }).click()
-  await page.getByRole('button', { name: 'Finish' }).click()
-  await expect(page.getByRole('heading', { name: /^You're done/ })).toBeVisible()
+  const env = db.envelopes[0]
+  expect(env.status).toBe('completed')
+  expect(db.calls.find(c => c.action === 'send').body.signNow).toBe(true)
+  const submit = db.calls.find(c => c.action === 'submit').body
+  expect(submit).toMatchObject({ envelopeId: env.id, consent: true })
+  expect(typeof submit.timeZone).toBe('string')
+  const fields = db.fields.filter(f => f.envelope_id === env.id)
+  expect(fields.find(f => f.type === 'signature').value).toMatch(/^data:image\/png;base64,/)
+  expect(fields.find(f => f.type === 'date').value).toBe(today)
+  expect(db.audit.filter(e => e.envelope_id === env.id).map(e => e.action)).toContain('recipient_signing_in_app')
+  // No link to yourself; the finished PDF to you and your copy recipient
   expect(db.emails.map(e => [e.to, e.kind]).sort()).toEqual([[ALICE.email, 'completed'], ['carol@client.com', 'completed']])
+  await expect(page.getByTestId('envelope-status')).toHaveText('Completed')
+})
+
+test('signing alone: a saved signature is one click away, and Sign and finish asks for anything missing', async ({ page }) => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAYAAAAb4BS0AAAAC0lEQVR4nGNgQAIAAA0AATBGj/4AAAAASUVORK5CYII='
+  db.savedSignatures.push({ id: crypto.randomUUID(), kind: 'signature', image: png, created_at: '2026-09-01T00:00:00Z' })
+  await signInAs(page, ALICE)
+  await page.goto('/')
+  await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+  await page.getByLabel('I need to sign this document').check()
+  await page.getByRole('button', { name: 'Signature', exact: true }).click()
+  await page.getByRole('menu', { name: 'Sign' }).getByRole('menuitem', { name: 'Place your signature' }).click()
+  await placePickedField(page)
+  await expect(page.locator('[data-field-type="signature"] img')).toHaveAttribute('src', png)
+
+  // A required text box left empty: finishing points at it instead
+  await addField(page, 'Text')
+  await page.getByRole('button', { name: 'Sign and finish' }).click()
+  await expect(page.getByRole('alert')).toContainText('Please complete: Text.')
+  expect(db.calls.some(c => c.action === 'send')).toBe(false)
+  await page.locator('[data-field-type="text"] input').fill('Co-Founder')
+
+  // Typed values survive a reload until you finish
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
+  await page.reload()
+  await expect(page.locator('[data-field-type="text"] input')).toHaveValue('Co-Founder')
+
+  await page.getByRole('button', { name: 'Sign and finish' }).click()
+  await answerDialog(page)
+  await expect(page.getByTestId('envelope-status')).toHaveText('Completed')
+  const fields = db.fields.filter(f => f.envelope_id === db.envelopes[0].id)
+  expect(fields.find(f => f.type === 'text').value).toBe('Co-Founder')
+  expect(fields.find(f => f.type === 'signature').value).toBe(png)
 })
 
 test('with another signer the button stays "Send"', async ({ page }) => {

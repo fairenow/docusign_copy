@@ -24,9 +24,11 @@ export default function GettingStarted({ draft, selfSign = false }) {
   const placed = signers.length > 0 && signers.every(r => draft.fields.some(f => f.recipientId === r.id))
   const steps = [
     { done: named, title: 'Add who signs', hint: 'Name and email for each signer, or tick "I need to sign this document".' },
-    { done: placed, title: 'Place their fields', hint: 'Pick a field on the left and click it onto the page, or use Suggest fields.' },
     selfSign
-      ? { done: false, title: 'Sign it', hint: 'Press Sign now at the top. The signed PDF is emailed to you and anyone you add below.' }
+      ? { done: placed, title: 'Sign and date it', hint: 'Signature on the left: pick your signature or today\'s date, click it onto the line, drag to fine-tune.' }
+      : { done: placed, title: 'Place their fields', hint: 'Pick a field on the left and click it onto the page, or use Suggest fields.' },
+    selfSign
+      ? { done: false, title: 'Finish', hint: 'Press Sign and finish at the top. The signed PDF is emailed to you and anyone you add below.' }
       : { done: false, title: 'Send', hint: 'Press Send at the top. Everyone gets an email with their own link.' }
   ]
 

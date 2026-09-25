@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { ADJUSTMENT_LIMITS, signerCanMove } from '../../supabase/functions/_shared/signing.js'
+import { ADJUSTMENT_LIMITS, signerCanMove, signingDate } from '../../supabase/functions/_shared/signing.js'
 
 export const SUPABASE_URL = 'https://e2e-test.supabase.co'
 export const STORAGE_KEY = 'sb-e2e-test-auth-token'
@@ -536,7 +536,8 @@ async function installMockSigningApi(page, db) {
         if (f.required && f.type !== 'date' && (v === undefined || v === '' || (f.type === 'checkbox' && v !== 'true'))) {
           return fail(400, `Please complete the required field: ${f.label || f.type}`)
         }
-        f.value = f.type === 'date' ? '09/24/2026' : v ?? null
+        // Like the database: today in the signer's time zone
+        f.value = f.type === 'date' ? signingDate(new Date(), body.timeZone) : v ?? null
       }
       recipient.status = 'signed'
       recipient.signed_at = now()

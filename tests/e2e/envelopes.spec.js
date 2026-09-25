@@ -193,7 +193,9 @@ test.describe('envelopes', () => {
 
     await expect(page.getByTestId('recipient')).toHaveCount(1)
     await expect(page.getByLabel('Recipient email')).toHaveValue('alice@flmlnk.com')
-    await expect(page.getByTestId('field').first()).toContainText('Alice Owner')
+    // Now yours: the date shows today, the signature waits for yours
+    await expect(page.locator('[data-field-type="signature"]')).toContainText('Click to sign')
+    await expect(page.locator('[data-field-type="date"] input')).toHaveValue(/^\d{2}\/\d{2}\/\d{4}$/)
     await expect(page.getByText('Everything is in place.')).toBeVisible()
   })
 

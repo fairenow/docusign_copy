@@ -9,10 +9,28 @@ const MAX_IMAGE_VALUE_LENGTH = 300000
 const MAX_TEXT_VALUE_LENGTH = 2000
 const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/
 
-/** "Date signed" as the server records it: the UTC date as MM/DD/YYYY. */
-export function signingDate(date = new Date()) {
-  const iso = date.toISOString()
-  return `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`
+/**
+ * "Date signed" as the server records it: MM/DD/YYYY in the signer's time zone (the browser's
+ * own zone by default; UTC if the zone is unknown).
+ */
+export function signingDate(date = new Date(), timeZone = localTimeZone()) {
+  let parts
+  try {
+    parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
+  } catch {
+    parts = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
+  }
+  const part = (type) => parts.find(p => p.type === type).value
+  return `${part('month')}/${part('day')}/${part('year')}`
+}
+
+/** The browser's IANA time zone, e.g. "America/Detroit" (undefined where unavailable). */
+export function localTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone
+  } catch {
+    return undefined
+  }
 }
 
 /** "Jane Q. Doe" -> "JQD" */

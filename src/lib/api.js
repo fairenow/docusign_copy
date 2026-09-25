@@ -6,6 +6,7 @@ import { supabase } from './supabase'
 import { fileToPdfBytes, stripExtension } from './documents'
 import { fieldToRow, recipientToRow } from './envelopeModel'
 import { peopleToRows, templateRolesToRows } from './templateModel'
+import { localTimeZone } from '../../supabase/functions/_shared/signing.js'
 
 const BUCKET = 'documents'
 const TEMPLATE_BUCKET = 'templates'
@@ -286,7 +287,8 @@ export async function convertDocumentToPdf(file) {
 
 /** A signer is identified by their link token, or (team members) by envelope id + session. */
 export const getSigningSession = (identity) => signingApi('session', identity)
-export const submitSigning = (identity, values, consent, positions = {}) => signingApi('submit', { ...identity, values, consent, positions })
+// The browser's time zone makes "Date signed" the signer's today, as the page shows it
+export const submitSigning = (identity, values, consent, positions = {}) => signingApi('submit', { ...identity, values, consent, positions, timeZone: localTimeZone() })
 export const declineSigning = (identity, reason) => signingApi('decline', { ...identity, reason })
 
 // signNow: you are about to sign it yourself in the app, so you are not emailed a link
