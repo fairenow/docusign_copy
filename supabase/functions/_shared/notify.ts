@@ -1,7 +1,7 @@
 import { emailConfig } from './config.ts'
 import { sendEmail } from './mail.ts'
 import { admin, audit, ownerOf, OWNER_SELECT } from './supabase.ts'
-import { reminderEmail, signingRequestEmail } from './emails.js'
+import { reminderEmail, signedEmail, signingRequestEmail } from './emails.js'
 
 export interface SigningLink {
   recipient_id: string
@@ -46,4 +46,33 @@ export async function emailSigningLinks(envelopeId: string, links: SigningLink[]
   results.forEach(r => { if (r.status === 'rejected') console.error(r.reason) })
   await audit(...failedEvents('delivery failed', failed))
   return { sent: links.length - failed.length, failed: failed.map(l => l.email) }
+}
+
+/**
+ * Tell the sender that someone signed and who is still to sign (unless the sender signed it
+ * themselves). Best effort: a failure is recorded in the audit trail.
+ */
+export async function emailSenderSigned(envelopeId: string, recipientId: string) {
+  const { data: envelope, error } = await admin
+    .from('envelopes')
+    .select(`title, ${OWNER_SELECT}, recipients (id, name, email, role, status)`)
+    .eq('id', envelopeId)
+    .single()
+  if (error) throw error
+  const owner = ownerOf(envelope)
+  // deno-lint-ignore no-explicit-any
+  const recipients = envelope.recipients as any[]
+  const signer = recipients.find(r => r.id === recipientId)
+  if (!signer || !owner.email || signer.email?.toLowerCase() === owner.email.toLowerCase()) return
+  const waitingOn = recipients.filter(r => r.role === 'signer' && r.status !== 'signed').map(r => r.name)
+  try {
+    const { appUrl, logoUrl } = emailConfig()
+    await sendEmail({
+      to: owner.email,
+      ...signedEmail({ ownerName: owner.name, recipientName: signer.name, title: envelope.title, waitingOn, link: `${appUrl}/envelopes/${envelopeId}`, logoUrl })
+    })
+  } catch (err) {
+    console.error(err)
+    await audit({ envelopeId, action: 'email_failed', details: { email: owner.email, kind: 'signed_notice' } })
+  }
 }

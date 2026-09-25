@@ -4,6 +4,7 @@
  * No Supabase or DOM access here, so it is covered by unit tests.
  */
 import { DEFAULT_FONT_SIZE, newId, placeField } from './fields'
+import { daysUntil, timeAgo } from './format'
 
 export const RECIPIENT_COLORS = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f']
 
@@ -284,6 +285,79 @@ export function envelopeGroup(envelope, user) {
     default:
       return 'closed' // declined / voided / expired: only under "All"
   }
+}
+
+// An envelope this close to expiring says so
+const EXPIRY_WARNING_DAYS = 3
+// Signing links can be resent by hand this often (the database enforces it too)
+export const REMIND_INTERVAL_MS = 10 * 60_000
+
+const latest = (dates) => dates.filter(Boolean).sort().at(-1) ?? null
+const namesOf = (people) => (people.length > 2
+  ? `${people.slice(0, 2).map(r => r.name).join(', ')} and ${people.length - 2} more`
+  : people.map(r => r.name).join(' and '))
+
+/**
+ * One line on where an envelope stands, for the dashboard:
+ * { text: 'Waiting on Carol · sent 3 days ago · not opened yet', tone: 'waiting' | 'warning' | 'done' | 'problem' | 'draft' }
+ */
+export function envelopeProgress(envelope, user, now = Date.now()) {
+  const recipients = envelope.recipients ?? []
+  const signers = recipients.filter(r => r.role === 'signer')
+  switch (envelope.status) {
+    case 'draft':
+      return { text: `Draft · edited ${timeAgo(envelope.updated_at, now)}`, tone: 'draft' }
+    case 'completed':
+      return { text: `Completed ${timeAgo(envelope.completed_at ?? envelope.updated_at, now)}`, tone: 'done' }
+    case 'declined': {
+      const who = recipients.find(r => r.status === 'declined')
+      return { text: `Declined by ${who?.name ?? 'a signer'} ${timeAgo(who?.declined_at ?? envelope.updated_at, now)}`, tone: 'problem' }
+    }
+    case 'voided':
+      return { text: `Voided ${timeAgo(envelope.voided_at ?? envelope.updated_at, now)}`, tone: 'problem' }
+    case 'expired':
+      return { text: `Expired ${timeAgo(envelope.expires_at ?? envelope.updated_at, now)}`, tone: 'problem' }
+    case 'sent': {
+      const waiting = currentSigners(envelope).filter(r => r.status !== 'declined')
+      const email = user?.email?.toLowerCase()
+      const mine = waiting.some(r => r.email?.toLowerCase() === email)
+      const others = waiting.filter(r => r.email?.toLowerCase() !== email)
+      const parts = []
+      const signed = signers.filter(r => r.status === 'signed').length
+      if (signers.length > 1) parts.push(`${signed} of ${signers.length} signed`)
+      parts.push(mine
+        ? (others.length ? `Waiting on you and ${namesOf(others)}` : 'Waiting on you')
+        : `Waiting on ${namesOf(waiting) || 'the signers'}`)
+      const sentAt = latest(waiting.map(r => r.sent_at)) ?? envelope.sent_at
+      if (sentAt) parts.push(`sent ${timeAgo(sentAt, now)}`)
+      if (!mine && waiting.length) {
+        const viewed = latest(waiting.map(r => r.viewed_at))
+        parts.push(viewed ? `opened ${timeAgo(viewed, now)}` : 'not opened yet')
+      }
+      const reminded = latest(waiting.map(r => r.last_reminded_at))
+      if (reminded && (!sentAt || reminded > sentAt)) parts.push(`reminded ${timeAgo(reminded, now)}`)
+      const days = envelope.expires_at ? daysUntil(envelope.expires_at, now) : null
+      const expiring = days !== null && days <= EXPIRY_WARNING_DAYS
+      if (expiring) parts.push(`expires ${days === 1 ? 'within a day' : `in ${days} days`}`)
+      return { text: parts.join(' · '), tone: expiring ? 'warning' : 'waiting' }
+    }
+    default:
+      return { text: '', tone: 'draft' }
+  }
+}
+
+/**
+ * Who a Remind would email now (the signers whose turn it is), and when it can next be sent:
+ * { recipients, availableAt } (availableAt is null when it can be sent now).
+ */
+export function remindTargets(envelope, user, now = Date.now()) {
+  if (envelope.status !== 'sent') return { recipients: [], availableAt: null }
+  const email = user?.email?.toLowerCase()
+  const recipients = currentSigners(envelope)
+    .filter(r => (r.status === 'sent' || r.status === 'viewed') && r.email?.toLowerCase() !== email)
+  const last = latest(recipients.map(r => r.last_reminded_at))
+  const next = last ? new Date(last).getTime() + REMIND_INTERVAL_MS : 0
+  return { recipients, availableAt: next > now ? next : null }
 }
 
 /**

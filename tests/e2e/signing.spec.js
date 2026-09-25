@@ -112,8 +112,8 @@ test('signer uses the emailed link: consent, guided fields, adopt signature, fin
   expect(byType.checkbox).toBe('true')
   expect(byType.date).toBeUndefined() // the server sets "Date signed"
 
-  // The next signer is emailed; the link cannot be reused
-  expect(db.emails.map(e => e.to)).toEqual(['dan@client.com'])
+  // The next signer is emailed and the sender hears who signed; the link cannot be reused
+  expect(db.emails.map(e => [e.to, e.kind])).toEqual([['dan@client.com', 'signing_request'], [ALICE.email, 'signed_notice']])
   await page.goto(`/sign/${token}`)
   await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible()
 })

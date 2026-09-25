@@ -52,8 +52,8 @@ export async function fetchProfile(userId) {
 // ---------------------------------------------------------------------------
 
 const OWNER_COLUMNS = 'owner:profiles!envelopes_owner_id_fkey (full_name, email)'
-const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, expires_at, updated_at, created_at, ' +
-  `recipients (id, name, email, role, routing_order, status, signed_at), ${OWNER_COLUMNS}`
+const LIST_COLUMNS = 'id, owner_id, title, status, signing_order, original_filename, page_count, final_path, sent_at, completed_at, expires_at, voided_at, updated_at, created_at, ' +
+  `recipients (id, name, email, role, routing_order, status, sent_at, viewed_at, signed_at, declined_at, last_reminded_at), ${OWNER_COLUMNS}`
 
 export async function listEnvelopes() {
   // Working copies used to edit a template are not envelopes to the user

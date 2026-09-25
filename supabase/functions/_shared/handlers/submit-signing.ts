@@ -3,7 +3,7 @@ import { PDFDocument } from 'pdf-lib'
 import { json, readJson, clientIp, userAgent, runInBackground, HttpError } from '../http.ts'
 import { rpc } from '../supabase.ts'
 import { signerArgs } from '../signer.ts'
-import { emailSigningLinks, type SigningLink } from '../notify.ts'
+import { emailSenderSigned, emailSigningLinks, type SigningLink } from '../notify.ts'
 import { finalizeOrRecordFailure } from '../finalize.ts'
 
 export async function submitSigning(req: Request): Promise<Response> {
@@ -21,7 +21,7 @@ export async function submitSigning(req: Request): Promise<Response> {
     if (typeof clean === 'string' && /^data:/i.test(clean)) await assertPng(clean)
   }
 
-  const result = await rpc<{ envelope_id: string; complete: boolean; notify: SigningLink[] }>('svc_complete_signing', {
+  const result = await rpc<{ envelope_id: string; recipient_id: string; complete: boolean; notify: SigningLink[] }>('svc_complete_signing', {
     ...(await signerArgs(req, body)),
     p_values: values,
     // Moved/resized fields; the database checks they are the signer's own and on the page
@@ -31,10 +31,14 @@ export async function submitSigning(req: Request): Promise<Response> {
     p_user_agent: userAgent(req)
   })
 
-  // The signature is recorded; emails and the final PDF happen after responding
+  // The signature is recorded; emails and the final PDF happen after responding. Until the
+  // last signature the sender hears about each one (the last one sends the finished PDF).
   runInBackground(result.complete
     ? finalizeOrRecordFailure(result.envelope_id)
-    : emailSigningLinks(result.envelope_id, result.notify))
+    : Promise.all([
+      emailSigningLinks(result.envelope_id, result.notify),
+      emailSenderSigned(result.envelope_id, result.recipient_id)
+    ]))
   return json({ complete: result.complete })
 }
 

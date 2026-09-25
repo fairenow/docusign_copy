@@ -115,6 +115,27 @@ export function completedEmail({ recipientName, title, link, logoUrl }) {
   }
 }
 
+/** To the sender after each signature, while others still have to sign. */
+export function signedEmail({ ownerName, recipientName, title, waitingOn, link, logoUrl }) {
+  const waiting = waitingOn.length ? waitingOn.join(', ') : 'the remaining signers'
+  const paragraphs = [
+    `Hi ${escapeHtml(ownerName)},`,
+    `${escapeHtml(recipientName)} signed <strong>${escapeHtml(title)}</strong>.`,
+    `Still waiting on: ${escapeHtml(waiting)}. You will get the completed document when everyone has signed.`
+  ]
+  return {
+    subject: `${recipientName} signed: ${title}`,
+    html: layout({
+      heading: `${escapeHtml(recipientName)} signed`,
+      paragraphs,
+      logoUrl,
+      button: { href: link, label: 'View envelope' },
+      footer: 'You are receiving this because you sent this envelope.'
+    }),
+    text: `Hi ${ownerName},\n\n${recipientName} signed "${title}".\nStill waiting on: ${waiting}.\n\nView envelope: ${link}`
+  }
+}
+
 export function declinedEmail({ ownerName, recipientName, title, reason, link, logoUrl }) {
   const paragraphs = [
     `Hi ${escapeHtml(ownerName)},`,

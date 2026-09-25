@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PDFDocument, StandardFonts, degrees } from 'pdf-lib'
-import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminderEmail, expiredEmail } from './emails.js'
+import { escapeHtml, signingRequestEmail, completedEmail, declinedEmail, reminderEmail, expiredEmail, signedEmail } from './emails.js'
 import { validateSigningValues, isFieldComplete, limitAdjustment } from './signing.js'
 import { loadPdf, stampFields, elementsFromFieldRows } from './pdfStamp.js'
 import { appendCertificate, wrap, formatTimestamp } from './certificate.js'
@@ -57,6 +57,14 @@ describe('emails', () => {
     expect(signingRequestEmail({ recipientName: 'A', senderName: 'B', title: 'T', link: 'https://x' }).html).not.toContain('border-left')
     expect(completedEmail({ recipientName: 'A', title: 'T' }).html).not.toContain('Open in FLMLNK Sign')
     expect(declinedEmail({ ownerName: 'O', recipientName: 'R', title: 'T', reason: 'Too <b>low</b>', link: 'https://x' }).html).toContain('Too &lt;b&gt;low')
+  })
+
+  it('tells the sender who signed and who is left, escaping names', () => {
+    const email = signedEmail({ ownerName: 'Sara', recipientName: 'Carol <Client>', title: 'NDA', waitingOn: ['Dave'], link: 'https://x/envelopes/1' })
+    expect(email.subject).toBe('Carol <Client> signed: NDA')
+    expect(email.html).toContain('Carol &lt;Client&gt; signed')
+    expect(email.html).not.toContain('<Client>')
+    expect(email.text).toContain('Still waiting on: Dave.')
   })
 })
 

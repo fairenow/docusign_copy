@@ -400,6 +400,7 @@ function issueTokens(db, env) {
     const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '').slice(0, 11)
     db.tokens.set(token, r.id)
     r.status = 'sent'
+    r.sent_at = now()
     db.emails.push({ to: r.email, kind: 'signing_request', link: `/sign/${token}`, token })
     addAudit(db, env.id, 'recipient_notified', r.id)
   }
@@ -448,6 +449,11 @@ async function installMockSigningApi(page, db) {
       }
       if (action === 'resend') {
         const r = db.recipients.find(x => x.id === body.recipientId && x.envelope_id === env.id)
+        // Like the database: at most once every 10 minutes per signer
+        if (r.last_reminded_at && Date.now() - Date.parse(r.last_reminded_at) < 10 * 60_000) {
+          return fail(409, `${r.name} was sent a link a few minutes ago. Try again in 10 minutes.`)
+        }
+        r.last_reminded_at = now()
         for (const [t, id] of db.tokens) if (id === r.id) db.tokens.delete(t)
         const token = 'resent' + randomUUID().replace(/-/g, '') + 'xxxxxx'
         db.tokens.set(token, r.id)
@@ -539,6 +545,9 @@ async function installMockSigningApi(page, db) {
         addAudit(db, env.id, 'envelope_completed')
       } else {
         issueTokens(db, env)
+        // The sender hears about each signature (not their own)
+        const owner = db.profiles.find(p => p.id === env.owner_id)
+        if (owner && owner.email !== recipient.email) db.emails.push({ to: owner.email, kind: 'signed_notice', signer: recipient.name })
       }
       return json(route, 200, { complete })
     }

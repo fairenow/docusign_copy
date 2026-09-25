@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } from 'lucide-react'
+import { BellRing, FilePlus, Trash2, Ban, RefreshCw, Download, LayoutTemplate, Search } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
-import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
+import { createEnvelopeFromFile, deleteDraft, downloadSignedPdf, listEnvelopes, resendSigningLink, subscribeToEnvelopeChanges, voidEnvelope } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { ACCEPTED_FILE_TYPES, CONVERTIBLE_EXTENSIONS } from '../lib/documents'
 import {
-  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes, isMine, matchesSearch, senderName
+  ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, envelopeProgress, groupEnvelopes, isMine,
+  matchesSearch, remindTargets, senderName
 } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
 import { useFeedback } from '../components/feedback/useFeedback'
@@ -14,6 +15,14 @@ import ErrorBanner from '../components/ErrorBanner'
 
 // A deleted draft can be brought back this long, then it is deleted for good
 const UNDO_DELETE_MS = 6000
+
+const PROGRESS_STYLES = {
+  waiting: 'text-gray-700',
+  warning: 'text-amber-700',
+  done: 'text-green-700',
+  problem: 'text-red-700',
+  draft: 'text-gray-500'
+}
 
 const STATUS_STYLES = {
   draft: 'bg-gray-200 text-gray-800',
@@ -39,6 +48,13 @@ export default function DashboardPage() {
   const { ask, notify } = useFeedback()
   // Drafts deleted a moment ago, hidden until the undo window passes
   const [hiddenIds, setHiddenIds] = useState(() => new Set())
+  // "sent 3 min ago" stays true while the page is open
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+  const [reminding, setReminding] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
@@ -123,6 +139,25 @@ export default function DashboardPage() {
     } catch (err) {
       notify(`Could not download: ${err.message}`, { tone: 'error' })
     }
+  }
+
+  // Email a fresh link to the signers whose turn it is
+  const handleRemind = async (envelope) => {
+    const { recipients } = remindTargets(envelope, user)
+    if (!recipients.length) return
+    setReminding(envelope.id)
+    const results = await Promise.allSettled(recipients.map(r => resendSigningLink(envelope.id, r.id)))
+    setReminding(null)
+    setNow(Date.now())
+    const at = new Date().toISOString()
+    const done = recipients.filter((_, i) => results[i].status === 'fulfilled')
+    setEnvelopes(list => list.map(e => (e.id !== envelope.id ? e : {
+      ...e,
+      recipients: e.recipients.map(r => (done.some(d => d.id === r.id) ? { ...r, last_reminded_at: at } : r))
+    })))
+    if (done.length) notify(`Reminded ${done.map(r => r.name).join(' and ')}.`)
+    const failed = results.find(r => r.status === 'rejected')
+    if (failed) notify(`Could not send a reminder: ${failed.reason.message}`, { tone: 'error' })
   }
 
   const handleVoid = async (envelope) => {
@@ -229,6 +264,9 @@ export default function DashboardPage() {
               envelope={envelope}
               user={user}
               isAdmin={isAdmin}
+              now={now}
+              reminding={reminding === envelope.id}
+              onRemind={() => handleRemind(envelope)}
               onDelete={() => handleDelete(envelope)}
               onVoid={() => handleVoid(envelope)}
               onDownload={() => handleDownload(envelope)}
@@ -242,9 +280,12 @@ export default function DashboardPage() {
   )
 }
 
-function EnvelopeRow({ envelope, user, isAdmin, onDelete, onVoid, onDownload }) {
+function EnvelopeRow({ envelope, user, isAdmin, now, reminding, onRemind, onDelete, onVoid, onDownload }) {
   const recipients = [...envelope.recipients].sort((a, b) => a.routing_order - b.routing_order)
   const updated = formatDateTime(envelope.updated_at)
+  const progress = envelopeProgress(envelope, user, now)
+  const remind = canVoid(envelope, user, isAdmin) ? remindTargets(envelope, user, now) : { recipients: [] }
+  const remindWait = remind.availableAt ? Math.ceil((remind.availableAt - now) / 60_000) : 0
 
   return (
     <li className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1.5 px-4 py-3 hover:bg-gray-50" data-testid="envelope-row">
@@ -256,6 +297,9 @@ function EnvelopeRow({ envelope, user, isAdmin, onDelete, onVoid, onDownload }) 
         {envelope.owner_id !== user?.id && (
           <p className="text-xs text-gray-600 truncate">Sent by {senderName(envelope)}</p>
         )}
+        {progress.text && (
+          <p className={`text-xs truncate ${PROGRESS_STYLES[progress.tone]}`} data-testid="envelope-progress">{progress.text}</p>
+        )}
         <p className="text-xs text-gray-500 truncate">
           {recipients.length
             ? recipients.map(r => `${RECIPIENT_STATUS[r.status]?.icon ?? ''} ${r.name}${r.role === 'cc' ? ' (cc)' : ''}`).join('   ')
@@ -266,6 +310,18 @@ function EnvelopeRow({ envelope, user, isAdmin, onDelete, onVoid, onDownload }) 
         {STATUS_LABELS[envelope.status]}
       </span>
       <span className="flex-1 sm:flex-none text-xs text-gray-500 sm:w-40 sm:text-right whitespace-nowrap">{updated}</span>
+      {remind.recipients.length > 0 && (
+        <button
+          onClick={onRemind}
+          disabled={reminding || remindWait > 0}
+          className="btn-secondary px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 whitespace-nowrap"
+          title={remindWait > 0
+            ? `Reminded a few minutes ago. You can remind again in ${remindWait} min.`
+            : `Email ${remind.recipients.map(r => r.name).join(' and ')} a new signing link`}
+        >
+          <BellRing size={13} /> {reminding ? 'Reminding…' : 'Remind'}
+        </button>
+      )}
       <div className="w-8 flex justify-end">
         {envelope.status === 'completed' && envelope.final_path && (
           <button onClick={onDownload} className="p-1.5 rounded text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Download signed PDF">
