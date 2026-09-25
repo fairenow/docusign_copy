@@ -9,8 +9,8 @@ import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
-import { FIELD_LABELS, nextFieldY, placeField } from '../lib/fields'
-import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '../lib/fieldSuggestions'
+import { FIELD_LABELS, clamp, nextFieldY, placeField } from '../lib/fields'
+import { assignSuggestions, companyFromEmail, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
@@ -78,14 +78,13 @@ export default function EnvelopeEditorPage() {
   const [action, setAction] = useState({ busy: null, error: null }) // busy: 'send' | 'finalize' | recipientId
   const [templateDialog, setTemplateDialog] = useState(null) // Save as template: null | 'open' | 'saved'
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
-  const { getLayout, getAllLayouts } = usePageLayouts(pdfDoc)
+  const { getAllLayouts } = usePageLayouts(pdfDoc)
   // Fields found on the document, waiting to be reviewed and added
   const [suggestions, setSuggestions] = useState(null)
   const [suggesting, setSuggesting] = useState(false)
   const [suggestNotice, setSuggestNotice] = useState(null)
   // Field type picked up from the toolbar, waiting to be clicked onto the page
   const [placingType, setPlacingType] = useState(null)
-  const [layouts, setLayouts] = useState([])
   // Set while a template copy is being saved back or discarded: nothing more is edited or saved
   const [leaving, setLeaving] = useState(false)
   const navigate = useNavigate()
@@ -250,28 +249,25 @@ export default function EnvelopeEditorPage() {
   }
 
   // With a mouse, a field type is picked up and follows the pointer until it is clicked onto
-  // the page (sitting on the line below it). Touch screens have no hover: it is added at once.
+  // the page. Touch screens have no hover: it is added at once.
   const addField = (type) => {
     const pageSize = pageSizes[currentPage - 1]
     if (!pageSize) return
     if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
       setPlacingType(current => (current === type ? null : type))
-      getAllLayouts().then(setLayouts)
       return
     }
     insertField(newField(type, { page: currentPage, pageSize }, signerForNewField(type), { y: nextFieldY(draft.fields, currentPage) }))
   }
 
-  // The rectangle a field being placed would take with the pointer at (x, y): its left edge at
-  // the pointer, centred vertically, then onto a line close below
+  // The rectangle a field being placed would take with the pointer at (x, y). Nothing snaps:
+  // the field goes exactly where the preview shows it. Its bottom-left corner is at the pointer,
+  // so pointing at the start of a line puts the field on it; a checkbox is centred on it.
   const placementRect = useCallback((type, pageNumber, x, y) => {
-    const pageSize = pageSizes[pageNumber - 1]
-    const { w, h } = placeField(type, { page: pageNumber, pageSize })
-    const rect = { x: Math.min(Math.max(x, 0), 1 - w), y: Math.min(Math.max(y - h / 2, 0), 1 - h), w, h }
-    const layout = layouts[pageNumber - 1]
-    const snapped = layout && type !== 'checkbox' ? snapToLine(rect, layout) : null
-    return snapped ? { ...rect, ...snapped } : rect
-  }, [pageSizes, layouts])
+    const { w, h } = placeField(type, { page: pageNumber, pageSize: pageSizes[pageNumber - 1] })
+    const [left, top] = type === 'checkbox' ? [x - w / 2, y - h / 2] : [x, y - h]
+    return { x: clamp(left, 0, 1 - w), y: clamp(top, 0, 1 - h), w, h }
+  }, [pageSizes])
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
   const selectField = useCallback((id) => {
@@ -283,18 +279,6 @@ export default function EnvelopeEditorPage() {
   const updateField = useCallback((id, patch) => {
     setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }), { coalesce: fieldStep(id) })
   }, [setDraft])
-
-  // A field dropped near a line sits on it (hold Alt to place it freely)
-  const snapField = useCallback(async (element, kind, event) => {
-    if (kind !== 'move' || event?.altKey || element.suggestion || element.type === 'checkbox') return
-    const layout = await getLayout(element.page)
-    if (!layout) return
-    setDraft(d => {
-      const field = d.fields.find(f => f.id === element.id)
-      const patch = field && snapToLine(field, layout)
-      return patch ? { ...d, fields: d.fields.map(f => (f.id === field.id ? { ...f, ...patch } : f)) } : d
-    }, { coalesce: fieldStep(element.id) }) // part of the move that ended here
-  }, [getLayout, setDraft])
 
   // Suggest fields ------------------------------------------------------------
   const suggest = async () => {
@@ -551,7 +535,7 @@ export default function EnvelopeEditorPage() {
 
       {placing && (
         <p role="status" className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-sm text-blue-900">
-          Click on the page to place the {FIELD_LABELS[placingType].toLowerCase()} field. Press Esc to cancel.
+          Click where the {FIELD_LABELS[placingType].toLowerCase()} field should start (its bottom-left corner follows the pointer). Press Esc to cancel.
         </p>
       )}
       {action.error && <ErrorBanner className="mx-4 mt-3">{action.error}</ErrorBanner>}
@@ -593,7 +577,6 @@ export default function EnvelopeEditorPage() {
             onSelectedIdChange={selectField}
             onUpdateElement={updateField}
             onDeleteElement={deleteField}
-            onElementGestureEnd={snapField}
             placing={placing}
           />
         )}
@@ -665,7 +648,7 @@ export default function EnvelopeEditorPage() {
                       {activeRecipient
                         ? <>Adding to the current page for <span className="font-medium" style={{ color: activeRecipient.color }}>{activeRecipient.name || 'this signer'}</span>. Pick a field on the left.</>
                         : 'Pick a field on the left and click it onto the page. Say who signs here, now or after placing fields.'}
-                      {' '}Fields snap onto the line you drop them on; hold Alt to place one freely.
+                      {' '}Drag a field to move it (Shift keeps it straight); arrow keys nudge it by one point.
                     </p>
                     <MessageField value={draft.message} onChange={(message) => update({ message }, 'message')} />
                     <ReminderSettings

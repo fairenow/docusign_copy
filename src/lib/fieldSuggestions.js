@@ -1,48 +1,15 @@
 /**
- * Field placement from a page's layout (see pageLayout.js): snap a field onto the line it was
- * dropped near, and suggest fields for the blank lines of a document.
+ * Suggest fields for the blank lines and placeholders of a document, from its page layouts
+ * (see pageLayout.js).
  *
  * Layout units are display points (origin top-left); fields use page fractions.
  * Pure functions, covered by unit tests.
  */
 
-// How far (in points) a field's bottom edge may be from a line to snap onto it
-const SNAP_DISTANCE = 12
 // Gap between a field and the line it sits on
 const GAP = 1
 
-const clamp = (v, min, max) => Math.min(Math.max(v, min), Math.max(min, max))
 const overlap = (a1, a2, b1, b2) => Math.min(a2, b2) - Math.max(a1, b1)
-
-/**
- * Move/resize a field so it sits on the nearest line below or at its bottom edge.
- * Returns { x, y, w } (fractions) or null when no line is close enough.
- */
-export function snapToLine(field, layout) {
-  const W = layout.width
-  const H = layout.height
-  const x = field.x * W
-  const w = field.w * W
-  const h = field.h * H
-  const bottom = (field.y + field.h) * H
-
-  let best = null
-  for (const line of layout.lines) {
-    const length = line.x2 - line.x1
-    if (overlap(x, x + w, line.x1, line.x2) < 0.4 * Math.min(w, length)) continue
-    const distance = Math.abs(bottom - line.y)
-    if (distance <= SNAP_DISTANCE && (!best || distance < best.distance)) best = { line, distance }
-  }
-  if (!best) return null
-
-  const { line } = best
-  const length = line.x2 - line.x1
-  const nw = Math.min(w, length - 2)
-  const nx = clamp(x, line.x1 + 1, line.x2 - 1 - nw)
-  const ny = line.y - GAP - h
-  if (ny < 0) return null
-  return { x: nx / W, y: ny / H, w: nw / W }
-}
 
 // ---------------------------------------------------------------------------
 // Suggestions

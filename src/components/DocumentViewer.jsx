@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import OverlayElement from './OverlayElement'
+import { nudgeRect } from '../lib/fieldGeometry'
 import { PageSkeletons } from './Skeleton'
 import { BASE_SCALE } from '../lib/viewer'
 // Pages are drawn when they come within this distance of the visible area
@@ -13,6 +14,8 @@ const RENDER_MARGIN = '1200px 0px'
  * renderField(element, { isSelected, scale, containerSize, onUpdate }) draws a field's content;
  * onActivateElement(element) runs when a field is clicked without being dragged, and
  * onElementGestureEnd(element, kind, event) when a move ('move') or resize ('resize') ends.
+ * Arrow keys move the selected field by 1 pt (Shift: 10 pt). constrainElement(element, rect)
+ * may limit where a field can be moved or resized to.
  * readOnly (or element.fixed for one field): fields can be selected but not moved, resized or
  * deleted. Without onDeleteElement, fields can be moved and resized but not deleted (e.g. a
  * signer adjusting their own fields).
@@ -33,6 +36,7 @@ export default function DocumentViewer({
   onDeleteElement,
   onActivateElement,
   onElementGestureEnd, // (element, kind, event) after a field was moved or resized
+  constrainElement,
   // Placing a new field: { rectAt(pageNumber, x, y) -> rect, render(rect), onPlace(pageNumber, rect) }.
   // The field follows the pointer as a preview and a click puts it there.
   placing = null,
@@ -75,13 +79,26 @@ export default function DocumentViewer({
   }, [onPageChange])
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
-  // Delete / Backspace removes the selected field (unless typing somewhere)
+  // Delete / Backspace removes the selected field and arrow keys nudge it (unless typing somewhere)
   useEffect(() => {
-    if (readOnly || !onDeleteElement) return
+    if (readOnly) return
     const onKeyDown = (e) => {
       if (!selectedId) return
       const tag = document.activeElement?.tagName
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.activeElement?.isContentEditable) return
+      const element = elements.find(el => el.id === selectedId)
+      const pageSize = element && pageSizes[element.page - 1]
+      if (e.key.startsWith('Arrow') && element && pageSize && !element.fixed && onUpdateElement) {
+        e.preventDefault()
+        const points = e.shiftKey ? 10 : 1
+        const next = nudgeRect(element, e.key, { x: points / pageSize.width, y: points / pageSize.height })
+        if (next) {
+          const { x, y } = constrainElement ? constrainElement(element, next) : next
+          onUpdateElement(element.id, { x, y })
+        }
+        return
+      }
+      if (!onDeleteElement) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault()
         onDeleteElement(selectedId)
@@ -92,7 +109,7 @@ export default function DocumentViewer({
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [readOnly, selectedId, setSelectedId, onDeleteElement])
+  }, [readOnly, selectedId, setSelectedId, onDeleteElement, onUpdateElement, constrainElement, elements, pageSizes])
 
   return (
     <div
@@ -123,7 +140,7 @@ export default function DocumentViewer({
           >
             <PageCanvas pdfDoc={pdfDoc} pageNumber={pageNumber} scale={scale} size={displaySize} />
             <div className="absolute inset-0">
-              {elements.filter(el => el.page === pageNumber).map(element => {
+              {elements.filter(el => el.page === pageNumber).map((element, _, onPage) => {
                 const isSelected = selectedId === element.id
                 const onUpdate = (updates) => onUpdateElement?.(element.id, updates)
                 return (
@@ -133,6 +150,8 @@ export default function DocumentViewer({
                     readOnly={readOnly || element.fixed}
                     containerSize={displaySize}
                     pageSize={size}
+                    neighbors={onPage.filter(other => other !== element && !other.suggestion)}
+                    constrain={constrainElement && ((rect) => constrainElement(element, rect))}
                     isSelected={isSelected}
                     onSelect={() => setSelectedId(element.id)}
                     onUpdate={onUpdate}

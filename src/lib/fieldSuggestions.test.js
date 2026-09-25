@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { snapToLine, suggestFields, assignSuggestions, classifyLabel, companyFromEmail } from './fieldSuggestions'
+import { suggestFields, assignSuggestions, classifyLabel, companyFromEmail } from './fieldSuggestions'
 import { mergeSegments } from './pageLayout'
 
 const word = (text, x1, baseline, size = 11) => ({ text, x1, x2: x1 + text.length * size * 0.5, baseline, size })
@@ -106,29 +106,6 @@ describe('labels', () => {
   it('knows the company from the email', () => {
     expect(companyFromEmail('alice@flmlnk.com')).toBe('flmlnk')
     expect(companyFromEmail(undefined)).toBe('')
-  })
-})
-
-describe('snapping', () => {
-  const line = { x1: 100, x2: 300, y: 651 }
-  const layout = { width: 612, height: 792, lines: [line], words: [] }
-  const field = (x, bottom, w = 110, h = 16) => ({ x: x / 612, y: (bottom - h) / 792, w: w / 612, h: h / 792 })
-
-  it('puts a field dropped near a line onto it', () => {
-    const patch = snapToLine(field(120, 640), layout) // 11pt above the line
-    expect(patch.y * 792 + 16).toBeCloseTo(650, 5)
-    expect(patch.x * 612).toBeCloseTo(120, 5)
-  })
-
-  it('keeps the field on the line and no wider than it', () => {
-    const patch = snapToLine(field(150, 655, 300), layout)
-    expect(patch.x * 612).toBeCloseTo(101, 5)
-    expect(patch.w * 612).toBeCloseTo(198, 5)
-  })
-
-  it('leaves fields far from any line where they are', () => {
-    expect(snapToLine(field(120, 600), layout)).toBeNull()
-    expect(snapToLine(field(400, 650), layout)).toBeNull()
   })
 })
 
