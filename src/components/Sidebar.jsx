@@ -5,6 +5,7 @@ import { Pen, Type, Calendar, Hash, CheckSquare, Sparkles } from 'lucide-react'
 import SignaturePanel from './SignaturePanel'
 import TextOptions from './TextOptions'
 import DetectedFieldsPanel from './DetectedFieldsPanel'
+import { useFeedback } from './feedback/useFeedback'
 
 export default function Sidebar({
   hasDocument,
@@ -24,6 +25,7 @@ export default function Sidebar({
   className = ''
 }) {
   const [showDetectedFields, setShowDetectedFields] = useState(true)
+  const { notify } = useFeedback()
 
   const togglePanel = (panel) => {
     onActivePanelChange(activePanel === panel ? null : panel)
@@ -32,7 +34,7 @@ export default function Sidebar({
   // Every add action needs a document to add to
   const requireDocument = (action) => (...args) => {
     if (!hasDocument) {
-      alert('Please upload a document first')
+      notify('Upload a document first.', { tone: 'info' })
       return
     }
     action(...args)

@@ -6,6 +6,7 @@ import { initialsOf } from '../../supabase/functions/_shared/signing.js'
 import SignaturePanel from '../components/SignaturePanel'
 import Modal from '../components/Modal'
 import ErrorBanner from '../components/ErrorBanner'
+import { useFeedback } from '../components/feedback/useFeedback'
 
 const KINDS = [
   { kind: 'signature', title: 'Signatures', noun: 'signature' },
@@ -19,6 +20,7 @@ export default function SignaturesPage() {
   const [creating, setCreating] = useState(null) // 'signature' | 'initials'
   const [error, setError] = useState(null)
   const name = profile?.full_name || ''
+  const { confirm } = useFeedback()
 
   const run = async (fn) => {
     setError(null)
@@ -60,7 +62,10 @@ export default function SignaturesPage() {
                   <li key={s.id} className="relative group bg-white border border-gray-200 rounded-lg h-24 p-3 flex items-center justify-center">
                     <img src={s.image} alt={`Saved ${noun} ${i + 1}`} className="max-h-full max-w-full object-contain" />
                     <button
-                      onClick={() => window.confirm(`Delete this ${noun}?`) && run(() => remove(s.id))}
+                      onClick={async () => {
+                        const sure = await confirm({ title: `Delete this ${noun}?`, confirmLabel: 'Delete', danger: true })
+                        if (sure) run(() => remove(s.id))
+                      }}
                       className="absolute top-1.5 right-1.5 p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50"
                       title={`Delete ${noun}`}
                     >

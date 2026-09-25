@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
+import { FeedbackProvider } from './components/feedback/FeedbackProvider'
 import RequireAuth from './auth/RequireAuth'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
@@ -43,7 +44,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <FeedbackProvider>
+        <RouterProvider router={router} />
+      </FeedbackProvider>
     </AuthProvider>
   </React.StrictMode>
 )

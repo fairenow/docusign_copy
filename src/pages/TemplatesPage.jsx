@@ -7,6 +7,7 @@ import { sortedRoles } from '../lib/templateModel'
 import { formatDateTime } from '../lib/format'
 import UseTemplateDialog from '../components/templates/UseTemplateDialog'
 import ErrorBanner from '../components/ErrorBanner'
+import { useFeedback } from '../components/feedback/useFeedback'
 
 /** Reusable documents: start an envelope with the fields already placed. */
 export default function TemplatesPage() {
@@ -16,6 +17,7 @@ export default function TemplatesPage() {
   const [using, setUsing] = useState(null)
   const [opening, setOpening] = useState(null)
   const navigate = useNavigate()
+  const { confirm, notify } = useFeedback()
 
   useEffect(() => {
     listTemplates().then(setTemplates, err => setError(err.message))
@@ -36,11 +38,18 @@ export default function TemplatesPage() {
   }
 
   const handleDelete = async (template) => {
-    if (!window.confirm(`Delete the template "${template.name}"? Envelopes already created from it are not affected.`)) return
+    const sure = await confirm({
+      title: `Delete "${template.name}"?`,
+      message: 'The template is removed for everyone. Envelopes already created from it are not affected.',
+      confirmLabel: 'Delete template',
+      danger: true
+    })
+    if (!sure) return
     setError(null)
     try {
       await deleteTemplate(template)
       setTemplates(list => list.filter(t => t.id !== template.id))
+      notify(`Deleted the template "${template.name}".`)
     } catch (err) {
       setError(err.message)
     }

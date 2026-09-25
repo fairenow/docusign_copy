@@ -115,3 +115,8 @@ body {
 .btn-secondary {
   @apply bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 disabled:opacity-50;
 }
+
+/* Destructive action button (delete, void, decline) */
+.btn-danger {
+  @apply bg-red-600 text-white font-medium hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed;
+}

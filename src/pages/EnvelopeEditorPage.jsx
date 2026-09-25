@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Download, LayoutTemplate, PenLine, RotateCw, Save, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, Download, LayoutTemplate, PenLine, Redo2, RotateCw, Save, Send, Sparkles, Undo2 } from 'lucide-react'
 import { useAuth } from '../auth/useAuth'
 import {
   cancelTemplateEdit, downloadDocument, downloadSignedPdf, fetchEnvelope, finishTemplateEdit, listAuditEvents, resendSigningLink,
@@ -15,6 +15,8 @@ import { assignSuggestions, companyFromEmail, snapToLine, suggestFields } from '
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
 import { usePdf } from '../hooks/usePdf'
+import { useUndoable } from '../hooks/useUndoable'
+import { useFeedback } from '../components/feedback/useFeedback'
 import { preloadPdfViewer } from '../lib/documents'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
 import DocumentViewer from '../components/DocumentViewer'
@@ -49,7 +51,11 @@ export default function EnvelopeEditorPage() {
   const [envelope, setEnvelope] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [pdfBytes, setPdfBytes] = useState(null)
-  const [draft, setDraft] = useState(null)
+  // The draft being edited, with undo/redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl+Y)
+  const [draft, setDraft, { undo, redo, reset: resetDraft, canUndo, canRedo }] = useUndoable(null)
+  const { confirm, notify } = useFeedback()
+  const draftRef = useRef(draft)
+  useEffect(() => { draftRef.current = draft }, [draft])
   const [savedDraft, setSavedDraft] = useState(null)
   const [saveState, setSaveState] = useState({ saving: false, problems: [], error: null })
   const [activeRecipientId, setActiveRecipientId] = useState(null)
@@ -82,11 +88,11 @@ export default function EnvelopeEditorPage() {
     const [loaded, activity] = await Promise.all([fetchEnvelope(envelopeId), listAuditEvents(envelopeId)])
     const next = draftFromEnvelope(loaded)
     setEnvelope(loaded)
-    setDraft(next)
+    resetDraft(next)
     setSavedDraft(next)
     setEvents(activity)
     return loaded
-  }, [envelopeId])
+  }, [envelopeId, resetDraft])
 
   useEffect(() => {
     let cancelled = false
@@ -150,7 +156,8 @@ export default function EnvelopeEditorPage() {
 
   useUnsavedChangesWarning(dirty)
 
-  const update = useCallback((patch) => setDraft(d => ({ ...d, ...patch })), [])
+  // `coalesce` makes a burst of changes (typing in one box) a single undo step
+  const update = useCallback((patch, coalesce) => setDraft(d => ({ ...d, ...patch }), { coalesce }), [setDraft])
 
   // Editing clears the previous save's error banner
   useEffect(() => {
@@ -170,19 +177,27 @@ export default function EnvelopeEditorPage() {
       // CC recipients receive a copy only, so their fields are removed
       const fields = patch.role === 'cc' ? d.fields.filter(f => f.recipientId !== id) : d.fields
       return { ...d, recipients, fields }
-    })
+    }, { coalesce: patch.role ? undefined : `recipient:${id}:${Object.keys(patch).join()}` })
     if (patch.role === 'cc' && activeRecipientId === id) setActiveRecipientId(null)
   }
 
+  // No "are you sure?": removing is one undo away, and the message offers it
   const removeRecipient = (id) => {
+    const recipient = draft.recipients.find(r => r.id === id)
     const count = draft.fields.filter(f => f.recipientId === id).length
-    if (count && !window.confirm(`Remove this recipient and their ${count} field${count > 1 ? 's' : ''}?`)) return
-    setDraft(d => ({
-      ...d,
-      recipients: renumberRecipients(d.recipients.filter(r => r.id !== id)),
-      fields: d.fields.filter(f => f.recipientId !== id)
-    }))
+    const next = {
+      ...draft,
+      recipients: renumberRecipients(draft.recipients.filter(r => r.id !== id)),
+      fields: draft.fields.filter(f => f.recipientId !== id)
+    }
+    setDraft(next)
     if (activeRecipientId === id) setActiveRecipientId(null)
+    if (count) {
+      notify(`Removed ${recipient?.name || 'the recipient'} and their ${count} field${count > 1 ? 's' : ''}.`, {
+        // Only while nothing else has changed; otherwise Undo would take back something else
+        action: { label: 'Undo', onClick: () => { if (draftRef.current === next) undo() } }
+      })
+    }
   }
 
   // "I need to sign this document": you are a signer, first in order by default
@@ -255,9 +270,10 @@ export default function EnvelopeEditorPage() {
     setTab(id ? 'field' : 'recipients')
   }, [])
 
+  // Dragging, resizing or typing into one field is one undo step
   const updateField = useCallback((id, patch) => {
-    setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }))
-  }, [])
+    setDraft(d => ({ ...d, fields: d.fields.map(f => (f.id === id ? { ...f, ...patch } : f)) }), { coalesce: `field:${id}` })
+  }, [setDraft])
 
   // A field dropped near a line sits on it (hold Alt to place it freely)
   const snapField = useCallback(async (element, kind, event) => {
@@ -268,8 +284,8 @@ export default function EnvelopeEditorPage() {
       const field = d.fields.find(f => f.id === element.id)
       const patch = field && snapToLine(field, layout)
       return patch ? { ...d, fields: d.fields.map(f => (f.id === field.id ? { ...f, ...patch } : f)) } : d
-    })
-  }, [getLayout])
+    }, { coalesce: `field:${element.id}` }) // part of the move that ended here
+  }, [getLayout, setDraft])
 
   // Esc puts back a field type that was picked up
   useEffect(() => {
@@ -318,7 +334,7 @@ export default function EnvelopeEditorPage() {
   const deleteField = useCallback((id) => {
     setDraft(d => ({ ...d, fields: d.fields.filter(f => f.id !== id) }))
     setSelectedFieldId(current => (current === id ? null : current))
-  }, [])
+  }, [setDraft])
 
   // Saving -------------------------------------------------------------------
   // Returns true once the current draft is stored
@@ -363,23 +379,30 @@ export default function EnvelopeEditorPage() {
     }
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (sendProblems.length) return
     const signers = draft.recipients.filter(r => r.role === 'signer')
     const first = draft.signingOrder === 'sequential' ? signers.slice(0, 1) : signers
     const who = first.map(r => r.name).join(', ')
-    if (!window.confirm(`Send "${draft.title}" for signature?\n\n${who} will be emailed a signing link${draft.signingOrder === 'sequential' && signers.length > 1 ? ' first; the others follow in order' : ''}.`)) return
+    const sure = await confirm({
+      title: `Send "${draft.title}" for signature?`,
+      message: `${who} will be emailed a signing link${draft.signingOrder === 'sequential' && signers.length > 1 ? ' first; the others follow in order' : ''}.`,
+      confirmLabel: 'Send'
+    })
+    if (!sure) return
     runAction('send', async () => {
       if (dirty && !(await save())) throw new Error('Fix the problems above, then send again.')
       const result = await sendEnvelope(envelopeId)
       await reload()
       if (result.failed?.length) throw new Error(`Sent, but the email to ${result.failed.join(', ')} could not be delivered. Use the resend button next to their name.`)
+      notify(`Sent. ${who} ${first.length > 1 ? 'have' : 'has'} been emailed a signing link.`)
     })
   }
 
   const handleResend = (recipient) => runAction(recipient.id, async () => {
     await resendSigningLink(envelopeId, recipient.id)
     await reload()
+    notify(`Emailed ${recipient.name} a new signing link.`)
   })
 
   const handleRetryFinalize = () => runAction('finalize', async () => {
@@ -414,8 +437,15 @@ export default function EnvelopeEditorPage() {
     navigate('/templates')
   })
 
-  const handleCancelTemplate = () => {
-    if (!window.confirm('Discard your changes to this template?')) return
+  const handleCancelTemplate = async () => {
+    const sure = await confirm({
+      title: 'Discard your changes?',
+      message: 'The template stays as it was before you opened it.',
+      confirmLabel: 'Discard changes',
+      cancelLabel: 'Keep editing',
+      danger: true
+    })
+    if (!sure) return
     runAction('template', async () => {
       setLeaving(true)
       try {
@@ -427,6 +457,25 @@ export default function EnvelopeEditorPage() {
       navigate('/templates')
     })
   }
+
+  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes. In a text box the browser's own undo
+  // (of the typing) applies instead.
+  const canEditNow = editable && !leaving
+  useEffect(() => {
+    if (!canEditNow) return
+    const onKeyDown = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      const target = e.target
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+      e.preventDefault()
+      if (key === 'y' || e.shiftKey) redo()
+      else undo()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [canEditNow, undo, redo])
 
   // Ctrl/Cmd+S saves
   useEffect(() => {
@@ -510,7 +559,7 @@ export default function EnvelopeEditorPage() {
           {editable ? (
             <input
               value={draft.title}
-              onChange={(e) => update({ title: e.target.value })}
+              onChange={(e) => update({ title: e.target.value }, 'title')}
               maxLength={200}
               className="w-full max-w-xl bg-transparent text-base text-gray-900 font-semibold outline-none rounded px-1 -mx-1 hover:bg-gray-50 focus:bg-gray-50"
               aria-label={editingTemplate ? 'Template name' : 'Envelope title'}
@@ -610,6 +659,28 @@ export default function EnvelopeEditorPage() {
           onPageChange={setCurrentPage}
           onZoomChange={setZoom}
         />
+        {editable && (
+          <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label="History">
+            <button
+              onClick={undo}
+              disabled={!canUndo || leaving}
+              className="p-1.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+              title="Undo (Ctrl+Z)"
+              aria-label="Undo"
+            >
+              <Undo2 size={17} />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo || leaving}
+              className="p-1.5 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+              title="Redo (Ctrl+Shift+Z)"
+              aria-label="Redo"
+            >
+              <Redo2 size={17} />
+            </button>
+          </div>
+        )}
         {editable && (
           <button
             onClick={suggest}
@@ -740,7 +811,7 @@ export default function EnvelopeEditorPage() {
                         : 'Pick a field on the left and click it onto the page. Say who signs here, now or after placing fields.'}
                       {' '}Fields snap onto the line you drop them on; hold Alt to place one freely.
                     </p>
-                    <MessageField value={draft.message} onChange={(message) => update({ message })} />
+                    <MessageField value={draft.message} onChange={(message) => update({ message }, 'message')} />
                     <ReminderSettings
                       remindEveryDays={draft.remindEveryDays}
                       expireAfterDays={draft.expireAfterDays}

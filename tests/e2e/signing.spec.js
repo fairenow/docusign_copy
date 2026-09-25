@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { answerDialog } from './dialogs'
 import { ALICE, BOB, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 import { addField } from './placeField'
@@ -54,11 +55,8 @@ test('owner sends an envelope; only the first signer is emailed in sequential or
   }
   await expect(page.getByText('Everything is in place.')).toBeVisible()
 
-  page.once('dialog', d => {
-    expect(d.message()).toContain('Bob Teammate will be emailed a signing link first')
-    d.accept()
-  })
   await page.getByRole('button', { name: 'Send' }).click()
+  await answerDialog(page, { contains: 'Bob Teammate will be emailed a signing link first' })
 
   await expect(page.getByTestId('envelope-status')).toHaveText('Out for signature')
   // Unsaved edits were saved before sending
@@ -134,8 +132,8 @@ test('shows why a link cannot be used: waiting for an earlier signer, invalid', 
 test('signer can decline with a reason', async ({ page }) => {
   const { id, token } = await seedSent({ signers: [{ name: 'Carol Client', email: 'carol@client.com' }] })
   await page.goto(`/sign/${token}`)
-  page.once('dialog', d => d.accept('Salary is wrong'))
   await page.getByRole('button', { name: 'Decline to sign' }).click()
+  await answerDialog(page, { text: 'Salary is wrong' })
   await expect(page.getByRole('heading', { name: 'You declined to sign' })).toBeVisible()
   expect(db.envelopes.find(e => e.id === id).status).toBe('declined')
   expect(db.recipients.find(r => r.envelope_id === id).decline_reason).toBe('Salary is wrong')
@@ -205,7 +203,6 @@ test('"I need to sign this document" adds you as the first signer', async ({ pag
   expect(save.p_fields[0].recipient_id).toBe(save.p_recipients[0].id)
 
   // Unchecking removes you (and your fields)
-  page.once('dialog', d => d.accept())
   await page.getByLabel('I need to sign this document').uncheck()
   await expect(page.getByTestId('recipient')).toHaveCount(1)
   await expect(page.getByTestId('field')).toHaveCount(0)
@@ -237,8 +234,8 @@ test('team members save a signature once and reuse it; manage it on My signature
   // My signatures lists it and can delete it
   await page.goto('/signatures')
   await expect(page.getByRole('img', { name: 'Saved signature 1' })).toBeVisible()
-  page.once('dialog', d => d.accept())
   await page.getByTitle('Delete signature').click()
+  await answerDialog(page)
   await expect(page.getByTestId('saved-signature')).toContainText('No saved signature yet')
   expect(db.savedSignatures).toHaveLength(0)
 })

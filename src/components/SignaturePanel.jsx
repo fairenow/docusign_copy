@@ -68,22 +68,13 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
     setTypedName('')
   }
 
+  // Nothing to apply until something is drawn or typed
+  const ready = mode === 'draw' ? hasInk : Boolean(typedName.trim())
+
   const handleApply = async () => {
-    let result
-    if (mode === 'draw') {
-      result = hasInk ? trimCanvas(canvasRef.current) : null
-      if (!result) {
-        alert('Please draw your signature first')
-        return
-      }
-    } else {
-      if (!typedName.trim()) {
-        alert('Please type your name')
-        return
-      }
-      result = await renderTypedSignature(typedName.trim())
-    }
-    onApply(result)
+    if (!ready) return
+    const result = mode === 'draw' ? trimCanvas(canvasRef.current) : await renderTypedSignature(typedName.trim())
+    if (result) onApply(result)
   }
 
   const tabClass = (active) =>
@@ -128,7 +119,12 @@ export default function SignaturePanel({ onApply, defaultTypedName = '', applyLa
         <button onClick={clear} className="flex-1 py-2 px-3 bg-gray-200 text-gray-800 rounded-lg text-sm hover:bg-gray-300 transition-all">
           Clear
         </button>
-        <button onClick={handleApply} className="flex-1 py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all">
+        <button
+          onClick={handleApply}
+          disabled={!ready}
+          title={ready ? undefined : mode === 'draw' ? 'Draw your signature first' : 'Type your name first'}
+          className="flex-1 py-2 px-3 bg-green-600 text-white rounded-lg text-sm hover:bg-green-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           {applyLabel}
         </button>
       </div>

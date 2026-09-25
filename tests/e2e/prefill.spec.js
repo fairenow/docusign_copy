@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { answerDialog } from './dialogs'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase } from './mockSupabase'
 import { pdfFile } from './fixtures'
 import { addField } from './placeField'
@@ -37,8 +38,8 @@ test('the sender fills in the other company\'s name; signers see it but cannot c
   await box.fill('Acme Holdings LLC')
   await expect(page.getByText('Everything is in place.')).toBeVisible()
 
-  page.once('dialog', d => d.accept())
   await page.getByRole('button', { name: 'Send' }).click()
+  await answerDialog(page)
   await expect(page.getByTestId('envelope-status')).toHaveText('Out for signature')
 
   const save = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body

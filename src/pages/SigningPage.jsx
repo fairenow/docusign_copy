@@ -5,6 +5,7 @@ import { declineSigning, getSigningSession, submitSigning } from '../lib/api'
 import { usePdf } from '../hooks/usePdf'
 import { fitWidthZoom } from '../lib/viewer'
 import { preloadPdfViewer } from '../lib/documents'
+import { useFeedback } from '../components/feedback/useFeedback'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
 import { useAuth } from '../auth/useAuth'
 import { isFieldComplete, validateSigningValues, signingDate, initialsOf, fieldLabel, limitAdjustment, signerCanMove } from '../../supabase/functions/_shared/signing.js'
@@ -51,6 +52,7 @@ export default function SigningPage() {
   const { doc: pdfDoc, pageSizes, error: pdfError } = usePdf(pdfBytes)
   // Team members signing as themselves can reuse and save signatures
   const { user } = useAuth()
+  const { ask } = useFeedback()
   const canSaveSignatures = Boolean(user?.email && session?.recipient?.email &&
     user.email.toLowerCase() === session.recipient.email.toLowerCase())
   const { saved: savedSignatures, save: saveSignature } = useSavedSignatures(canSaveSignatures)
@@ -213,7 +215,14 @@ export default function SigningPage() {
   }
 
   const handleDecline = async () => {
-    const reason = window.prompt('Decline to sign? The sender will be notified and the envelope will be closed.\n\nReason (optional):')
+    const reason = await ask({
+      title: 'Decline to sign?',
+      message: 'The sender will be told, and no one else will be able to sign this envelope.',
+      label: 'Reason (optional)',
+      placeholder: 'e.g. The dates in section 2 are wrong',
+      confirmLabel: 'Decline',
+      danger: true
+    })
     if (reason === null) return
     setBusy(true)
     setError(null)

@@ -9,7 +9,11 @@ import {
   ENVELOPE_GROUPS, RECIPIENT_STATUS, STATUS_LABELS, canDelete, canVoid, envelopeGroup, groupEnvelopes, isMine, matchesSearch, senderName
 } from '../lib/envelopeModel'
 import LoadingOverlay from '../components/LoadingOverlay'
+import { useFeedback } from '../components/feedback/useFeedback'
 import ErrorBanner from '../components/ErrorBanner'
+
+// A deleted draft can be brought back this long, then it is deleted for good
+const UNDO_DELETE_MS = 6000
 
 const STATUS_STYLES = {
   draft: 'bg-gray-200 text-gray-800',
@@ -32,6 +36,9 @@ export default function DashboardPage() {
   // Admins see everyone's envelopes; "Mine" narrows that to what they sent or were sent
   const [scope, setScope] = useState('mine') // 'mine' | 'everyone'
   const [query, setQuery] = useState('')
+  const { ask, notify } = useFeedback()
+  // Drafts deleted a moment ago, hidden until the undo window passes
+  const [hiddenIds, setHiddenIds] = useState(() => new Set())
 
   const refresh = useCallback(async () => {
     try {
@@ -57,8 +64,8 @@ export default function DashboardPage() {
   }, [refresh])
 
   const shown = useMemo(() => (envelopes ?? []).filter(e =>
-    (!isAdmin || scope === 'everyone' || isMine(e, user)) && matchesSearch(e, query)
-  ), [envelopes, isAdmin, scope, user, query])
+    !hiddenIds.has(e.id) && (!isAdmin || scope === 'everyone' || isMine(e, user)) && matchesSearch(e, query)
+  ), [envelopes, hiddenIds, isAdmin, scope, user, query])
   const groups = useMemo(() => groupEnvelopes(shown, user), [shown, user])
   const visible = groups[group]
 
@@ -72,39 +79,67 @@ export default function DashboardPage() {
       const id = await createEnvelopeFromFile(file)
       navigate(`/envelopes/${id}`)
     } catch (err) {
-      alert('Could not create the envelope: ' + err.message)
+      notify(`Could not create the envelope: ${err.message}`, { tone: 'error' })
       setBusy(null)
     }
   }
 
-  const handleDelete = async (envelope) => {
+  // Deleting hides the draft at once and offers Undo; it is deleted when that runs out (even
+  // if you have moved to another page meanwhile)
+  const setHidden = (id, hidden) => setHiddenIds(ids => {
+    const next = new Set(ids)
+    if (hidden) next.add(id)
+    else next.delete(id)
+    return next
+  })
+
+  const handleDelete = (envelope) => {
     const whose = envelope.owner_id === user?.id ? '' : ` by ${senderName(envelope)}`
-    if (!window.confirm(`Delete the draft "${envelope.title}"${whose}? This cannot be undone.`)) return
-    try {
-      await deleteDraft(envelope)
-      // Update locally; Realtime will also trigger a refetch
-      setEnvelopes(list => list.filter(e => e.id !== envelope.id))
-    } catch (err) {
-      alert('Could not delete the draft: ' + err.message)
-    }
+    setHidden(envelope.id, true)
+    const timer = setTimeout(async () => {
+      try {
+        await deleteDraft(envelope)
+        setEnvelopes(list => list?.filter(e => e.id !== envelope.id))
+      } catch (err) {
+        notify(`Could not delete "${envelope.title}": ${err.message}`, { tone: 'error' })
+      }
+      setHidden(envelope.id, false)
+    }, UNDO_DELETE_MS)
+    notify(`Deleted the draft "${envelope.title}"${whose}.`, {
+      duration: UNDO_DELETE_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          clearTimeout(timer)
+          setHidden(envelope.id, false)
+        }
+      }
+    })
   }
 
   const handleDownload = async (envelope) => {
     try {
       await downloadSignedPdf(envelope)
     } catch (err) {
-      alert('Could not download: ' + err.message)
+      notify(`Could not download: ${err.message}`, { tone: 'error' })
     }
   }
 
   const handleVoid = async (envelope) => {
-    const reason = window.prompt(`Void "${envelope.title}"? Signers will no longer be able to sign it.\n\nReason (optional):`)
+    const reason = await ask({
+      title: `Void "${envelope.title}"?`,
+      message: 'Signers will no longer be able to open or sign it. This cannot be undone.',
+      label: 'Reason (optional, shown in the activity)',
+      confirmLabel: 'Void envelope',
+      danger: true
+    })
     if (reason === null) return
     try {
       const voided = await voidEnvelope(envelope.id, reason)
       setEnvelopes(list => list.map(e => (e.id === envelope.id ? { ...e, ...voided, recipients: e.recipients } : e)))
+      notify(`Voided "${envelope.title}".`)
     } catch (err) {
-      alert('Could not void the envelope: ' + err.message)
+      notify(`Could not void the envelope: ${err.message}`, { tone: 'error' })
     }
   }
 

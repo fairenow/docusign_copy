@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { answerDialog } from './dialogs'
 import { STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
 import { addField } from './placeField'
@@ -76,8 +77,8 @@ test('save a prepared envelope as a template, then start a new envelope from it'
 
   // Delete the template
   await page.goto('/templates')
-  page.once('dialog', d => d.accept())
   await page.getByTitle('Delete template').click()
+  await answerDialog(page)
   await expect(page.getByText('No templates yet.')).toBeVisible()
   expect(db.files.has(`templates/${template.id}/original.pdf`)).toBe(false)
 })
@@ -197,8 +198,8 @@ test('cancelling a template edit leaves the template as it was', async ({ page }
   await page.getByLabel('Template name').fill('Changed')
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
 
-  page.once('dialog', d => d.accept())
   await page.getByRole('button', { name: 'Cancel' }).click()
+  await answerDialog(page)
   await expect(page).toHaveURL(/\/templates$/)
   await expect(page.getByTestId('template-row')).toContainText('NDA template')
   expect(db.templates[0].name).toBe('NDA template')

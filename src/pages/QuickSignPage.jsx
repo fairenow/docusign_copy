@@ -7,6 +7,7 @@ import FillField from '../components/FillField'
 import FileDropzone from '../components/FileDropzone'
 import Toolbar from '../components/Toolbar'
 import LoadingOverlay from '../components/LoadingOverlay'
+import { useFeedback } from '../components/feedback/useFeedback'
 import Modal from '../components/Modal'
 import SignaturePanel from '../components/SignaturePanel'
 import { useDocument } from '../hooks/useDocument'
@@ -73,10 +74,11 @@ export default function QuickSignPage() {
   }, [pageSizes])
 
   useUnsavedChangesWarning(elements.length > 0)
+  const { ask, confirm, notify } = useFeedback()
 
   useEffect(() => {
-    if (documentError) alert('Error opening document: ' + documentError.message)
-  }, [documentError])
+    if (documentError) notify(`Could not open the document: ${documentError.message}`, { tone: 'error' })
+  }, [documentError, notify])
 
   const addElement = useCallback((type, props = {}) => {
     const pageSize = pageSizes[currentPage - 1]
@@ -95,19 +97,21 @@ export default function QuickSignPage() {
     setElements(prev => prev.filter(el => el.id !== id))
   }, [])
 
-  const clearAllElements = useCallback(() => {
-    if (window.confirm('Remove all added fields?')) setElements([])
-  }, [])
+  const clearAllElements = useCallback(async () => {
+    if (await confirm({ title: 'Remove all fields?', message: 'Everything you added to the document is removed.', confirmLabel: 'Remove all', danger: true })) {
+      setElements([])
+    }
+  }, [confirm])
 
   const getInitials = useCallback(async () => {
     if (savedInitials) return savedInitials
-    const text = window.prompt('Enter your initials:')?.trim()
+    const text = await ask({ title: 'Your initials', label: 'Initials', placeholder: 'e.g. JD', confirmLabel: 'Use initials', multiline: false, maxLength: 10, required: true })
     if (!text) return null
     const image = await renderTypedSignature(text)
     const initials = { ...image, text }
     setSavedInitials(initials)
     return initials
-  }, [savedInitials])
+  }, [savedInitials, ask])
 
   // From the sidebar: a new signature field on the current page
   const handleSignatureCreated = useCallback((signature) => {
@@ -154,7 +158,12 @@ export default function QuickSignPage() {
   }, [pageSizes, savedInitials])
 
   const handleFileLoad = async (uploadedFile) => {
-    if (elements.length && !window.confirm('Loading a new document will discard the fields you placed. Continue?')) {
+    if (elements.length && !(await confirm({
+      title: 'Open another document?',
+      message: 'The fields you placed on this one will be discarded.',
+      confirmLabel: 'Open document',
+      danger: true
+    }))) {
       return
     }
     setLoading(true)
@@ -165,7 +174,7 @@ export default function QuickSignPage() {
       setZoom(1)
     } catch (err) {
       console.error(err)
-      alert('Error loading file: ' + err.message)
+      notify(`Could not open the file: ${err.message}`, { tone: 'error' })
     }
     setLoading(false)
   }
@@ -175,7 +184,7 @@ export default function QuickSignPage() {
     const incomplete = findIncompleteElements(elements)
     if (incomplete.length) {
       setCurrentPage(incomplete[0].page)
-      alert(`${incomplete.length} signature/initials field${incomplete.length > 1 ? 's are' : ' is'} still empty. Click the highlighted field to sign, or remove it.`)
+      notify(`${incomplete.length} signature/initials field${incomplete.length > 1 ? 's are' : ' is'} still empty. Click the highlighted field to sign, or remove it.`, { tone: 'info' })
       return
     }
 
@@ -185,7 +194,7 @@ export default function QuickSignPage() {
       downloadPdf(bytes, file.name)
     } catch (err) {
       console.error('Download error:', err)
-      alert('Error generating PDF: ' + err.message)
+      notify(`Could not create the PDF: ${err.message}`, { tone: 'error' })
     }
     setLoading(false)
   }

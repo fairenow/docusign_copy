@@ -45,14 +45,11 @@ test('an admin sees their own envelopes, or everyone\'s, and can manage a teamma
   await expect(rows(page)).toHaveCount(3)
   await page.getByLabel('Search envelopes').fill('')
 
-  // Deleting a teammate's draft says whose it is
-  page.once('dialog', d => {
-    expect(d.message()).toContain('"Bob draft" by Bob Teammate')
-    d.accept()
-  })
+  // Deleting a teammate's draft says whose it is, and can be undone for a few seconds
   await rows(page).filter({ hasText: 'Bob draft' }).getByTitle('Delete draft').click()
+  await expect(page.getByTestId('toast')).toContainText('"Bob draft" by Bob Teammate')
   await expect(rows(page)).toHaveCount(3)
-  expect(db.envelopes.some(e => e.title === 'Bob draft')).toBe(false)
+  await expect.poll(() => db.envelopes.some(e => e.title === 'Bob draft'), { timeout: 10_000 }).toBe(false)
 
   // Opening it: read-only, shows the sender, and a signer can be sent a new link
   await bobNda.getByRole('link').click()

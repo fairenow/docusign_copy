@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { answerDialog } from './dialogs'
 import { PDFDocument } from 'pdf-lib'
 import { ALICE, STORAGE_KEY, createMockDb, fakeSession, installMockSupabase, seedEnvelope } from './mockSupabase'
 import { makePdf, pdfFile } from './fixtures'
@@ -228,12 +229,12 @@ test.describe('envelopes', () => {
     await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
     await page.getByLabel('Envelope title').fill('Changed title')
 
-    page.once('dialog', d => d.dismiss())
     await page.getByTitle('Back to envelopes').click()
+    await answerDialog(page, { accept: false, contains: 'Leave without saving?' })
     await expect(page.getByLabel('Envelope title')).toHaveValue('Changed title')
 
-    page.once('dialog', d => d.accept())
     await page.getByTitle('Back to envelopes').click()
+    await answerDialog(page)
     await expect(page.getByRole('heading', { name: 'Envelopes' })).toBeVisible()
   })
 
@@ -253,20 +254,70 @@ test.describe('envelopes', () => {
     await page.getByLabel('Recipient role').selectOption('signer')
     await page.getByLabel('Select Bob').click()
     await addField(page, 'Text')
-    page.once('dialog', d => d.accept())
     await page.getByTitle('Remove recipient').click()
     await expect(page.getByTestId('recipient')).toHaveCount(0)
     await expect(page.getByTestId('field')).toHaveCount(0)
+    // No "are you sure?": the message offers Undo, which brings both back
+    await expect(page.getByTestId('toast')).toContainText('Removed Bob and their 1 field.')
+    await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByTestId('recipient')).toHaveCount(1)
+    await expect(page.getByTestId('field')).toHaveCount(1)
+  })
+
+  test('undo and redo changes to the draft, from the toolbar or the keyboard', async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('new-envelope-input').setInputFiles(await pdfFile())
+    await expect(page.getByTestId('document-page').first()).toBeVisible()
+    const undo = page.getByRole('button', { name: 'Undo' })
+    const redo = page.getByRole('button', { name: 'Redo' })
+    await expect(undo).toBeDisabled()
+
+    await addField(page, 'Signature')
+    await addField(page, 'Date signed')
+    await expect(page.getByTestId('field')).toHaveCount(2)
+    await undo.click()
+    await expect(page.getByTestId('field')).toHaveCount(1)
+    await redo.click()
+    await expect(page.getByTestId('field')).toHaveCount(2)
+
+    // Typing the title is one step, undone outside the text box with Ctrl+Z
+    await page.getByLabel('Envelope title').fill('Offer letter')
+    await page.getByLabel('Envelope title').pressSequentially(' v2')
+    await page.getByTestId('document-page').first().click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Control+z')
+    await expect(page.getByLabel('Envelope title')).toHaveValue('Mutual NDA')
+    await page.keyboard.press('Control+Shift+z')
+    await expect(page.getByLabel('Envelope title')).toHaveValue('Offer letter v2')
+
+    // Undone changes are saved like any other
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+z')
+    await expect(page.getByTestId('field')).toHaveCount(1)
+    await expect(page.getByTestId('save-status')).toHaveText('All changes saved')
+    const saved = db.calls.filter(c => c.table === 'rpc/save_envelope_draft').pop().body
+    expect(saved).toMatchObject({ p_title: 'Mutual NDA' })
+    expect(saved.p_fields).toHaveLength(1)
+  })
+
+  test('deleting a draft can be undone for a few seconds', async ({ page }) => {
+    const pdf = await makePdf()
+    seedEnvelope(db, { pdf, status: 'draft', title: 'Old draft' })
+    await page.goto('/')
+    await page.getByTitle('Delete draft').click()
+    await expect(page.getByText('No envelopes yet.')).toBeVisible()
+    await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByTestId('envelope-row')).toContainText('Old draft')
+    await page.waitForTimeout(6500)
+    expect(db.envelopes).toHaveLength(1)
   })
 
   test('deletes a draft and its stored document', async ({ page }) => {
     const pdf = await makePdf()
     const id = seedEnvelope(db, { pdf, status: 'draft', title: 'Old draft' })
     await page.goto('/')
-    page.once('dialog', d => d.accept())
     await page.getByTitle('Delete draft').click()
     await expect(page.getByText('No envelopes yet.')).toBeVisible()
-    expect(db.envelopes).toHaveLength(0)
+    await expect.poll(() => db.envelopes.length, { timeout: 10_000 }).toBe(0)
     expect(db.files.has(`documents/${id}/original.pdf`)).toBe(false)
   })
 
@@ -296,8 +347,8 @@ test.describe('envelopes', () => {
     await expect(page.getByTestId('field')).toHaveCount(1)
 
     await page.getByTitle('Back to envelopes').click()
-    page.once('dialog', d => d.accept('Wrong salary'))
     await page.getByTitle('Void envelope').click()
+    await answerDialog(page, { text: 'Wrong salary' })
     await page.getByRole('tab', { name: /^All/ }).click()
     await expect(page.getByTestId('envelope-row')).toContainText('Voided')
     expect(db.envelopes[0]).toMatchObject({ status: 'voided', void_reason: 'Wrong salary' })
@@ -342,11 +393,8 @@ test('Word documents are converted on the server, exactly as LibreOffice lays th
 
 test('Quick sign asks you to sign in before converting a Word document', async ({ page }) => {
   await page.goto('/quick-sign')
-  page.once('dialog', d => {
-    expect(d.message()).toContain('Sign in to upload Word documents, or upload a PDF instead.')
-    d.accept()
-  })
   await page.getByTestId('file-input').setInputFiles('tests/e2e/fixtures/consent.docx')
+  await expect(page.getByTestId('toast')).toContainText('Sign in to upload Word documents, or upload a PDF instead.')
   await expect.poll(() => db.calls.some(c => c.action === 'convert')).toBe(false)
   await expect(page.getByTestId('document-page')).toHaveCount(0)
 })
