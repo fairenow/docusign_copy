@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Brand from '../components/Brand'
@@ -13,7 +13,7 @@ import SignaturePanel from '../components/SignaturePanel'
 import PlacementHint from '../components/PlacementHint'
 import { useDocument } from '../hooks/useDocument'
 import { useUnsavedChangesWarning } from '../hooks/useUnsavedChangesWarning'
-import { FIELD_LABELS, canHover, createElement, elementFromDetected, nextFieldY, placementRect } from '../lib/fields'
+import { FIELD_LABELS, canHover, createElement, elementFromDetected, placementRect, rectInView } from '../lib/fields'
 import { renderTypedSignature, signatureFromImage } from '../lib/signatureImage'
 import { useAuth } from '../auth/useAuth'
 import { useSavedSignatures } from '../hooks/useSavedSignatures'
@@ -39,6 +39,8 @@ export default function QuickSignPage() {
   const [signingFieldId, setSigningFieldId] = useState(null)
   // A field picked up with the mouse: { type, props }, following the pointer until clicked onto a page
   const [pending, setPending] = useState(null)
+  const [selectedId, setSelectedId] = useState(null)
+  const viewerRef = useRef(null)
 
   // Ready by the time a file is picked
   useEffect(preloadPdfViewer, [])
@@ -84,19 +86,22 @@ export default function QuickSignPage() {
   }, [documentError, notify])
 
   // With a mouse the field follows the pointer until it is clicked onto the page, as in the
-  // envelope editor. Touch screens have no hover: it is added to the current page at once.
+  // envelope editor. Touch screens have no hover: it is added at once where you are looking,
+  // selected, and scrolled fully into view.
   const addElement = useCallback((type, props = {}) => {
-    const pageSize = pageSizes[currentPage - 1]
-    if (!pageSize) return
+    if (!pageSizes[currentPage - 1]) return
     if (canHover()) {
       setPending({ type, props })
       return
     }
-    setElements(prev => [
-      ...prev,
-      createElement(type, { page: currentPage, pageSize }, { y: nextFieldY(prev, currentPage), ...props })
-    ])
-  }, [currentPage, pageSizes])
+    const spot = viewerRef.current?.visibleSpot() ?? { page: currentPage, x: 0.5, y: 0.3 }
+    const pageSize = pageSizes[spot.page - 1]
+    const rect = rectInView(type, pageSize, spot, elements.filter(el => el.page === spot.page), props)
+    const element = createElement(type, { page: spot.page, pageSize }, { ...props, ...rect })
+    setElements(prev => [...prev, element])
+    setSelectedId(element.id)
+    requestAnimationFrame(() => viewerRef.current?.reveal(spot.page, rect))
+  }, [currentPage, pageSizes, elements])
 
   const updateElement = useCallback((id, updates) => {
     setElements(prev => prev.map(el => (el.id === id ? { ...el, ...updates } : el)))
@@ -291,6 +296,9 @@ export default function QuickSignPage() {
           </div>
         ) : (
         <DocumentViewer
+          ref={viewerRef}
+          selectedId={selectedId}
+          onSelectedIdChange={setSelectedId}
           pdfDoc={pdfDoc}
           pageSizes={pageSizes}
           elements={elements}

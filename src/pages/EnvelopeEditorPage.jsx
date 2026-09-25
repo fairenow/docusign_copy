@@ -10,7 +10,7 @@ import {
   addSelfAsSigner, draftFromEnvelope, moveRecipient, newField, newRecipient, recipientByEmail, renumberRecipients,
   validateForSave, validateForSend, canEdit, canVoid, envelopeGroup, isOwner, signsAlone, peopleWithAccess, commentThreads, RECIPIENT_COLORS
 } from '../lib/envelopeModel'
-import { FIELD_LABELS, DEFAULT_FONT_SIZE, canHover, clamp, nextFieldY, placementRect } from '../lib/fields'
+import { FIELD_LABELS, DEFAULT_FONT_SIZE, canHover, clamp, placementRect, rectInView } from '../lib/fields'
 import { assignSuggestions, companyFromEmail, suggestFields } from '../lib/fieldSuggestions'
 import { usePageLayouts } from '../hooks/usePageLayouts'
 import { fitWidthZoom } from '../lib/viewer'
@@ -109,6 +109,7 @@ export default function EnvelopeEditorPage() {
   const [suggestNotice, setSuggestNotice] = useState(null)
   // Field type picked up from the toolbar, waiting to be clicked onto the page
   const [placingType, setPlacingType] = useState(null)
+  const viewerRef = useRef(null)
   // Signing it yourself: the Sign menu, and the signature/initials pad (place: then pick it up)
   const [signMenuOpen, setSignMenuOpen] = useState(false)
   const [creating, setCreating] = useState(null) // null | { kind: 'signature' | 'initials', place: boolean }
@@ -276,12 +277,12 @@ export default function EnvelopeEditorPage() {
   const pickFromSignMenu = (type, image) => {
     if (image) selfSigning.adopt(type, image)
     setSignMenuOpen(false)
-    setPlacingType(type)
+    pickUp(type)
   }
 
   const adoptCreated = (image, remember) => {
     selfSigning.adopt(creating.kind, image, { remember })
-    if (creating.place) setPlacingType(creating.kind)
+    if (creating.place) pickUp(creating.kind)
     setCreating(null)
   }
 
@@ -325,11 +326,26 @@ export default function EnvelopeEditorPage() {
       setCreating({ kind: 'initials', place: true })
       return
     }
-    if (canHover()) {
-      setPlacingType(current => (current === type ? null : type))
+    if (canHover() && placingType === type) {
+      setPlacingType(null) // clicking the same tool again puts it back
       return
     }
-    insertField(newField(type, { page: currentPage, pageSize }, signerForNewField(type), { y: nextFieldY(draft.fields, currentPage) }))
+    pickUp(type)
+  }
+
+  // With a mouse, a field follows the pointer until clicked into place. Without one (phones,
+  // tablets), it is added where you are looking, selected, and scrolled fully into view.
+  const pickUp = (type) => {
+    if (canHover()) {
+      setPlacingType(type)
+      return
+    }
+    const spot = viewerRef.current?.visibleSpot() ?? { page: currentPage, x: 0.5, y: 0.3 }
+    const pageSize = pageSizes[spot.page - 1]
+    if (!pageSize) return
+    const rect = rectInView(type, pageSize, spot, draft.fields.filter(f => f.page === spot.page))
+    insertField(newField(type, { page: spot.page, pageSize }, signerForNewField(type), rect))
+    requestAnimationFrame(() => viewerRef.current?.reveal(spot.page, rect))
   }
 
   // Clicking a field opens its settings; clearing the selection goes back to recipients
@@ -802,6 +818,7 @@ export default function EnvelopeEditorPage() {
           </div>
         ) : (
           <DocumentViewer
+            ref={viewerRef}
             placeholderPages={envelope.page_count || 1}
             pdfDoc={pdfDoc}
             pageSizes={pageSizes}

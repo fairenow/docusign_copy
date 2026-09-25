@@ -68,15 +68,6 @@ export function placeField(type, { page, pageSize }, props = {}) {
 }
 
 /**
- * Vertical position for the next field added to `page`, cascading down the page
- * so new fields do not stack exactly on top of each other.
- */
-export function nextFieldY(fields, page) {
-  const onPage = fields.filter(f => f.page === page).length
-  return 0.15 + (onPage % 8) * 0.09
-}
-
-/**
  * Create a fill-in element (Quick sign): geometry plus the value the user fills in.
  * @param {object} props geometry props (see placeField) plus text, data, checked, fontSize, color
  */
@@ -136,6 +127,26 @@ export function placementRect(type, pageSize, x, y, props = {}) {
   const { w, h } = placeField(type, { page: 1, pageSize }, { aspect: props.aspect })
   const [left, top] = type === 'checkbox' ? [x - w / 2, y - h / 2] : [x, y - h]
   return { x: clamp(left, 0, 1 - w), y: clamp(top, 0, 1 - h), w, h }
+}
+
+/**
+ * Where a field added without a mouse goes: centred on `spot` (where you are looking, see
+ * spotInView), kept on the page, and moved clear of the fields already there (`others`, on
+ * the same page) so several added in a row do not hide each other.
+ */
+export function rectInView(type, pageSize, spot, others = [], props = {}) {
+  const { w, h } = placeField(type, { page: spot.page, pageSize }, { aspect: props.aspect })
+  const gap = 6 / pageSize.height
+  const at = (y) => ({ x: clamp(spot.x - w / 2, 0, 1 - w), y: clamp(y, 0, 1 - h), w, h })
+  const overlaps = (r) => others.some(o => r.x < o.x + o.w && o.x < r.x + r.w && r.y < o.y + o.h && o.y < r.y + r.h)
+  const start = spot.y - h / 2
+  // Try the spot itself, then just below, then just above, stepping outwards
+  for (let step = 0; step < 12; step++) {
+    const offset = Math.ceil(step / 2) * (h + gap) * (step % 2 ? 1 : -1)
+    const rect = at(start + offset)
+    if (!overlaps(rect)) return rect
+  }
+  return at(start)
 }
 
 /** A mouse or trackpad: fields can follow the pointer until clicked into place (touch has no hover). */

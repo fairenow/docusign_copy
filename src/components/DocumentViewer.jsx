@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import OverlayElement from './OverlayElement'
 import { nudgeRect } from '../lib/fieldGeometry'
 import { PageSkeletons } from './Skeleton'
-import { BASE_SCALE } from '../lib/viewer'
+import { BASE_SCALE, spotInView } from '../lib/viewer'
 // Pages are drawn when they come within this distance of the visible area
 const RENDER_MARGIN = '1200px 0px'
 
@@ -20,8 +20,11 @@ const RENDER_MARGIN = '1200px 0px'
  * deleted. Without onDeleteElement, fields can be moved and resized but not deleted (e.g. a
  * signer adjusting their own fields).
  * Selection can be controlled with selectedId/onSelectedIdChange; otherwise it is internal.
+ *
+ * The ref offers visibleSpot() (where you are looking, as { page, x, y }; see spotInView) and
+ * reveal(page, rect) (scroll so that rect on that page is fully on screen).
  */
-export default function DocumentViewer({
+export default forwardRef(function DocumentViewer({
   pdfDoc,
   pageSizes,
   elements,
@@ -42,7 +45,7 @@ export default function DocumentViewer({
   placing = null,
   // Pages to sketch while the document is still loading (e.g. the envelope's page count)
   placeholderPages = 1
-}) {
+}, ref) {
   const scrollRef = useRef(null)
   const pageRefs = useRef([])
   const shownPage = useRef(currentPage)
@@ -53,6 +56,45 @@ export default function DocumentViewer({
   // Where the field being placed would go: { page, rect } under the pointer
   const [preview, setPreview] = useState(null)
   useEffect(() => { if (!placing) setPreview(null) }, [placing])
+
+  // Remembered while the viewer is hidden (a phone showing the tools instead of the document)
+  const lastSpot = useRef(null)
+  const visibleSpot = useCallback(() => {
+    const container = scrollRef.current
+    if (!container || !container.clientHeight) return lastSpot.current
+    const spot = spotInView(container.getBoundingClientRect(), pageRefs.current.map(el => el?.getBoundingClientRect()))
+    if (spot) lastSpot.current = spot
+    return spot ?? lastSpot.current
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    visibleSpot,
+    reveal(page, rect) {
+      const container = scrollRef.current
+      const pageEl = pageRefs.current[page - 1]
+      if (!container || !pageEl) return
+      const view = container.getBoundingClientRect()
+      const box = pageEl.getBoundingClientRect()
+      const margin = 24
+      const top = box.top + rect.y * box.height
+      const bottom = top + rect.h * box.height
+      const left = box.left + rect.x * box.width
+      const right = left + rect.w * box.width
+      const dy = top < view.top + margin ? top - view.top - margin : bottom > view.bottom - margin ? bottom - view.bottom + margin : 0
+      const dx = left < view.left + margin ? left - view.left - margin : right > view.right - margin ? right - view.right + margin : 0
+      if (dx || dy) container.scrollBy({ left: dx, top: dy, behavior: 'smooth' })
+    }
+  }), [visibleSpot])
+
+  // Something picked up to place shows at once where you are looking, then follows the pointer
+  const placingRef = useRef(placing)
+  placingRef.current = placing
+  const isPlacing = Boolean(placing)
+  useEffect(() => {
+    if (!isPlacing) return
+    const spot = visibleSpot()
+    if (spot && pageSizes[spot.page - 1]) setPreview({ page: spot.page, rect: placingRef.current.rectAt(spot.page, spot.x, spot.y) })
+  }, [isPlacing, visibleSpot, pageSizes])
 
   // Scroll to a page chosen outside the viewer (the page the user scrolled to is already shown)
   useEffect(() => {
@@ -68,6 +110,7 @@ export default function DocumentViewer({
     frame.current = requestAnimationFrame(() => {
       const container = scrollRef.current
       if (!container) return
+      visibleSpot()
       const line = container.getBoundingClientRect().top + container.clientHeight / 3
       let page = 1
       pageRefs.current.forEach((el, i) => { if (el && el.getBoundingClientRect().top <= line) page = i + 1 })
@@ -76,7 +119,7 @@ export default function DocumentViewer({
         onPageChange?.(page)
       }
     })
-  }, [onPageChange])
+  }, [onPageChange, visibleSpot])
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
   // Delete / Backspace removes the selected field and arrow keys nudge it (unless typing somewhere)
@@ -179,7 +222,7 @@ export default function DocumentViewer({
       })}
     </div>
   )
-}
+})
 
 /**
  * Above a page while a field is being placed: the preview follows the pointer and a click

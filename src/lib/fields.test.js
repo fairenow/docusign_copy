@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createElement, elementFromDetected, clamp, nextFieldY, placementRect, DEFAULT_SIZES } from './fields'
+import { createElement, elementFromDetected, clamp, placementRect, rectInView, DEFAULT_SIZES } from './fields'
 
 const letter = { width: 612, height: 792 }
 
@@ -61,15 +61,6 @@ describe('clamp', () => {
   })
 })
 
-describe('nextFieldY', () => {
-  it('cascades down the page and wraps', () => {
-    const on = (page, n) => Array.from({ length: n }, () => ({ page }))
-    expect(nextFieldY([], 1)).toBeCloseTo(0.15)
-    expect(nextFieldY([...on(1, 2), ...on(2, 5)], 1)).toBeCloseTo(0.33)
-    expect(nextFieldY(on(1, 8), 1)).toBeCloseTo(0.15)
-  })
-})
-
 describe('placementRect', () => {
   it('puts the bottom-left corner at the pointer, exactly (nothing snaps)', () => {
     const r = placementRect('text', letter, 0.2, 0.5)
@@ -92,5 +83,30 @@ describe('placementRect', () => {
     const placed = createElement('signature', { page: 1, pageSize: letter }, { aspect: 2, ...r })
     expect(r.w * letter.width).toBeCloseTo(DEFAULT_SIZES.signature.height * 2)
     expect([placed.x, placed.y, placed.w, placed.h]).toEqual([r.x, r.y, r.w, r.h])
+  })
+})
+
+describe('rectInView', () => {
+  it('centres the field on the spot where you are looking', () => {
+    const r = rectInView('date', letter, { page: 24, x: 0.3, y: 0.9 })
+    expect(r.x + r.w / 2).toBeCloseTo(0.3)
+    expect(r.y + r.h / 2).toBeCloseTo(0.9)
+  })
+
+  it('stays on the page at its edges', () => {
+    const r = rectInView('signature', letter, { page: 1, x: 1, y: 1 })
+    expect(r.x + r.w).toBeCloseTo(1)
+    expect(r.y + r.h).toBeCloseTo(1)
+  })
+
+  it('moves clear of fields already there, so several in a row do not stack', () => {
+    const first = rectInView('date', letter, { page: 1, x: 0.5, y: 0.5 })
+    const second = rectInView('date', letter, { page: 1, x: 0.5, y: 0.5 }, [first])
+    const third = rectInView('date', letter, { page: 1, x: 0.5, y: 0.5 }, [first, second])
+    const overlap = (a, b) => a.y < b.y + b.h && b.y < a.y + a.h
+    expect(overlap(first, second)).toBe(false)
+    expect(overlap(first, third) || overlap(second, third)).toBe(false)
+    // and stays close by
+    expect(Math.abs(second.y - first.y)).toBeLessThan(0.1)
   })
 })

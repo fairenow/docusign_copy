@@ -50,3 +50,15 @@ export async function makeSignaturePagePdf() {
   text('Date: ________________________________', 340, date - 1)
   return Buffer.from(await doc.save())
 }
+
+/** A long contract: `pages` letter pages, each with a date line near its bottom. */
+export async function makeLongPdf(pages = 24) {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (let i = 1; i <= pages; i++) {
+    const page = doc.addPage([612, 792])
+    page.drawText(`Page ${i}`, { x: 72, y: 720, size: 14, font })
+    page.drawText('Date: ____________________', { x: 72, y: 90, size: 12, font })
+  }
+  return Buffer.from(await doc.save())
+}
